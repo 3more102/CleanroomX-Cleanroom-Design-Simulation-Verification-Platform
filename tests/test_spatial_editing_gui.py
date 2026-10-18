@@ -1056,3 +1056,42 @@ def test_floor_properties_apply_as_one_transaction_and_preserve_cancel_safety(
     workspace.edit_floor()
     app.root.update()
     assert workspace.layout == applied
+
+
+def test_live_design_studio_navigator_and_dashboard_with_real_tk(app):
+    workspace = app.spatial_workspace
+    workspace.enter_studio_view()
+    app.root.update()
+    assert workspace.canvas_3d.winfo_ismapped()
+    assert workspace.inspector_visible()
+    assert {
+        key: var.get() for key, var in workspace._studio_metric_vars.items()
+    } == {
+        "rooms": "3",
+        "floor_area": "62.0 m²",
+        "volume": "186.0 m³",
+        "devices": "10",
+    }
+    target = next(
+        item for item, room_id in workspace._navigator_hit_rooms.items()
+        if room_id == "preparation"
+        and len(workspace._navigator_canvas.coords(item)) == 4
+    )
+    x0, y0, x1, y1 = workspace._navigator_canvas.coords(target)
+    workspace._navigator_canvas.event_generate(
+        "<Button-1>", x=int((x0 + x1) / 2), y=int((y0 + y1) / 2)
+    )
+    app.root.update()
+    assert workspace.selected == _Hit("room", "preparation")
+    assert "Preparation" in workspace._studio_selected_var.get()
+    assert "Area: 20.0 m²" in workspace._studio_selected_var.get()
+    assert workspace._studio_devices_var.get().startswith("Selected room")
+
+    workspace._property_vars["length_m"].set("6")
+    workspace.apply_properties()
+    app.root.update()
+    assert workspace._studio_metric_vars["floor_area"].get() == "66.0 m²"
+    assert workspace._studio_metric_vars["volume"].get() == "198.0 m³"
+    assert app.undo_project_edit()
+    app.root.update()
+    assert workspace._studio_metric_vars["floor_area"].get() == "62.0 m²"

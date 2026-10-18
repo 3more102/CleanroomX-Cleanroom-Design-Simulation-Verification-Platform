@@ -7394,6 +7394,12 @@ def main(argv: list[str] | None = None) -> int:
         root,
         autosave_interval_seconds=args.autosave_interval_seconds,
     )
+    if args.demo:
+        # The bundled demonstration is the dark Design Studio reference.
+        # Preserve normal project launches and the user's light-theme option.
+        # The idle layout restoration reads this session-local state.
+        app._ui_layout_state["theme"] = "dark"
+        app.set_theme("dark", persist=False)
     if not args.smoke:
         runtime_status_callback = getattr(
             getattr(app, "status_var", None),
@@ -7435,6 +7441,9 @@ def main(argv: list[str] | None = None) -> int:
                 return 2
             messagebox.showerror("Open failed", str(exc), parent=root)
 
+    if args.demo and not args.smoke and not recovered_at_startup:
+        app.spatial_workspace.enter_studio_view()
+
     if args.smoke:
         try:
             if project_path and app.project.analyses:
@@ -7454,6 +7463,25 @@ def main(argv: list[str] | None = None) -> int:
                     raise RuntimeError("2D pressure-cascade relationships did not render")
                 if not app.spatial_workspace.canvas_3d.find_withtag("pressure_relationship_3d"):
                     raise RuntimeError("3D pressure-cascade relationships did not render")
+                studio = app.spatial_workspace
+                if app.theme_var.get() != "dark":
+                    raise RuntimeError("demo must launch with the dark Studio palette")
+                expected_cards = {
+                    "rooms": "3",
+                    "floor_area": "62.0 m²",
+                    "volume": "186.0 m³",
+                    "devices": "10",
+                }
+                for card, expected in expected_cards.items():
+                    if studio._studio_metric_vars[card].get() != expected:
+                        raise RuntimeError(
+                            f"Design Studio {card} card is not model-synchronized"
+                        )
+                if not studio._navigator_canvas.find_all():
+                    raise RuntimeError("Room Navigator floor plan was not rendered")
+                studio.select_item("room", "process", notify=True)
+                if "Design pressure setpoint: 30 Pa" not in studio._studio_selected_var.get():
+                    raise RuntimeError("Selected Room inspector is not synchronized")
         except Exception as exc:
             root.destroy()
             print(f"CleanroomX GUI smoke: FAIL — {exc}")

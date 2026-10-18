@@ -331,6 +331,95 @@ def layout_metrics(value: Any) -> dict:
     }
 
 
+
+def design_studio_snapshot(value: Any, selected_room_id: str | None = None) -> dict:
+    """Model-derived Design Studio values; never treats setpoints as CFD results."""
+    layout = normalize_layout(value)
+    metrics = layout_metrics(layout)
+    selected = next(
+        (room for room in layout["rooms"] if room["id"] == selected_room_id),
+        None,
+    )
+    visible_devices = (
+        [item for item in layout["devices"] if item["room_id"] == selected["id"]]
+        if selected is not None
+        else layout["devices"]
+    )
+    buckets = {
+        "ffu": sum(item["type"] == "ffu" for item in visible_devices),
+        "supply": sum(item["type"] == "supply" for item in visible_devices),
+        "return_exhaust": sum(
+            item["type"] in {"return", "exhaust"} for item in visible_devices
+        ),
+        "other": sum(
+            item["type"] not in {"ffu", "supply", "return", "exhaust"}
+            for item in visible_devices
+        ),
+    }
+    selected_summary = None
+    if selected is not None:
+        selected_summary = {
+            "id": selected["id"],
+            "name": selected["name"],
+            "classification": selected.get("classification", ""),
+            "dimensions_m": (
+                selected["length_m"], selected["width_m"], selected["height_m"]
+            ),
+            "floor_area_m2": selected["length_m"] * selected["width_m"],
+            "volume_m3": (
+                selected["length_m"] * selected["width_m"] * selected["height_m"]
+            ),
+            "device_count": len(visible_devices),
+            "design_pressure_pa": selected.get("pressure_pa"),
+        }
+    return {
+        "room_count": metrics["room_count"],
+        "floor_area_m2": metrics["total_floor_area_m2"],
+        "volume_m3": metrics["total_volume_m3"],
+        "placed_devices": len(layout["devices"]),
+        "device_buckets": buckets,
+        "selected_room": selected_summary,
+        "navigator_rooms": [
+            {
+                "id": room["id"],
+                "name": room["name"],
+                "area_m2": room["length_m"] * room["width_m"],
+                "x_m": room["x_m"],
+                "y_m": room["y_m"],
+                "length_m": room["length_m"],
+                "width_m": room["width_m"],
+            }
+            for room in layout["rooms"]
+        ],
+    }
+
+
+def navigator_room_rectangles(
+    rooms: list[dict], width: int, height: int, padding: float = 10.0
+) -> list[tuple[float, float, float, float]]:
+    """Fit a floor-plan thumbnail to a canvas, retaining room aspect ratios."""
+    if not rooms:
+        return []
+    x_min = min(room["x_m"] for room in rooms)
+    y_min = min(room["y_m"] for room in rooms)
+    x_max = max(room["x_m"] + room["length_m"] for room in rooms)
+    y_max = max(room["y_m"] + room["width_m"] for room in rooms)
+    scale = min(
+        max(1, width - 2 * padding) / max(1e-9, x_max - x_min),
+        max(1, height - 2 * padding) / max(1e-9, y_max - y_min),
+    )
+    offset_x = (width - (x_max - x_min) * scale) / 2
+    offset_y = (height - (y_max - y_min) * scale) / 2
+    return [
+        (
+            offset_x + (room["x_m"] - x_min) * scale,
+            offset_y + (room["y_m"] - y_min) * scale,
+            offset_x + (room["x_m"] + room["length_m"] - x_min) * scale,
+            offset_y + (room["y_m"] + room["width_m"] - y_min) * scale,
+        )
+        for room in rooms
+    ]
+
 def derive_layout_from_analysis(analysis: Any) -> dict:
     layout = empty_layout()
     if analysis is None or not isinstance(getattr(analysis, "input", None), dict):
@@ -1644,6 +1733,12 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._validation_var = tk.StringVar(value="Spatial checks: PASS")
         self._sync_var = tk.StringVar(value="Engineering sync: unmapped")
         self._metrics_var = tk.StringVar(value="0 rooms")
+        self._studio_metric_vars = {
+            key: tk.StringVar(value="—")
+            for key in ("rooms", "floor_area", "volume", "devices")
+        }
+        self._studio_selected_var = tk.StringVar(value="Select a room to inspect")
+        self._studio_devices_var = tk.StringVar(value="No placed devices")
         self._zoom_var = tk.StringVar(value="Zoom 100%")
         self._validation_issues: list[dict] = []
         self._last_validation_key: tuple | None = None
@@ -1735,6 +1830,9 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Separator(modebar, orient="vertical").pack(
             side="left", fill="y", padx=8
         )
+        ttk.Button(
+            modebar, text="Studio View", command=self.enter_studio_view,
+        ).pack(side="left", padx=(3, 2))
         ttk.Button(modebar, text="Fit", width=6, command=self.fit_views).pack(
             side="left", padx=2
         )
@@ -1804,6 +1902,23 @@ class SpatialDesignWorkspace(ttk.Frame):
             overlaybar,
             textvariable=self._overlay_summary_var,
         ).pack(side="left", padx=(12, 0))
+
+        cards = ttk.Frame(self, padding=(8, 2, 8, 6))
+        cards.pack(fill="x")
+        for key, title in (
+            ("rooms", "ROOMS"),
+            ("floor_area", "FLOOR AREA"),
+            ("volume", "GEOMETRIC VOLUME"),
+            ("devices", "PLACED DEVICES"),
+        ):
+            card = ttk.LabelFrame(cards, text=title, padding=(10, 4))
+            card.pack(side="left", fill="x", expand=True, padx=3)
+            ttk.Label(
+                card,
+                textvariable=self._studio_metric_vars[key],
+                font=("Segoe UI", 13, "bold"),
+                anchor="center",
+            ).pack(fill="x")
 
         self._body = ttk.Panedwindow(self, orient="horizontal")
         self._body.pack(fill="both", expand=True, padx=8, pady=(2, 6))
@@ -1886,6 +2001,9 @@ class SpatialDesignWorkspace(ttk.Frame):
                 command=lambda p=preset: self.set_3d_view_preset(p),
             )
         camera_button.pack(side="left", padx=(5, 2))
+        ttk.Button(
+            header3, text="Inspector", command=self.toggle_inspector,
+        ).pack(side="left", padx=(4, 2))
         ttk.Button(header3, text="Fit", width=4, command=self.fit_3d).pack(
             side="left", padx=2
         )
@@ -1949,6 +2067,25 @@ class SpatialDesignWorkspace(ttk.Frame):
             highlightbackground=self._theme_palette["border"],
         )
         self.canvas_3d.pack(fill="both", expand=True)
+        # A real floor-plan thumbnail is overlaid on the active 3D canvas;
+        # its selection uses the same select_item path as 2D/3D picking.
+        navigator = ttk.Frame(self.canvas_3d, padding=7, style="CX.Panel.TFrame")
+        navigator.place(relx=0, rely=1, x=12, y=-12, anchor="sw")
+        ttk.Label(
+            navigator, text="ROOM NAVIGATOR", style="CX.PanelHeader.TLabel"
+        ).pack(anchor="w", pady=(0, 4))
+        self._navigator_canvas = tk.Canvas(
+            navigator, width=238, height=98, background="#101d2c",
+            highlightthickness=0, cursor="hand2",
+        )
+        self._navigator_canvas.pack(fill="x")
+        self._navigator_canvas.bind("<Button-1>", self._on_navigator_click)
+        self._navigator_rows_var = tk.StringVar(value="No rooms")
+        ttk.Label(
+            navigator, textvariable=self._navigator_rows_var,
+            justify="left", anchor="w",
+        ).pack(fill="x", pady=(4, 0))
+
 
         inspector = ttk.Frame(self._body, padding=(10, 8))
         self._inspector_frame = inspector
@@ -1971,11 +2108,75 @@ class SpatialDesignWorkspace(ttk.Frame):
             command=lambda: self.set_inspector_visible(False),
         )
         self._inspector_close_button.pack(side="right")
+        room_panel = ttk.LabelFrame(inspector, text="SELECTED ROOM", padding=(7, 5))
+        room_panel.pack(fill="x", pady=(0, 5))
+        ttk.Label(
+            room_panel, textvariable=self._studio_selected_var,
+            justify="left", wraplength=265,
+        ).pack(fill="x")
+        room_actions = ttk.Frame(room_panel)
+        room_actions.pack(fill="x", pady=(4, 0))
+        ttk.Button(
+            room_actions, text="Focus Room", command=self.focus_selected_room,
+        ).pack(side="left", padx=(0, 3))
+        ttk.Button(
+            room_actions, text="Isolate", command=self.isolate_selected,
+        ).pack(side="left", padx=(0, 3))
+        ttk.Button(
+            room_actions, text="Show All", command=self.show_all,
+        ).pack(side="left")
+        device_panel = ttk.LabelFrame(
+            inspector, text="PLACED DEVICES", padding=(7, 5)
+        )
+        device_panel.pack(fill="x", pady=(0, 5))
+        ttk.Label(
+            device_panel, textvariable=self._studio_devices_var,
+            justify="left", wraplength=265,
+        ).pack(fill="x")
+
         ttk.Label(
             inspector,
             textvariable=self._selection_var,
             wraplength=310,
         ).pack(fill="x", pady=(3, 8))
+
+        # Keep the entire editor accessible at 1920x1080 and smaller windows:
+        # summary panels stay visible while the existing field groups scroll.
+        editor_shell = ttk.Frame(inspector)
+        editor_shell.pack(fill="both", expand=True, pady=(0, 4))
+        editor_canvas = tk.Canvas(
+            editor_shell, highlightthickness=0, borderwidth=0,
+            background=self._theme_palette["panel"],
+        )
+        editor_scroll = ttk.Scrollbar(
+            editor_shell, orient="vertical", command=editor_canvas.yview,
+        )
+        editor_canvas.configure(yscrollcommand=editor_scroll.set)
+        editor_scroll.pack(side="right", fill="y")
+        editor_canvas.pack(side="left", fill="both", expand=True)
+        properties_body = ttk.Frame(editor_canvas)
+        editor_window = editor_canvas.create_window(
+            (0, 0), window=properties_body, anchor="nw",
+        )
+        properties_body.bind(
+            "<Configure>",
+            lambda _event: editor_canvas.configure(
+                scrollregion=editor_canvas.bbox("all"),
+            ),
+        )
+        editor_canvas.bind(
+            "<Configure>",
+            lambda event: editor_canvas.itemconfigure(
+                editor_window, width=event.width,
+            ),
+        )
+        editor_canvas.bind(
+            "<MouseWheel>",
+            lambda event: editor_canvas.yview_scroll(
+                -1 if event.delta > 0 else 1, "units",
+            ),
+        )
+        self._property_editor_canvas = editor_canvas
 
         property_groups = (
             (
@@ -2015,7 +2216,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             ),
         )
         for group_name, fields in property_groups:
-            section = ttk.LabelFrame(inspector, text=group_name, padding=(8, 6))
+            section = ttk.LabelFrame(properties_body, text=group_name, padding=(8, 6))
             section.pack(fill="x", pady=(0, 7))
             for key, label, unit in fields:
                 row = ttk.Frame(section)
@@ -2087,6 +2288,118 @@ class SpatialDesignWorkspace(ttk.Frame):
             canvas.bind("<Up>", lambda event: self._nudge_selected(0, -1))
             canvas.bind("<Down>", lambda event: self._nudge_selected(0, 1))
 
+    def enter_studio_view(self) -> None:
+        """Expand the real 3D view and show the live room/device inspector."""
+        self.set_workspace_mode("3d")
+        self.set_inspector_visible(True)
+
+    def focus_selected_room(self) -> None:
+        if self.selected is None or self.selected.kind != "room":
+            self._status_setter("Select a room to focus")
+            return
+        self.fit_selected()
+
+    def _on_navigator_click(self, event) -> str | None:
+        canvas = self._navigator_canvas
+        item_to_room = getattr(self, "_navigator_hit_rooms", {})
+        for item in reversed(canvas.find_overlapping(event.x, event.y, event.x, event.y)):
+            room_id = item_to_room.get(item)
+            if room_id is not None and self.select_item("room", room_id, notify=True):
+                return "break"
+        return None
+
+    def _draw_room_navigator(self, snapshot: dict) -> None:
+        canvas = self._navigator_canvas
+        canvas.delete("all")
+        rooms = snapshot["navigator_rooms"]
+        self._navigator_hit_rooms = {}
+        if not rooms:
+            canvas.create_text(
+                119, 49, text="Add a room to begin",
+                fill="#94a3b8", font=("Segoe UI", 9),
+            )
+            self._navigator_rows_var.set("No rooms")
+            return
+        width, height = 238, 98
+        selected_id = (
+            self.selected.item_id
+            if self.selected is not None and self.selected.kind == "room"
+            else None
+        )
+        for room, (x0, y0, x1, y1) in zip(
+            rooms, navigator_room_rectangles(rooms, width, height)
+        ):
+            selected = room["id"] == selected_id
+            fill = "#17577a" if selected else "#213a50"
+            outline = "#67e8f9" if selected else "#6c879e"
+            rect = canvas.create_rectangle(
+                x0, y0, x1, y1, fill=fill, outline=outline,
+                width=3 if selected else 1,
+            )
+            self._navigator_hit_rooms[rect] = room["id"]
+            if x1 - x0 >= 34 and y1 - y0 >= 16:
+                label = room["name"]
+                if len(label) > 13:
+                    label = label[:12] + "…"
+                text_id = canvas.create_text(
+                    (x0 + x1) / 2, (y0 + y1) / 2, text=label,
+                    fill="#e5f6ff", width=max(20, int(x1 - x0) - 6),
+                    font=("Segoe UI", 8),
+                )
+                self._navigator_hit_rooms[text_id] = room["id"]
+        rows = [
+            f"{'●' if room['id'] == selected_id else '·'} "
+            f"{room['name']}  {room['area_m2']:.1f} m²"
+            for room in rooms[:4]
+        ]
+        if len(rooms) > 4:
+            rows.append(f"+ {len(rooms) - 4} more rooms")
+        self._navigator_rows_var.set("\n".join(rows))
+
+    def _update_studio_panels(self) -> None:
+        # Guard for headless unit tests constructing an uninitialised workspace.
+        if not hasattr(self, "_studio_metric_vars"):
+            return
+        room_id = (
+            self.selected.item_id
+            if self.selected is not None and self.selected.kind == "room"
+            else None
+        )
+        snapshot = design_studio_snapshot(self.layout, room_id)
+        values = {
+            "rooms": str(snapshot["room_count"]),
+            "floor_area": f'{snapshot["floor_area_m2"]:.1f} m²',
+            "volume": f'{snapshot["volume_m3"]:.1f} m³',
+            "devices": str(snapshot["placed_devices"]),
+        }
+        for key, value in values.items():
+            self._studio_metric_vars[key].set(value)
+        selected = snapshot["selected_room"]
+        if selected is None:
+            self._studio_selected_var.set("Select a room to inspect")
+        else:
+            length, width, height = selected["dimensions_m"]
+            lines = [
+                selected["name"],
+                str(selected["classification"] or "Classification: not set"),
+                f"Dimensions: {length:g} × {width:g} × {height:g} m",
+                f'Area: {selected["floor_area_m2"]:.1f} m²',
+                f'Volume: {selected["volume_m3"]:.1f} m³',
+                f'Devices: {selected["device_count"]}',
+            ]
+            pressure = selected["design_pressure_pa"]
+            if pressure is not None:
+                lines.append(f"Design pressure setpoint: {pressure:g} Pa")
+            self._studio_selected_var.set("\n".join(lines))
+        counts = snapshot["device_buckets"]
+        scope = "Selected room" if selected else "Whole project"
+        self._studio_devices_var.set(
+            f"{scope} · FFU {counts['ffu']} · Supply {counts['supply']}\n"
+            f"Return/exhaust {counts['return_exhaust']} · Other {counts['other']}"
+        )
+        if hasattr(self, "_navigator_canvas"):
+            self._draw_room_navigator(snapshot)
+
     def _apply_workspace_mode(self) -> None:
         mode = self._workspace_mode.get()
         if mode not in {"2d", "3d", "split"}:
@@ -2121,6 +2434,10 @@ class SpatialDesignWorkspace(ttk.Frame):
             background=palette["canvas_3d"],
             highlightbackground=palette["border"],
         )
+        if hasattr(self, "_navigator_canvas"):
+            self._navigator_canvas.configure(background=palette["canvas_3d"])
+        if hasattr(self, "_property_editor_canvas"):
+            self._property_editor_canvas.configure(background=palette["panel"])
         if redraw:
             self.redraw()
 
@@ -3171,6 +3488,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._refresh_validation()
         self._update_sync_summary()
         self._update_metrics()
+        self._update_studio_panels()
         self._draw_2d()
         self._draw_3d()
 

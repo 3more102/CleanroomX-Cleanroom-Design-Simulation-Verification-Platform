@@ -3430,10 +3430,21 @@ class SpatialDesignWorkspace(ttk.Frame):
                 fill="#23616b" if chosen else "#183845",
                 width=3 if chosen else 1, tags=(tag,),
             )
-            if x1 - x0 >= 36 and y1 - y0 >= 17:
+            if x1 - x0 >= 48 and y1 - y0 >= 27:
                 canvas.create_text(
                     (x0 + x1) / 2, (y0 + y1) / 2,
-                    text=room["name"][:16],
+                    text=(
+                        f'{room["name"][:14]}\\n'
+                        f'{room["floor_area_m2"]:,.0f} m²'
+                    ),
+                    fill="#efffff" if chosen else "#bcd6df",
+                    font=("TkDefaultFont", 7), tags=(tag,),
+                    justify="center",
+                )
+            elif x1 - x0 >= 36 and y1 - y0 >= 17:
+                canvas.create_text(
+                    (x0 + x1) / 2, (y0 + y1) / 2,
+                    text=room["name"][:12],
                     fill="#efffff" if chosen else "#bcd6df",
                     font=("TkDefaultFont", 7), tags=(tag,),
                 )

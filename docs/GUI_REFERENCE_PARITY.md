@@ -9,7 +9,7 @@ Starting point: `work/cfd-integration-reconciliation-20261018` (not the older `m
 An implementation in source control is **not** proof that the GUI launched, the
 screen matches the supplied reference, or an OpenFOAM solver ran. Those claims
 need actual run logs and original screenshots from the installed application.
-No screenshots were generated or asserted in this iteration.
+A genuine application screenshot was captured under Xvfb at 1920 × 1080;\nsee [iteration evidence](../reports/gui_reference_parity/iteration_01.md).\nThis is not evidence of native Windows launch or exact pixel parity.
 
 ## Observed baseline (repository inspection)
 
@@ -29,17 +29,17 @@ No screenshots were generated or asserted in this iteration.
 
 | Feature | Source implementation | Run/visual evidence |
 |---|---|---|
-| Four live model-derived cards | Implemented | Pending headless GUI execution |
-| Room count/area/volume updates | Implemented using `layout_metrics` | Pending GUI regression |
-| Placed-device categories | Implemented (FFU/Supply/Return+Exhaust/Other) | Pending GUI regression |
-| Embedded 2D Room Navigator | Implemented from current room rectangles | Pending screenshot |
-| Click-to-select navigator→inspector/2D/3D | Implemented via `select_item` | Pending GUI regression |
-| Selected room dimensions, classification, device count | Implemented | Pending GUI regression |
-| Configured pressure distinction | Labelled **configured pressure**, never solver result | Pending GUI regression |
-| Focus Room | Implemented using temporary visibility filter and 3D fit | Pending GUI regression |
-| Isolate/Restore | Existing implementation, surfaced in inspector | Pending GUI regression |
-| Studio View (isometric/full/inspector) | Implemented | Pending GUI regression |
-| Inspector toggle | Implemented | Pending GUI regression |
+| Four live model-derived cards | Implemented | Focused Xvfb Tk suite passed |
+| Room count/area/volume updates | Implemented using `layout_metrics` | Focused Xvfb Tk suite passed |
+| Placed-device categories | Implemented (FFU/Supply/Return+Exhaust/Other) | Focused Xvfb Tk suite passed |
+| Embedded 2D Room Navigator | Implemented from current room rectangles | Genuine Xvfb 1920×1080 screenshot captured |
+| Click-to-select navigator→inspector/2D/3D | Implemented via `select_item` | Focused Xvfb Tk suite passed |
+| Selected room dimensions, classification, device count | Implemented | Focused Xvfb Tk suite passed |
+| Configured pressure distinction | Labelled **configured pressure**, never solver result | Focused Xvfb Tk suite passed |
+| Focus Room | Implemented using existing synchronized camera fit | Focused Xvfb Tk suite passed |
+| Isolate/Restore | Existing implementation, surfaced in inspector | Focused Xvfb Tk suite passed |
+| Studio View (isometric/full/inspector) | Implemented | Focused Xvfb Tk suite passed |
+| Inspector toggle | Implemented | Focused Xvfb Tk suite passed |
 | OpenFOAM live simulation & verified fields | Not changed this iteration | **Not verified** |
 | Precise reference screenshot parity | Not measured | **Not verified** |
 
@@ -65,13 +65,11 @@ rather than treating no-DISPLAY skips as passed GUI interactions.
 
 ## Unverified visual work
 
-1. Capture original unmodified reference baseline and new application screen
-   at 1920×1080 using the user's native desktop or a real GUI session.
-2. Compare panel placement, typography, color palette and 3D room dimensions.
-3. Verify the original user's theme preference is preserved; dark default
-   parity and responsive geometry remain open.
-4. Record exact focused/full suite passed, failed, skipped and error counts.
-5. Verify the OpenFOAM v10 installed solver separately with provenance-backed
+1. Capture a *Windows-native* screenshot and compare to the exact supplied
+   reference image; Linux Xvfb screenshot alone is not Windows parity.
+2. Check typography, palette, room proportions, door apertures and translucent walls.
+3. Run the full suite and record exact pass/fail/skip/error counts at the final SHA.
+4. Verify OpenFOAM v10 installed solver separately with provenance-backed
    residuals and fields; never infer integration % from GUI widgets.
 
 ## Percent completion
@@ -84,5 +82,13 @@ Criteria and per-item evidence must be recorded before calculating any score.
 
 GitHub repository code was inspected and changed through the connected
 repository interface. The user's Windows desktop is not accessible to this
-session. Consequently the application was **not** launched locally and no
-authentic baseline/after screenshot was captured in this iteration.
+session. The app **was launched in a real Linux/Xvfb GUI session**, with an
+unmodified screenshot recorded as a GitHub Actions artifact. **It was not
+launched on the user's Windows desktop** and exact screenshot parity is
+unverified. The external reference screenshot was not available as an exact
+comparison asset in this session.
+
+Latest verified focused evidence before the most recent cosmetic adjustment:
+**62 passed, 0 failed** in GitHub Actions run
+[39170287686](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/runs/39170287686).
+The cosmetic correction requires its own fresh CI evidence.

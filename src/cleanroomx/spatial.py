@@ -3817,8 +3817,12 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._notify_view_status()
         canvas = self.canvas_3d
         canvas.delete("all")
-        studio_active = getattr(getattr(self, "_studio", None), "enabled", False)
+        studio = getattr(self, "_studio", None)
+        studio_active = getattr(studio, "enabled", False)
         if studio_active:
+            studio.zoom_percent.set(
+                f'{self.layout["view"]["zoom_3d"] * 100:.0f}%'
+            )
             # Scene backdrop is display-only; room/model coordinates remain canonical.
             cw, ch = max(1, canvas.winfo_width()), max(1, canvas.winfo_height())
             for band in range(24):
@@ -3856,6 +3860,43 @@ class SpatialDesignWorkspace(ttk.Frame):
             *sum(floor_points, ()),
             fill="#202b36", outline="#526577", width=1, tags=("floor3d",),
         )
+        if studio_active:
+            # A bounded architectural reference grid/height ruler:
+            # purely display coordinates, never CFD/mesh or solver results.
+            x_span = max(1e-9, max_x - min_x + 2 * pad)
+            y_span = max(1e-9, max_y - min_y + 2 * pad)
+            for index in range(1, 15):
+                x = min_x - pad + x_span * index / 15
+                start = self._project_3d(x - cx, min_y - cy - pad, floor_z)
+                end = self._project_3d(x - cx, max_y - cy + pad, floor_z)
+                canvas.create_line(
+                    *start, *end, fill="#31465b", width=1,
+                    tags=("studio_grid3d",),
+                )
+            for index in range(1, 7):
+                y = min_y - pad + y_span * index / 7
+                start = self._project_3d(min_x - cx - pad, y - cy, floor_z)
+                end = self._project_3d(max_x - cx + pad, y - cy, floor_z)
+                canvas.create_line(
+                    *start, *end, fill="#31465b", width=1,
+                    tags=("studio_grid3d",),
+                )
+            max_room_height = max(float(r["height_m"]) for r in self.layout["rooms"])
+            axis_x, axis_y = min_x - cx - pad, min_y - cy - pad
+            tick_limit = min(6, math.ceil(max_room_height))
+            canvas.create_line(
+                *self._project_3d(axis_x, axis_y, floor_z),
+                *self._project_3d(axis_x, axis_y, floor_z + max_room_height),
+                fill="#5d91b0", dash=(2, 5), width=1,
+                tags=("studio_axis3d",),
+            )
+            for level in range(tick_limit + 1):
+                px, py = self._project_3d(axis_x, axis_y, floor_z + level)
+                canvas.create_text(
+                    px - 10, py, text=str(level), fill="#83a9c3",
+                    font=("Segoe UI", 8),
+                    tags=("studio_axis3d",),
+                )
 
         section_height = self._active_section_height()
         if section_height is not None:

@@ -1827,14 +1827,14 @@ class SpatialDesignWorkspace(ttk.Frame):
             ("volume", "GEOMETRIC VOLUME", "m³"),
             ("devices", "PLACED DEVICES", ""),
         ):
-            card = ttk.Frame(studio_cards, style="CX.Toolbar.TFrame", padding=(10, 6))
+            card = ttk.Frame(studio_cards, style="CX.StudioCard.TFrame", padding=(10, 6))
             card.pack(side="left", fill="x", expand=True, padx=3)
-            ttk.Label(card, text=heading, style="CX.Section.TLabel").pack(anchor="w")
+            ttk.Label(card, text=heading, style="CX.StudioCardTitle.TLabel").pack(anchor="w")
             value_row = ttk.Frame(card)
             value_row.pack(fill="x")
             ttk.Label(
                 value_row, textvariable=self._studio_card_vars[key],
-                style="CX.ViewTitle.TLabel",
+                style="CX.StudioCardValue.TLabel",
             ).pack(side="left")
             if unit:
                 ttk.Label(value_row, text=unit).pack(side="left", padx=(5, 0))
@@ -2594,7 +2594,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             x0, y0, x1, y1 = room["rect"]
             label_id = canvas.create_text(
                 (x0 + x1) / 2, (y0 + y1) / 2,
-                text=room["name"][:14],
+                text=f'{room["name"][:12]}\n{room["floor_area_m2"]:g} m²',
                 fill=p["selection_text"] if is_selected else p["text"],
                 font=("TkDefaultFont", 8),
                 width=max(1, x1 - x0 - 4),

@@ -429,6 +429,10 @@ class DesignStudioPanels:
                                  ("device", self.workspace.layout["devices"])):
             for item in collection:
                 if text in str(item.get("name", "")).casefold():
+                    # Search must not select something still hidden by a
+                    # previous room/device isolation filter.
+                    if self.workspace._isolated_item is not None:
+                        self.workspace.show_all()
                     self.workspace.select_item(kind, str(item["id"]), notify=True)
                     return
         self.workspace._status_setter("No matching room or device")

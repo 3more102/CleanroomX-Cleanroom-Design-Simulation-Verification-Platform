@@ -442,7 +442,9 @@ def test_solver_worker_attaches_full_log_audit_to_finished_event(tmp_path):
     workspace = OpenFOAMWorkspace.__new__(OpenFOAMWorkspace)
     case = tmp_path / "configuration_1"
     case.mkdir()
-    (case / "blockMesh.log").write_text("FOAM FATAL ERROR\\n".replace("\\\\n", "\\n") + ("x" * 40000) + "\\nEnd\\n", encoding="utf-8")
+    (case / "blockMesh.log").write_text(
+        "FOAM FATAL ERROR\n" + ("x" * 40000) + "\nEnd\n", encoding="utf-8",
+    )
     workspace._run_kind = "run"
     workspace._progress_directory = str(tmp_path)
     workspace._events = queue.Queue()

@@ -21,6 +21,26 @@ Use **More tools** to expose the application menu, editing controls and
 engineering overlays. **Inspector** opens the scrollable property editor.
 Selecting 2D or Split restores the normal editing chrome.
 
+## Visual refinement
+
+The Studio now uses a restrained teal/navy palette, flat command styling,
+segmented 2D/3D/Split controls and native vector branding. Four rounded metric
+cards retain live model values; their icons are drawn with Canvas primitives.
+The floating room navigator and detail cards share spacing and corner treatment.
+Room dimensions have a clearer hierarchy, and the device breakdown uses labeled
+icons alongside the actual per-room counts.
+
+The camera dock highlights its actual preset. Hovering an action changes its
+background and cursor, and the selected volume has a soft outline. Categorical
+room walls have subtle face shading; engineering-overlay wall colors are kept
+unchanged. None of these presentation effects modifies room geometry or invents
+solver data.
+
+**Edit** on a room card opens the actual property Inspector. When a device is
+selected, Edit, Focus and Isolate resolve its assigned room. The desktop checks
+exercise these actions, hover feedback, selected-camera state and live metric
+text in addition to the existing selection/edit/save/reload workflows.
+
 ## Reference components and behavior
 
 | Reference component | Implemented behavior |

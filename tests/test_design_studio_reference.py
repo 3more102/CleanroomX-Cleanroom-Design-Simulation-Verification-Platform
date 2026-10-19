@@ -112,6 +112,9 @@ def test_gui_cards_and_room_inspector_are_live(gui):
     assert ws._studio_card_vars["rooms"].get() == "4"
     assert ws._studio_card_vars["area"].get() == "92.0"
     assert ws._studio_card_vars["volume"].get() == "276.0"
+    assert ws._studio_metrics_canvas.itemcget("studio-metric-value:rooms", "text") == "4"
+    assert ws._studio_metrics_canvas.itemcget("studio-metric-value:area", "text") == "92.0"
+    assert ws._studio_metrics_canvas.itemcget("studio-metric-value:volume", "text") == "276.0"
 
 
 def test_gui_focus_isolate_restore_and_studio_view(gui):
@@ -348,3 +351,52 @@ def test_studio_editing_tools_and_2d_split_views_remain_accessible(gui):
     assert ws.canvas_2d.winfo_ismapped()
     assert ws.canvas_3d.winfo_ismapped()
     assert ws.canvas_3d.find_withtag("room3d")
+
+
+def test_studio_action_hover_and_camera_selection_have_visible_feedback(gui):
+    gui.open_design_studio()
+    gui.root.update()
+    ws, canvas = gui.spatial_workspace, gui.spatial_workspace.canvas_3d
+    geometry = copy.deepcopy((ws.layout["rooms"], ws.layout["devices"]))
+    original = canvas.itemcget("studio-action-bg:focus", "fill")
+    x0, y0, x1, y1 = canvas.bbox("studio-action:focus")
+    canvas.event_generate("<Motion>", x=round((x0 + x1) / 2), y=round((y0 + y1) / 2))
+    gui.root.update()
+    assert canvas.itemcget("studio-action-bg:focus", "fill") != original
+    assert canvas.cget("cursor") == "hand2"
+    canvas.event_generate("<Leave>")
+    gui.root.update()
+    assert canvas.itemcget("studio-action-bg:focus", "fill") == original
+    assert (ws.layout["rooms"], ws.layout["devices"]) == geometry
+    click_tag(canvas, "studio-action:top")
+    canvas.event_generate("<Leave>")
+    assert canvas.itemcget("studio-action-bg:top", "fill") == ws._theme_palette["selection"]
+    assert canvas.itemcget("studio-action-bg:iso", "fill") != ws._theme_palette["selection"]
+
+
+def test_studio_room_actions_use_the_room_of_a_selected_device(gui):
+    gui.open_design_studio()
+    gui.root.update()
+    ws = gui.spatial_workspace
+    assert ws.select_item("device", "supply-process", notify=True)
+    click_tag(ws.canvas_3d, "studio-action:focus")
+    assert ws.selected.kind == "room" and ws.selected.item_id == "process"
+    assert ws.select_item("device", "supply-process", notify=True)
+    click_tag(ws.canvas_3d, "studio-action:isolate")
+    assert ws._is_item_visible("room", "process")
+    assert not ws._is_item_visible("room", "preparation")
+    click_tag(ws.canvas_3d, "studio-action:restore")
+    assert ws._is_item_visible("room", "preparation")
+
+
+def test_studio_edit_card_opens_the_actual_room_inspector(gui):
+    gui.open_design_studio()
+    gui.root.update()
+    ws = gui.spatial_workspace
+    assert ws.select_item("device", "supply-process", notify=True)
+    click_tag(ws.canvas_3d, "studio-action:properties")
+    gui.root.update()
+    assert ws.selected.kind == "room" and ws.selected.item_id == "process"
+    assert ws.inspector_visible()
+    assert ws._property_entries["name"].winfo_ismapped()
+    assert ws._property_vars["name"].get() == "Process"

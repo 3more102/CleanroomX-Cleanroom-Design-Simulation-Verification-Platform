@@ -9,6 +9,7 @@ on:
       - "src/cleanroomx/gui_proofgraph.py"
       - "src/cleanroomx/studio_summary.py"
       - "src/cleanroomx/studio_canvas.py"
+      - "src/cleanroomx/studio_widgets.py"
       - "src/cleanroomx/gui_theme.py"
       - "tests/test_design_studio_reference.py"
       - "tests/test_gui_proofgraph.py"

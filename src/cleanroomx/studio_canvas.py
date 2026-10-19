@@ -12,25 +12,19 @@ from typing import TYPE_CHECKING
 
 from .spatial_transforms import fit_3d_view
 from .studio_summary import dashboard_snapshot, navigator_rectangles
+from .studio_widgets import blend, draw_icon, draw_metrics, fit_text, rounded_rect
 
 if TYPE_CHECKING:
     from .spatial import SpatialDesignWorkspace
 
 
-ROOM_COLORS = ("#f0808a", "#6596f0", "#35bdb3", "#b39aef", "#e9b55f")
+ROOM_COLORS = ("#f58290", "#719eff", "#3fc8b9", "#b49af7", "#e7bc78")
 
 
 def room_color(layout: dict, room_id: str) -> str:
     index = next((i for i, room in enumerate(layout["rooms"])
                   if room["id"] == room_id), 0)
     return ROOM_COLORS[index % len(ROOM_COLORS)]
-
-
-def blend(color: str, background: str, amount: float) -> str:
-    channels = [round(int(color[i:i + 2], 16) * amount
-                      + int(background[i:i + 2], 16) * (1 - amount))
-                for i in (1, 3, 5)]
-    return "#" + "".join(f"{channel:02x}" for channel in channels)
 
 
 def studio_regions(width: int, height: int, inspector: bool = False) -> dict:
@@ -80,15 +74,21 @@ def draw_navigator(workspace: SpatialDesignWorkspace) -> None:
     workspace._navigator_item_to_room.clear()
     width = int(float(canvas.cget("width")))
     height = int(float(canvas.cget("height")))
-    canvas.configure(background=palette["panel"], highlightbackground=palette["border"])
-    canvas.create_text(12, 17, text="ROOM NAVIGATOR", anchor="w",
-                       fill=palette["accent"], font=("TkDefaultFont", 9, "bold"))
-    canvas.create_text(width - 12, 17, text="PLAN", anchor="e",
+    canvas.configure(background=palette["canvas_3d"], highlightthickness=0)
+    rounded_rect(canvas, (3, 5, width, height), fill=palette["canvas_3d"], outline="")
+    rounded_rect(canvas, (0, 0, width - 3, height - 3), radius=14,
+                 fill=palette["panel"], outline=palette["border"])
+    draw_icon(canvas, "rooms", 18, 22, 12, palette["accent"])
+    canvas.create_text(33, 22, text="ROOM NAVIGATOR", anchor="w",
+                       fill=palette["text"], font=("TkDefaultFont", 8, "bold"))
+    canvas.create_text(width - 18, 22, text=f'{len(workspace.layout["rooms"]):02d}', anchor="e",
                        fill=palette["muted"], font=("TkDefaultFont", 8))
+    rounded_rect(canvas, (12, 42, width - 15, 131), radius=8,
+                 fill=palette["field"], outline="")
     rooms = workspace.layout["rooms"]
     selected_id = _selected_room_id(workspace)
     miniatures = navigator_rectangles(
-        workspace.layout, width_px=width, height_px=132, padding_px=13, header_px=35
+        workspace.layout, width_px=width, height_px=128, padding_px=20, header_px=48
     )
     for index, room in enumerate(miniatures):
         selected = room["id"] == selected_id
@@ -96,7 +96,8 @@ def draw_navigator(workspace: SpatialDesignWorkspace) -> None:
         x0, y0, x1, y1 = room["rect"]
         items = [canvas.create_rectangle(
             x0, y0, x1, y1, fill=blend(color, palette["panel"], .65),
-            outline=palette["text"] if selected else color, width=3 if selected else 1,
+            outline=blend(color, palette["text"], .5) if selected else color,
+            width=2 if selected else 1,
             tags=(f"navigator-room:{room['id']}",),
         ), canvas.create_text(
             (x0 + x1) / 2, (y0 + y1) / 2, text=str(index + 1),
@@ -113,41 +114,60 @@ def draw_navigator(workspace: SpatialDesignWorkspace) -> None:
         y = 148 + (index - start) * row_height
         selected = room["id"] == selected_id
         color = room_color(workspace.layout, room["id"])
-        items = [canvas.create_rectangle(
-            7, y - 12, width - 7, y + 12,
-            fill=palette["selection"] if selected else palette["panel"], outline="",
-        ), canvas.create_rectangle(12, y - 5, 20, y + 5, fill=color, outline=""),
-            canvas.create_text(29, y, text=str(index + 1), anchor="w",
-                               fill=palette["text"], font=("TkDefaultFont", 8, "bold")),
-            canvas.create_text(45, y, text=room["name"][:21], anchor="w",
-                               fill=palette["text"], font=("TkDefaultFont", 8)),
-            canvas.create_text(width - 12, y,
+        items = [rounded_rect(canvas, (10, y - 12, width - 13, y + 12), radius=6,
+            fill=blend(color, palette["panel"], .17) if selected else palette["panel"], outline=""),
+            canvas.create_oval(18, y - 3, 24, y + 3, fill=color, outline=""),
+            canvas.create_text(34, y, text=f'{index + 1:02d}', anchor="w",
+                               fill=palette["muted"], font=("TkDefaultFont", 7)),
+            canvas.create_text(58, y, text=fit_text(canvas, room["name"], width - 125,
+                               ("TkDefaultFont", 8, "bold" if selected else "normal")), anchor="w",
+                               fill=palette["text"], font=("TkDefaultFont", 8, "bold" if selected else "normal")),
+            canvas.create_text(width - 22, y,
                                text=f'{room["length_m"] * room["width_m"]:g} m²',
-                               anchor="e", fill=palette["muted"], font=("TkDefaultFont", 8))]
+                               anchor="e", fill=palette["muted"], font=("TkDefaultFont", 7))]
         for item in items:
             workspace._navigator_item_to_room[item] = room["id"]
-    canvas.create_text(12, height - 15,
-                       text="Click plan / row to select · ↑ ↓ rooms", anchor="w",
-                       fill=palette["muted"], font=("TkDefaultFont", 8))
+    canvas.create_text(17, height - 17,
+                       text="↑ ↓  Switch room     ·     Click to select", anchor="w",
+                       fill=palette["muted"], font=("TkDefaultFont", 7))
 
 
 def _panel(workspace, x, y, width, height, *, selected=False):
     canvas, p = workspace.canvas_3d, workspace._theme_palette
-    canvas.create_rectangle(x, y, x + width, y + height, fill=p["panel"],
-                            outline=p["border"], tags=("studio-ui",))
+    rounded_rect(canvas, (x + 2, y + 4, x + width + 2, y + height + 4), radius=12,
+                 fill=blend(p["canvas_3d"], p["background"], .6), outline="", tags=("studio-ui",))
+    rounded_rect(canvas, (x, y, x + width, y + height), radius=12,
+                 fill=p["panel"], outline=p["border"], tags=("studio-ui",))
     if selected:
-        canvas.create_rectangle(x, y, x + 3, y + height, fill=p["accent"],
-                                outline="", tags=("studio-ui",))
+        canvas.create_line(x + 1, y + 15, x + 1, y + height - 15,
+                           fill=p["accent"], width=3, capstyle="round", tags=("studio-ui",))
 
 
-def _action(workspace, rect, label, action):
+def _action(workspace, rect, label, action, *, primary=False, active=False):
     canvas, p = workspace.canvas_3d, workspace._theme_palette
     x0, y0, x1, y1 = rect
     tags = (f"studio-action:{action}", "studio-ui")
-    canvas.create_rectangle(x0, y0, x1, y1, fill=p["surface_alt"],
-                            outline=p["border"], tags=tags)
+    normal = p["accent"] if primary else p["selection"] if active else p["surface_alt"]
+    foreground = p["accent_text"] if primary else p["accent"] if active else p["text"]
+    hovered = p["accent_hover"] if primary else blend(p["accent"], p["surface_alt"], .2)
+    workspace._studio_action_styles[action] = (normal, hovered)
+    fill = hovered if workspace._studio_hover_action == action else normal
+    rounded_rect(canvas, rect, radius=7, fill=fill,
+                 outline=p["accent"] if primary or active else p["border"],
+                 tags=tags + (f"studio-action-bg:{action}",))
     canvas.create_text((x0 + x1) / 2, (y0 + y1) / 2, text=label,
-                       fill=p["text"], font=("TkDefaultFont", 8, "bold"), tags=tags)
+                       fill=foreground, font=("TkDefaultFont", 8, "bold"), tags=tags)
+
+
+def hover_action(workspace, action):
+    previous = workspace._studio_hover_action
+    if previous == action:
+        return
+    workspace._studio_hover_action = action
+    for key, hovered in ((previous, False), (action, True)):
+        colors = workspace._studio_action_styles.get(key)
+        if colors:
+            workspace.canvas_3d.itemconfigure(f"studio-action-bg:{key}", fill=colors[int(hovered)])
 
 
 def _room_panels(workspace, width, height, card_width):
@@ -173,33 +193,47 @@ def _room_panel_contents(workspace, width, card_width):
         x + 12, yy, text=value, anchor="nw", fill=kw.pop("fill", p["muted"]),
         font=kw.pop("font", ("TkDefaultFont", 9)), tags=("studio-ui",), **kw
     )
-    text(y + 10, "SELECTED ROOM", fill=p["accent"], font=("TkDefaultFont", 9, "bold"))
+    text(y + 14, "SELECTED ROOM", fill=p["muted"], font=("TkDefaultFont", 7, "bold"))
     if room is None:
         text(y + 38, "Select a room in the scene or navigator", width=card_width - 24)
         return
-    text(y + 34, room["name"], fill=p["text"], font=("TkDefaultFont", 10, "bold"))
-    text(y + 59, f'Project class: {room["classification"]}', width=card_width - 24)
-    text(y + 82, f'L {room["length_m"]:g} W {room["width_m"]:g} H {room["height_m"]:g} m')
-    text(y + 105, f'Floor area {room["floor_area_m2"]:g} m² | Volume {room["volume_m3"]:g} m³')
-    text(y + 128, f'Placed devices: {room["device_count"]}')
+    _action(workspace, (x + card_width - 54, y + 9, x + card_width - 12, y + 31), "Edit", "properties")
+    text(y + 37, fit_text(canvas, room["name"], card_width - 30, ("TkDefaultFont", 15, "bold")),
+         fill=p["text"], font=("TkDefaultFont", 15, "bold"))
+    text(y + 67, fit_text(canvas, room["classification"], card_width - 30, ("TkDefaultFont", 8)),
+         font=("TkDefaultFont", 8))
+    for column, (label, value) in enumerate((("LENGTH", room["length_m"]),
+                                            ("WIDTH", room["width_m"]), ("HEIGHT", room["height_m"]))):
+        xx = x + 14 + column * (card_width - 28) / 3
+        canvas.create_text(xx, y + 100, text=f"{value:g} m", anchor="w", fill=p["text"],
+                           font=("TkDefaultFont", 11, "bold"), tags=("studio-ui",))
+        canvas.create_text(xx, y + 119, text=label, anchor="w", fill=p["muted"],
+                           font=("TkDefaultFont", 6, "bold"), tags=("studio-ui",))
+    text(y + 133, f'{room["floor_area_m2"]:g} m² floor  ·  {room["volume_m3"]:g} m³ volume',
+         font=("TkDefaultFont", 7))
     pressure = room["pressure_setpoint_pa"]
-    text(y + 151, "Pressure setpoint: " + ("not set" if pressure is None else f'{pressure:+g} Pa'),
-         fill="#d6bd7b")
+    text(y + 157, "PRESSURE SETPOINT", font=("TkDefaultFont", 7))
+    canvas.create_text(x + card_width - 16, y + 162,
+                       text="Not set" if pressure is None else f'{pressure:+g} Pa', anchor="e",
+                       fill=p["accent"], font=("TkDefaultFont", 10, "bold"), tags=("studio-ui",))
     y += 194
     _panel(workspace, x, y, card_width, 140)
-    text(y + 11, "PLACED IN THIS ROOM", fill=p["muted"], font=("TkDefaultFont", 9, "bold"))
+    text(y + 13, "PLACED IN THIS ROOM", font=("TkDefaultFont", 7, "bold"))
+    canvas.create_text(x + card_width - 16, y + 18, text=f'{room["device_count"]:02d} total',
+                       anchor="e", fill=p["muted"], font=("TkDefaultFont", 7), tags=("studio-ui",))
     groups = room["device_groups"]
     for column, key, label, yy in (
         (0, "ffu", "FFU", 48), (1, "supply", "Supply", 48),
         (0, "return_exhaust", "Return / exhaust", 76), (1, "other", "Other", 76),
     ):
         xx = x + 12 + column * ((card_width - 24) / 2)
-        canvas.create_text(xx, y + yy, text=str(groups[key]), anchor="w", fill=p["accent"],
-                           font=("TkDefaultFont", 13, "bold"), tags=("studio-ui",))
-        canvas.create_text(xx + 22, y + yy, text=label, anchor="w", fill=p["muted"],
-                           font=("TkDefaultFont", 8), tags=("studio-ui",))
+        draw_icon(canvas, key, xx + 8, y + yy, 12, p["accent"], ("studio-ui",))
+        canvas.create_text(xx + 24, y + yy, text=str(groups[key]), anchor="w", fill=p["text"],
+                           font=("TkDefaultFont", 12 if len(str(groups[key])) < 4 else 8, "bold"), tags=("studio-ui",))
+        canvas.create_text(xx + 50, y + yy, text=label, anchor="w", fill=p["muted"],
+                           font=("TkDefaultFont", 7), tags=("studio-ui",))
     middle = x + card_width / 2
-    _action(workspace, (x + 11, y + 104, middle - 3, y + 129), "Focus room", "focus")
+    _action(workspace, (x + 11, y + 104, middle - 3, y + 129), "Focus room", "focus", primary=True)
     _action(workspace, (middle + 3, y + 104, x + card_width - 11, y + 129),
             "Restore rooms" if workspace._isolated_item else "Isolate room",
             "restore" if workspace._isolated_item else "isolate")
@@ -209,6 +243,7 @@ def draw_scene(workspace: SpatialDesignWorkspace, overlay: dict) -> None:
     """Render actual cutaway volumes, attached devices and functional panels."""
     canvas, p, layout = workspace.canvas_3d, workspace._theme_palette, workspace.layout
     width, height = max(200, canvas.winfo_width()), max(200, canvas.winfo_height())
+    workspace._studio_action_styles.clear()
     regions = studio_regions(width, height, workspace.inspector_visible())
     # Canvas-native gradient, painted before geometry and UI. This is not an image.
     for y in range(0, height, 6):
@@ -219,6 +254,12 @@ def draw_scene(workspace: SpatialDesignWorkspace, overlay: dict) -> None:
     workspace.navigator_canvas.configure(width=regions["navigator_width"], height=nav_height)
     workspace.navigator_canvas.place(relx=0, x=14, rely=1, y=-14, anchor="sw")
     workspace._draw_room_navigator()
+    if height >= 430:
+        canvas.create_text(18, 24, text="ROOM COMPOSITION", anchor="w", fill=p["text"],
+                           font=("TkDefaultFont", 11, "bold"), tags=("studio-ui",))
+        canvas.create_text(18, 48, text=("Interior" if workspace._interior_3d.get() else "Exterior")
+                           + " view  ·  " + workspace._projection_mode.get(), anchor="w", fill=p["muted"],
+                           font=("TkDefaultFont", 8), tags=("studio-ui",))
     if not layout["rooms"]:
         canvas.create_text(width / 2, height / 2, text="Add a room to begin designing",
                            fill=p["muted"], tags=("studio-ui",))
@@ -227,11 +268,18 @@ def draw_scene(workspace: SpatialDesignWorkspace, overlay: dict) -> None:
     if not workspace.inspector_visible():
         _room_panels(workspace, width, height, regions["card_width"])
     center = sum(regions["scene"][::2]) / 2
+    rounded_rect(canvas, (center - 137, height - 51, center + 137, height - 7), radius=12,
+                 fill=p["panel"], outline=p["border"], tags=("studio-ui",))
+    view = layout["view"]
+    angles = {"top": (0, 90), "front": (0, 0), "iso": (35, 28)}
     for i, (label, action) in enumerate((("TOP", "top"), ("FRONT", "front"), ("ISO", "iso"))):
         xx = center - 125 + i * 58
-        _action(workspace, (xx, height - 43, xx + 58, height - 13), label, action)
+        azimuth, elevation = angles[action]
+        active = (abs((view["azimuth_deg"] - azimuth + 180) % 360 - 180) < .05
+                  and abs(view["elevation_deg"] - elevation) < .05)
+        _action(workspace, (xx + 2, height - 43, xx + 56, height - 15), label, action, active=active)
     xx = center + 49
-    _action(workspace, (xx, height - 43, xx + 76, height - 13),
+    _action(workspace, (xx + 4, height - 43, xx + 76, height - 15),
             f'{layout["view"]["zoom_3d"] * 100:.0f}%', "fit")
     if height >= 430:
         canvas.create_text(width - 16, height - 18, anchor="se",
@@ -285,15 +333,19 @@ def _geometry(workspace, overlay):
         selected = _selected_room_id(workspace) == room["id"]
         hovered = workspace._hovered_3d is not None and workspace._hovered_3d.item_id == room["id"]
         outline = "#8bddf7" if selected or hovered else blend(color, p["text"], .7)
+        if selected or hovered:
+            canvas.create_polygon(*sum(base, ()), fill="", outline=blend(color, p["canvas_3d"], .3),
+                                  width=7, tags=(tag, "room3d", "studio-selection-glow"))
         canvas.create_polygon(*sum(base, ()), fill=blend(color, p["canvas_3d"], .26),
                               outline=outline, width=2 if selected else 1,
                               tags=(tag, "room3d", "studio-floor"))
         far_edges = ((0, 1) if math.cos(az) >= 0 else (3, 2),
                      (0, 3) if math.sin(az) >= 0 else (1, 2))
         edges = far_edges if workspace._interior_3d.get() else ((0, 1), (1, 2), (2, 3), (3, 0))
-        for a, b in edges:
+        for face_index, (a, b) in enumerate(edges):
             face = (base[a], base[b], top[b], top[a])
-            canvas.create_polygon(*sum(face, ()), fill=color, outline=outline,
+            shaded = blend(color, p["canvas_3d"], .88 if face_index % 2 else 1)
+            canvas.create_polygon(*sum(face, ()), fill=shaded if overlay["mode"] == "none" else color, outline=outline,
                                   width=2 if selected else 1,
                                   stipple="gray50" if workspace._xray_3d.get() else "",
                                   tags=(tag, "room3d", "studio-wall"))
@@ -310,13 +362,14 @@ def _geometry(workspace, overlay):
                                   dash=(4, 3), tags=(tag, "section_plane"))
         if workspace._show_labels.get():
             anchor = project(x0 + room["length_m"] * .22, y0 + room["width_m"] * .18, z1 + .15)
-            label = canvas.create_text(*anchor, text=room["name"], fill=p["text"],
+            label = canvas.create_text(*anchor, text=fit_text(canvas, room["name"], 190,
+                                       ("TkDefaultFont", 10, "bold")), fill=p["text"],
                                        font=("TkDefaultFont", 10, "bold"),
                                        tags=(tag, "room3d", "studio-room-label"))
             x, y, xx, yy = canvas.bbox(label)
-            box = canvas.create_rectangle(x - 5, y - 3, xx + 5, yy + 3,
-                                          fill=p["panel"], outline=blend(color, p["border"], .6),
-                                          tags=(tag, "room3d", "studio-room-label"))
+            box = rounded_rect(canvas, (x - 11, y - 5, xx + 11, yy + 5), radius=7,
+                               fill=p["panel"], outline=blend(color, p["border"], .6),
+                               tags=(tag, "room3d", "studio-room-label"))
             canvas.tag_lower(box, label)
         if workspace._show_devices.get():
             for device in layout["devices"]:

@@ -82,7 +82,7 @@ def main() -> int:
             "render_source_sha256": {
                 name: hashlib.sha256(path.read_bytes()).hexdigest()
                 for name in ("gui.py", "gui_theme.py", "spatial.py", "spatial_transforms.py",
-                             "studio_canvas.py", "studio_summary.py", "gui_proofgraph.py")
+                             "studio_canvas.py", "studio_widgets.py", "studio_summary.py", "gui_proofgraph.py")
                 if (path := Path(gui_module.__file__).parent / name).is_file()
             },
             "image_sha256": hashlib.sha256(args.output.read_bytes()).hexdigest(),

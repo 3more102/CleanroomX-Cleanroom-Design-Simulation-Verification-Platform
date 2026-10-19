@@ -2414,9 +2414,11 @@ class CleanroomXApp:
         # workspace remains fully usable at the supported 1050×680 minimum.
         topbar = ttk.Frame(self.root, padding=(10, 5, 10, 4))
         topbar.pack(fill="x")
-        ttk.Label(topbar, text="CLEANROOMX", style="CX.Brand.TLabel").grid(
-            row=0, column=0, sticky="w", padx=(0, 12)
-        )
+        brand = ttk.Frame(topbar)
+        brand.grid(row=0, column=0, sticky="w", padx=(0, 14))
+        self._brand_mark = tk.Canvas(brand, width=26, height=28, highlightthickness=0)
+        self._brand_mark.pack(side="left", padx=(0, 7))
+        ttk.Label(brand, text="CLEANROOMX", style="CX.Brand.TLabel").pack(side="left")
         ttk.Label(topbar, text="Project").grid(
             row=0, column=1, sticky="w", padx=(0, 5)
         )
@@ -3135,6 +3137,14 @@ class CleanroomXApp:
                 background=palette["plot"],
                 highlightbackground=palette["border"],
             )
+
+        brand_mark = getattr(self, "_brand_mark", None)
+        if brand_mark is not None:
+            from .studio_widgets import draw_icon
+
+            brand_mark.delete("all")
+            brand_mark.configure(background=palette["background"])
+            draw_icon(brand_mark, "volume", 13, 14, 21, palette["accent"])
 
         workspace = getattr(self, "spatial_workspace", None)
         if workspace is not None:

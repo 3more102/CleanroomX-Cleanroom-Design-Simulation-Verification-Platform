@@ -1658,6 +1658,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._navigator_item_to_room: dict[int, str] = {}
         self._navigator_scroll = 0
         self._studio_active = False
+        self._studio_hover_action = None
+        self._studio_action_styles = {}
         self._studio_saved_menu = None
         self._toolbar_layout_keys = {}
         self._studio_more_tools = tk.BooleanVar(value=False)
@@ -1700,7 +1702,8 @@ class SpatialDesignWorkspace(ttk.Frame):
             style="CX.Section.TLabel",
         )
         self._design_title.pack(side="left", padx=(0, 8))
-        ttk.Button(commandbar, text="+ Room", width=8, command=self.add_room).pack(
+        ttk.Button(commandbar, text="+ Room", width=8, command=self.add_room,
+                   style="CX.Primary.TButton").pack(
             side="left", padx=2
         )
         device_button = ttk.Menubutton(commandbar, text="+ Device / opening")
@@ -1745,6 +1748,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         ]
         self._studio_find_button = ttk.Button(
             commandbar, text="Find room / device", command=self.prompt_design_search,
+            style="CX.Ghost.TButton",
         )
         self._studio_find_button.pack(side="right", padx=2)
 
@@ -1760,6 +1764,7 @@ class SpatialDesignWorkspace(ttk.Frame):
                 value=value,
                 variable=self._workspace_mode,
                 command=self._apply_workspace_mode,
+                style="CX.Segmented.TRadiobutton",
             ).pack(side="left", padx=1)
         ttk.Separator(modebar, orient="vertical").pack(
             side="left", fill="y", padx=8
@@ -1871,21 +1876,9 @@ class SpatialDesignWorkspace(ttk.Frame):
         studio_cards = ttk.Frame(self, padding=(8, 2, 8, 5))
         studio_cards.pack(fill="x")
         self._studio_cards = studio_cards
-        for column, (key, heading, unit) in enumerate((
-            ("rooms", "ROOMS", ""),
-            ("area", "FLOOR AREA", "m²"),
-            ("volume", "GEOMETRIC VOLUME", "m³"),
-            ("devices", "PLACED DEVICES", ""),
-        )):
-            studio_cards.columnconfigure(column, weight=1, uniform="studio-metrics")
-            card = ttk.Frame(studio_cards, style="CX.StudioCard.TFrame", padding=(14, 8))
-            card.grid(row=0, column=column, sticky="nsew", padx=(0, 2))
-            ttk.Label(
-                card, textvariable=self._studio_card_vars[key],
-                style="CX.StudioCardValue.TLabel",
-            ).pack(anchor="w")
-            ttk.Label(card, text=heading + (f" · {unit}" if unit else ""),
-                      style="CX.StudioCardTitle.TLabel").pack(anchor="w", pady=(5, 0))
+        self._studio_metrics_canvas = tk.Canvas(studio_cards, height=86, highlightthickness=0)
+        self._studio_metrics_canvas.pack(fill="x")
+        self._studio_metrics_canvas.bind("<Configure>", lambda _event: studio_canvas.draw_metrics(self))
 
         self._body = ttk.Panedwindow(self, orient="horizontal")
         self._body.pack(fill="both", expand=True, padx=8, pady=(2, 6))
@@ -2373,6 +2366,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             highlightbackground=palette["border"],
         )
         self._inspector_scroll.configure(background=palette["background"])
+        studio_canvas.draw_metrics(self)
         if redraw:
             self.redraw()
 
@@ -2741,16 +2735,29 @@ class SpatialDesignWorkspace(ttk.Frame):
             self.find_design_item()
 
     def focus_room(self) -> None:
-        if self.selected is None or self.selected.kind != "room":
+        if not self._select_context_room():
             self._status_setter("Select a room to focus")
             return
         self.fit_selected()
 
     def isolate_room(self) -> None:
-        if self.selected is None or self.selected.kind != "room":
+        if not self._select_context_room():
             self._status_setter("Select a room to isolate")
             return
         self.isolate_selected()
+
+    def _select_context_room(self) -> bool:
+        if self.selected is None:
+            return False
+        if self.selected.kind == "room":
+            return True
+        item = self._selected_object()
+        room_id = (item or {}).get("room_id")
+        return bool(room_id and self.select_item("room", room_id, notify=True))
+
+    def inspect_room(self) -> None:
+        if self._select_context_room():
+            self._focus_property("name")
 
     def _update_studio_summary(self) -> None:
         selected_room_id = (
@@ -2766,6 +2773,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             ("devices", str(snapshot["placed_devices"])),
         ):
             self._studio_card_vars[key].set(value)
+        studio_canvas.draw_metrics(self)
         groups = (snapshot["selected_room"] or {}).get("device_groups", snapshot["device_groups"])
         self._studio_devices_var.set(
             f'FFU {groups["ffu"]}  ·  Supply {groups["supply"]}  ·  '
@@ -4796,16 +4804,25 @@ class SpatialDesignWorkspace(ttk.Frame):
 
     def _on_3d_motion(self, event: tk.Event) -> None:
         current = self.canvas_3d.find_withtag("current")
+        tags = self.canvas_3d.gettags(current[0]) if current else ()
+        action = next((tag.split(":", 1)[1] for tag in tags
+                       if tag.startswith("studio-action:")), None)
+        if self._studio_active:
+            studio_canvas.hover_action(self, action)
         hovered = (
-            self._parse_hit(self.canvas_3d.gettags(current[0]))
+            self._parse_hit(tags)
             if current
             else None
         )
+        self.canvas_3d.configure(cursor="hand2" if action or hovered else "")
         if hovered != self._hovered_3d:
             self._hovered_3d = hovered
             self._draw_3d()
 
     def _on_3d_leave(self, event: tk.Event | None = None) -> None:
+        if self._studio_active:
+            studio_canvas.hover_action(self, None)
+        self.canvas_3d.configure(cursor="")
         if self._hovered_3d is None:
             return
         self._hovered_3d = None
@@ -4819,6 +4836,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         actions = {
             "focus": self.focus_room, "isolate": self.isolate_room,
             "restore": self.show_all, "fit": self.fit_3d,
+            "properties": self.inspect_room,
             **{key: lambda p=key: self.set_3d_view_preset(p)
                for key in ("top", "front", "iso")},
         }

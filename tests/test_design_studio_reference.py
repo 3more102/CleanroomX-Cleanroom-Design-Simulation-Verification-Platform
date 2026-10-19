@@ -684,6 +684,10 @@ def test_live_device_schedule_select_focus_export_and_reveal(gui, tmp_path, monk
     schedule._query_var.set("supply")
     schedule.refresh_rows()
     assert len(schedule.table.get_children()) == 2
+    schedule._query_var.set("this-device-does-not-exist")
+    schedule.refresh_rows()
+    assert schedule.table.get_children() == ()
+    assert "0 of 10" in schedule._status_var.get()
     schedule._query_var.set("")
     schedule._category_var.set("Air devices")
     schedule.refresh_rows()

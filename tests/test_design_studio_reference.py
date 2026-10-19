@@ -10,7 +10,7 @@ import tkinter as tk
 import pytest
 
 from cleanroomx.gui import CleanroomXApp, bundled_demo_project_path
-from cleanroomx.studio_summary import dashboard_snapshot, navigator_device_markers, navigator_rectangles
+from cleanroomx.studio_summary import dashboard_snapshot, device_snapshot, navigator_device_markers, navigator_rectangles
 
 
 def demo_layout() -> dict:
@@ -470,3 +470,47 @@ def test_studio_minimap_device_selection_and_room_keyboard_context(gui):
     click_tag(ws.navigator_canvas, f"navigator-room:{room_id}")
     assert ws.selected.kind == "room"
     assert ws.selected.item_id == room_id
+
+
+def test_selected_device_model_snapshot_is_live_and_read_only():
+    layout = demo_layout()
+    unchanged = copy.deepcopy(layout)
+    device = device_snapshot(layout, "supply-process")
+    assert device is not None
+    assert device["id"] == "supply-process"
+    assert device["type"] == "supply"
+    assert device["room_id"] == "process"
+    assert device["room_name"] == "Process"
+    assert device["x_m"] == pytest.approx(1.5)
+    assert device["y_m"] == pytest.approx(2.0)
+    assert layout == unchanged
+    assert device_snapshot(layout, "nonexistent-device") is None
+    assert device_snapshot(layout, None) is None
+    layout["devices"][1]["x_m"] += 1
+    assert device_snapshot(layout, "supply-process")["x_m"] == pytest.approx(2.5)
+
+
+def test_studio_device_inspection_card_uses_shared_selection(gui):
+    gui.open_design_studio()
+    gui.root.update()
+    ws = gui.spatial_workspace
+    assert ws.select_item("device", "supply-process", notify=True)
+    gui.root.update()
+    canvas = ws.canvas_3d
+    selected_name = canvas.find_withtag("studio-selected-device-name")
+    position = canvas.find_withtag("studio-selected-device-position")
+    assert selected_name and position
+    assert canvas.itemcget(selected_name[0], "text") == "supply-process" or (
+        "supply" in canvas.itemcget(selected_name[0], "text").lower()
+    )
+    assert "X 1.5 m" in canvas.itemcget(position[0], "text")
+    assert "Y 2 m" in canvas.itemcget(position[0], "text")
+    click_tag(canvas, "studio-action:inspect-device")
+    gui.root.update()
+    assert ws.selected.kind == "device"
+    assert ws.selected.item_id == "supply-process"
+    assert ws.inspector_visible()
+    assert ws._property_entries["name"].winfo_ismapped()
+    assert ws._property_vars["name"].get() == (
+        next(d["name"] for d in ws.layout["devices"] if d["id"] == "supply-process")
+    )

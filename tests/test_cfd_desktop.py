@@ -204,9 +204,9 @@ def test_full_log_audit_detects_fatal_message_outside_live_tail(tmp_path):
     case = tmp_path / "configuration_1"
     case.mkdir()
     (case / "simpleFoam.log").write_text(
-        "FOAM FATAL ERROR\\n".replace("\\\\n", "\\n")
-        + "Time = 1\\n".replace("\\\\n", "\\n")
-        + ("normal solver output " * 3000) + "\\nEnd\\n",
+        "FOAM FATAL ERROR\n"
+        + "Time = 1\n"
+        + ("normal solver output " * 3000) + "\nEnd\n",
         encoding="utf-8",
     )
     live = read_solver_progress(tmp_path)
@@ -221,9 +221,9 @@ def test_full_log_audit_catches_nonfinite_early_residual(tmp_path):
     case = tmp_path / "configuration_1"
     case.mkdir()
     (case / "simpleFoam.log").write_text(
-        "Time = 1\\n".replace("\\\\n", "\\n")
-        + "smoothSolver: Solving for Ux, Initial residual = nan, Final residual = 1e-2, No Iterations 2\\n".replace("\\\\n", "\\n")
-        + ("normal solver output " * 3000) + "\\nEnd\\n",
+        "Time = 1\n"
+        + "smoothSolver: Solving for Ux, Initial residual = nan, Final residual = 1e-2, No Iterations 2\n"
+        + ("normal solver output " * 3000) + "\nEnd\n",
         encoding="utf-8",
     )
     audited = read_solver_progress(tmp_path, full_scan=True)
@@ -234,7 +234,7 @@ def test_full_log_audit_catches_nonfinite_early_residual(tmp_path):
 def test_full_log_audit_requires_complete_end_line(tmp_path):
     case = tmp_path / "configuration_1"
     case.mkdir()
-    (case / "blockMesh.log").write_text("mesh generated\\nEnd".replace("\\\\n", "\\n"), encoding="utf-8")
+    (case / "blockMesh.log").write_text("mesh generated\nEnd", encoding="utf-8")
     audited = read_solver_progress(tmp_path, full_scan=True)
     assert audited["completed_stages"] == 0
     assert audited["latest"]["ended"] is False

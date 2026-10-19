@@ -131,3 +131,7 @@ solver execution or merge itself into the default branch.
 - Inline room cards scale to the available viewport height. The optional XYZ
   widget appears when it fits below them; shorter views keep the primary room
   actions visible. Screenshot capture waits for the final native repaint.
+
+## Interactive equipment mini-map
+
+The floating Room Navigator now draws **real equipment and opening coordinates** over the fitted miniature floor plan. Circular markers represent air devices, diamonds represent openings and squares represent other devices. Selecting a marker uses the existing shared device-selection path, so the 3D scene and selected-room context respond together. A selected device receives a ring, and Up/Down navigation advances relative to its assigned room. Off-plan markers are omitted from the tiny navigator to avoid obscuring the room list; these items remain accessible from the actual 2D/3D views and Find. All markers are derived from stored design geometry, **not** solver-computed fields.

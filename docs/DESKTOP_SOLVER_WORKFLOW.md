@@ -39,6 +39,12 @@ and the process exit status remain authoritative for success.
    spatial cell samples or region statistics. **Export report + data…** retains
    the selected graphs, raw graph values, sources and hashes.
 
+Each room-study run is first assembled in a temporary sibling directory and
+published only after all generated case inputs, the original project snapshot,
+and provenance files are written. Failed preparation removes the staging files
+without publishing a partial run; an existing destination is never intentionally
+replaced. A sudden power loss is not a guarantee of durable publication.
+
 Each run uses a new directory. It retains `project-input.json`,
 `specification.json`, `room-study.json`, 24 generated case inputs, solver logs,
 `execution-receipt.json`, native fields and synchronized VTK/receipt assets.

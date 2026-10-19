@@ -2930,6 +2930,14 @@ class SpatialDesignWorkspace(ttk.Frame):
             self._navigator_item_to_room[rect_id] = room["id"]
             self._navigator_item_to_room[label_id] = room["id"]
 
+    def toggle_studio_device_layer(self, category: str) -> None:
+        """Toggle one Studio display layer without editing the project."""
+        if category not in self._studio_device_layers:
+            raise ValueError(f"Unknown Studio device layer: {category}")
+        value = self._studio_device_layers[category]
+        value.set(not value.get())
+        self._on_studio_device_layers_changed()
+
     def _on_studio_device_layers_changed(self) -> None:
         """Redraw GUI layers only; model geometry and project data stay intact."""
         self._navigator_hover_target = None
@@ -5002,6 +5010,8 @@ class SpatialDesignWorkspace(ttk.Frame):
             "properties": self.inspect_room,
             "inspect-device": lambda: self._focus_property("name"),
             "focus-device": self.fit_selected,
+            **{f"layer-{category}": lambda name=category: self.toggle_studio_device_layer(name)
+               for category in ("air", "opening", "other")},
             **{key: lambda p=key: self.set_3d_view_preset(p)
                for key in ("top", "front", "iso")},
         }

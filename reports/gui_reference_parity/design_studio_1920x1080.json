@@ -1,0 +1,40 @@
+{
+  "capture_type": "real_desktop_screenshot",
+  "baseline": false,
+  "platform": "Linux-6.18.55-x86_64-with-glibc2.39",
+  "git_commit": "860a479716ffeb1e487ddd6c18e0e4d0b9fde049",
+  "resolution": [
+    1920,
+    1080
+  ],
+  "desktop_capture_origin": [
+    0,
+    0
+  ],
+  "render_source_sha256": {
+    "gui.py": "73e04ba6789480768f8d47cb1f32b5af126b20094fd50622ed3e3da974ff5bfe",
+    "gui_theme.py": "4dc78102612b42a86ee9ee41b0611467b582f9b695e6a4041a3afbd993312590",
+    "spatial.py": "b234e70fedca495933f2db466276fd22950370d92c506c3ecab962be3f1b1428",
+    "spatial_transforms.py": "ec2bf271a4b3fd2e22ed2303d686084aaf40e4e59a16b0da182b19077a682313",
+    "studio_canvas.py": "88fef64c7ed6b8b1790a3abfa2899ec774d8cf945585afa24a2066e97e66fd04",
+    "studio_summary.py": "d8f884f9afaa4f6a05043ddf624db65ef7844324e3d6c39b9e85d624ad57012b",
+    "gui_proofgraph.py": "4fd11e20f3091ef5a754244d048a6567e0e34697f6123b162c0a247d4c7c6467"
+  },
+  "image_sha256": "9d718189832368775d30b821d2edfb2c6a7041992385a8af1a0e272b963bd1b1",
+  "room_count": 3,
+  "floor_area_m2": 62.0,
+  "volume_m3": 186.0,
+  "placed_devices": 10,
+  "canvas_3d_pixels": [
+    1880,
+    611
+  ],
+  "camera_zoom_3d": 1.5831299355392556,
+  "automated_visual_similarity": "NOT MEASURED; manual review is separate",
+  "reference_image_sha256": "e1c29487f017745d060beb8249f0a53aad7b7c334d541d9c39a9b9a9969daf9f",
+  "studio_active": true,
+  "room_wall_polygons": 6,
+  "room_floor_polygons": 3,
+  "opening_polygons": 4,
+  "openfoam_execution": "NOT PERFORMED"
+}

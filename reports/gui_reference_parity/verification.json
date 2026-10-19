@@ -1,0 +1,143 @@
+{
+  "source_commit": "860a479716ffeb1e487ddd6c18e0e4d0b9fde049",
+  "base_commit": "f6ab26bfebf27e1dd3d78bdc3ed12ca226fa65cb",
+  "patch_application": {
+    "status": "PASS",
+    "tree_sha": "52d4944261b75ebac6614502d08dc5398a32381a",
+    "source_commit": "860a479716ffeb1e487ddd6c18e0e4d0b9fde049"
+  },
+  "visual_review": {
+    "method": "Direct inspection of the supplied reference and actual 1536x960 Tk capture",
+    "result": "Reference layout and components reproduced; pixel-identical appearance is not claimed",
+    "components": [
+      "navy/cyan chrome",
+      "project and command bars",
+      "guided workflow",
+      "Design Studio command row",
+      "2D/3D/Split and Fit controls",
+      "camera toolbar",
+      "section/interior/display controls",
+      "four live summary metrics",
+      "three cutaway rooms",
+      "device/opening geometry",
+      "configured pressure relationship arrows",
+      "scaled room navigator and room rows",
+      "selected-room details",
+      "per-room device grouping",
+      "focus/isolate/restore and camera footer"
+    ],
+    "differences": [
+      "The guided stage reflects Design rather than highlighting Run while editing.",
+      "Pressure is explicitly labeled as a configured setpoint.",
+      "A camera-oriented XYZ indicator accompanies the dimension labels.",
+      "Fonts and platform rendering may differ."
+    ],
+    "visual_similarity_percentage": "NOT MEASURED",
+    "windows_desktop_visual_review": "NOT PERFORMED"
+  },
+  "regression": {
+    "status": "PASS",
+    "source_commit": "860a479716ffeb1e487ddd6c18e0e4d0b9fde049",
+    "total": 2400,
+    "passed": 2399,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 1,
+    "duration_seconds": 140.932,
+    "skipped_cases": [
+      {
+        "test": ".tests.test_bim_ifc_native",
+        "reason": "('/workspace/scratch/a50b614113ea/CleanroomX/tests/test_bim_ifc_native.py', 5, 'Skipped: native IFC smoke requires the optional CleanroomX BIM dependency')"
+      }
+    ]
+  },
+  "platform": "Linux-6.18.55-x86_64-with-glibc2.39",
+  "openfoam_execution": "NOT PERFORMED for this GUI change",
+  "capture_receipts": {
+    "design_studio_1536x960.json": {
+      "capture_type": "real_desktop_screenshot",
+      "baseline": false,
+      "platform": "Linux-6.18.55-x86_64-with-glibc2.39",
+      "git_commit": "860a479716ffeb1e487ddd6c18e0e4d0b9fde049",
+      "resolution": [
+        1536,
+        960
+      ],
+      "desktop_capture_origin": [
+        0,
+        0
+      ],
+      "render_source_sha256": {
+        "gui.py": "73e04ba6789480768f8d47cb1f32b5af126b20094fd50622ed3e3da974ff5bfe",
+        "gui_theme.py": "4dc78102612b42a86ee9ee41b0611467b582f9b695e6a4041a3afbd993312590",
+        "spatial.py": "b234e70fedca495933f2db466276fd22950370d92c506c3ecab962be3f1b1428",
+        "spatial_transforms.py": "ec2bf271a4b3fd2e22ed2303d686084aaf40e4e59a16b0da182b19077a682313",
+        "studio_canvas.py": "88fef64c7ed6b8b1790a3abfa2899ec774d8cf945585afa24a2066e97e66fd04",
+        "studio_summary.py": "d8f884f9afaa4f6a05043ddf624db65ef7844324e3d6c39b9e85d624ad57012b",
+        "gui_proofgraph.py": "4fd11e20f3091ef5a754244d048a6567e0e34697f6123b162c0a247d4c7c6467"
+      },
+      "image_sha256": "db8780571d2cc77b312d79b83c77f4c735b386aa144a971c5d6d81a2777fc3ea",
+      "room_count": 3,
+      "floor_area_m2": 62.0,
+      "volume_m3": 186.0,
+      "placed_devices": 10,
+      "canvas_3d_pixels": [
+        1496,
+        520
+      ],
+      "camera_zoom_3d": 1.201937989390627,
+      "automated_visual_similarity": "NOT MEASURED; manual review is separate",
+      "reference_image_sha256": "e1c29487f017745d060beb8249f0a53aad7b7c334d541d9c39a9b9a9969daf9f",
+      "studio_active": true,
+      "room_wall_polygons": 6,
+      "room_floor_polygons": 3,
+      "opening_polygons": 4,
+      "openfoam_execution": "NOT PERFORMED"
+    },
+    "design_studio_1920x1080.json": {
+      "capture_type": "real_desktop_screenshot",
+      "baseline": false,
+      "platform": "Linux-6.18.55-x86_64-with-glibc2.39",
+      "git_commit": "860a479716ffeb1e487ddd6c18e0e4d0b9fde049",
+      "resolution": [
+        1920,
+        1080
+      ],
+      "desktop_capture_origin": [
+        0,
+        0
+      ],
+      "render_source_sha256": {
+        "gui.py": "73e04ba6789480768f8d47cb1f32b5af126b20094fd50622ed3e3da974ff5bfe",
+        "gui_theme.py": "4dc78102612b42a86ee9ee41b0611467b582f9b695e6a4041a3afbd993312590",
+        "spatial.py": "b234e70fedca495933f2db466276fd22950370d92c506c3ecab962be3f1b1428",
+        "spatial_transforms.py": "ec2bf271a4b3fd2e22ed2303d686084aaf40e4e59a16b0da182b19077a682313",
+        "studio_canvas.py": "88fef64c7ed6b8b1790a3abfa2899ec774d8cf945585afa24a2066e97e66fd04",
+        "studio_summary.py": "d8f884f9afaa4f6a05043ddf624db65ef7844324e3d6c39b9e85d624ad57012b",
+        "gui_proofgraph.py": "4fd11e20f3091ef5a754244d048a6567e0e34697f6123b162c0a247d4c7c6467"
+      },
+      "image_sha256": "9d718189832368775d30b821d2edfb2c6a7041992385a8af1a0e272b963bd1b1",
+      "room_count": 3,
+      "floor_area_m2": 62.0,
+      "volume_m3": 186.0,
+      "placed_devices": 10,
+      "canvas_3d_pixels": [
+        1880,
+        611
+      ],
+      "camera_zoom_3d": 1.5831299355392556,
+      "automated_visual_similarity": "NOT MEASURED; manual review is separate",
+      "reference_image_sha256": "e1c29487f017745d060beb8249f0a53aad7b7c334d541d9c39a9b9a9969daf9f",
+      "studio_active": true,
+      "room_wall_polygons": 6,
+      "room_floor_polygons": 3,
+      "opening_polygons": 4,
+      "openfoam_execution": "NOT PERFORMED"
+    }
+  },
+  "publication_when_packaged": {
+    "github_push": "BLOCKED_PENDING_USER_AUTHORIZATION",
+    "remote_pr": 1354,
+    "remote_head": "f6ab26bfebf27e1dd3d78bdc3ed12ca226fa65cb"
+  }
+}

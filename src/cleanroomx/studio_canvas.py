@@ -373,6 +373,9 @@ def draw_scene(workspace: SpatialDesignWorkspace, overlay: dict) -> None:
                 f'{name} {device_counts[category]}', f"layer-{category}",
                 active=workspace._studio_device_layers[category].get(),
             )
+        if height >= 480:
+            _action(workspace, (18, 103, 157, 132),
+                    "Device schedule", "schedule")
     if not layout["rooms"]:
         canvas.create_text(width / 2, height / 2, text="Add a room to begin designing",
                            fill=p["muted"], tags=("studio-ui",))

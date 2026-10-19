@@ -141,3 +141,5 @@ Navigator rows also show live per-room device totals alongside the geometric flo
 ## Selected-device inspector
 
 Selecting an FFU, supply/return device, door, transfer opening, or other placed device now changes the right-hand lower Studio card from an aggregate count into a **Selected Device** readout: stored device name, type, room assignment, global X/Y position and Z above the design floor. Its **Inspect** action opens the actual editable Inspector and preserves the device selection. The original Selected Room panel and its Focus/Isolate controls continue to resolve the device's associated room. All values are geometry and configured inputs, not CFD outputs; empty/unknown selections are handled without inventing values.
+
+The navigator footer is also a live hover hint: moving the pointer over a room or device shows its actual configured name and a geometry/type descriptor. Hover is presentation-only and does not modify the selected object or stored project. The pointer changes to a hand only over selectable geometry.

@@ -11,7 +11,7 @@ import math
 from typing import TYPE_CHECKING
 
 from .spatial_transforms import fit_3d_view
-from .studio_summary import dashboard_snapshot, device_snapshot, navigator_device_markers, navigator_rectangles
+from .studio_summary import dashboard_snapshot, device_layer_category, device_snapshot, navigator_device_markers, navigator_rectangles
 from .studio_widgets import blend, draw_icon, draw_metrics, fit_text, rounded_rect
 
 if TYPE_CHECKING:
@@ -108,10 +108,13 @@ def draw_navigator(workspace: SpatialDesignWorkspace) -> None:
             workspace._navigator_item_to_room[item] = room["id"]
     # Native Canvas markers use actual x/y locations from the spatial model.
     # Markers are created after room outlines so direct clicks select devices.
-    for marker in navigator_device_markers(
+    all_markers = navigator_device_markers(
         workspace.layout, width_px=width, height_px=128,
         padding_px=20, header_px=48,
-    ):
+    )
+    visible_markers = [m for m in all_markers
+                       if workspace._studio_device_layers[m["category"]].get()]
+    for marker in visible_markers:
         px, py = marker["point"]
         tags = (f'navigator-device:{marker["id"]}', "navigator-device")
         selected_device = (
@@ -182,7 +185,10 @@ def draw_navigator(workspace: SpatialDesignWorkspace) -> None:
 def update_navigator_hint(workspace: SpatialDesignWorkspace) -> None:
     """Make dense device/room markers discoverable without changing selection."""
     target = getattr(workspace, "_navigator_hover_target", None)
-    label = "● Air   ◆ Opening   ■ Other   ↑↓ Rooms"
+    active = [name for key, name in
+              (("air", "Air"), ("opening", "Open"), ("other", "Other"))
+              if workspace._studio_device_layers[key].get()]
+    label = ("Layers: " + ", ".join(active)) if active else "Layers: none · Display to restore"
     if target is not None:
         kind, item_id = target
         collection = "devices" if kind == "device" else "rooms"
@@ -468,13 +474,17 @@ def _geometry(workspace, overlay):
             canvas.tag_lower(box, label)
         if workspace._show_devices.get():
             for device in layout["devices"]:
-                if device.get("room_id") == room["id"] and workspace._is_item_visible("device", device["id"]):
+                if (device.get("room_id") == room["id"]
+                        and workspace._is_item_visible("device", device["id"])
+                        and workspace._studio_device_layers[device_layer_category(device)].get()):
                     _device(workspace, device, z0, section, project)
     workspace._draw_relationships_3d(center_x_m=cx, center_y_m=cy, floor_z_m=floor_z)
     room_ids = {room["id"] for room in layout["rooms"]}
     if workspace._show_devices.get():
         for device in layout["devices"]:
-            if device.get("room_id") not in room_ids and workspace._is_item_visible("device", device["id"]):
+            if (device.get("room_id") not in room_ids
+                    and workspace._is_item_visible("device", device["id"])
+                    and workspace._studio_device_layers[device_layer_category(device)].get()):
                 _device(workspace, device, floor_z, section, project)
     if overlay["mode"] != "none":
         workspace._draw_engineering_legend(canvas, overlay)

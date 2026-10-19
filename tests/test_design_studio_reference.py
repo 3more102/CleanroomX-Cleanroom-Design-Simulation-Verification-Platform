@@ -586,3 +586,20 @@ def test_studio_navigator_device_and_room_hover_reveals_real_names(gui):
     gui.root.update()
     assert "Air" in canvas.itemcget(canvas.find_withtag("navigator-hint")[0], "text")
     assert canvas.cget("cursor") == ""
+
+
+def test_studio_3d_uses_real_device_type_glyphs(gui):
+    gui.open_design_studio()
+    gui.root.update()
+    ws = gui.spatial_workspace
+    canvas = ws.canvas_3d
+    for kind, device_id in (("ffu", "ffu-process"),
+                            ("supply", "supply-process"),
+                            ("return", "return-process"),
+                            ("equipment", "equipment-process")):
+        assert canvas.find_withtag(f"studio-device-glyph:{kind}")
+        assert canvas.find_withtag(f"device:{device_id}")
+    assert ws.select_item("device", "ffu-process", notify=True)
+    assert canvas.find_withtag("studio-device-selected")
+    assert canvas.find_withtag("studio-device-glyph:ffu")
+    assert canvas.find_withtag("studio-floor")

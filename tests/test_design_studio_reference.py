@@ -625,3 +625,116 @@ def test_studio_3d_layer_chips_toggle_graphics_not_model(gui):
     assert ws._studio_device_layers["air"].get()
     assert canvas.find_withtag("device:supply-process")
     assert (ws.layout["rooms"], ws.layout["devices"]) == before
+
+
+
+def test_device_schedule_search_filter_and_geometry_are_read_only():
+    from cleanroomx.studio_device_schedule import equipment_schedule_rows
+    layout = demo_layout()
+    unchanged = copy.deepcopy(layout)
+    all_rows = equipment_schedule_rows(layout)
+    assert len(all_rows) == 10
+    assert len({r["id"] for r in all_rows}) == 10
+    assert len(equipment_schedule_rows(layout, category="air")) == 5
+    assert len(equipment_schedule_rows(layout, category="opening")) == 4
+    assert len(equipment_schedule_rows(layout, category="other")) == 1
+    assert len(equipment_schedule_rows(layout, room_id="process")) == 5
+    filtered = equipment_schedule_rows(layout, query="supply", room_id="process")
+    assert [r["id"] for r in filtered] == ["supply-process"]
+    assert filtered[0]["x_m"] == pytest.approx(1.5)
+    assert filtered[0]["y_m"] == pytest.approx(2.0)
+    assert filtered[0]["z_offset_m"] == pytest.approx(3.0)
+    assert equipment_schedule_rows(layout, query="unknown-room-id") == []
+    with pytest.raises(ValueError, match="Unsupported device category"):
+        equipment_schedule_rows(layout, category="fake")
+    assert layout == unchanged
+
+
+def test_equipment_schedule_csv_exports_only_filtered_source_and_escapes_formulas(tmp_path):
+    import csv
+    from cleanroomx.studio_device_schedule import (
+        equipment_schedule_rows, export_equipment_schedule,
+    )
+    layout = demo_layout()
+    layout["devices"][1]["name"] = "=HYPERLINK(\"http://unsafe.test\")"
+    rows = equipment_schedule_rows(layout, category="air", room_id="process")
+    output = tmp_path / "visible_equipment.csv"
+    export_equipment_schedule(output, rows)
+    with output.open(newline="", encoding="utf-8-sig") as handle:
+        result = list(csv.reader(handle))
+    assert len(result) == 4  # One header, three air devices in Process
+    assert result[0][0:3] == ["Device ID", "Name", "Type"]
+    exported_name = next(item[1] for item in result[1:] if item[0] == "supply-process")
+    assert exported_name.startswith("'=HYPERLINK")
+    assert all(item[4] == "Process" for item in result[1:])
+    assert layout["devices"][1]["name"].startswith("=")
+
+
+def test_live_device_schedule_select_focus_export_and_reveal(gui, tmp_path, monkeypatch):
+    from cleanroomx.studio_device_schedule import export_equipment_schedule
+    gui.open_design_studio()
+    gui.root.update()
+    ws = gui.spatial_workspace
+    schedule = ws.open_device_schedule()
+    gui.root.update()
+    assert schedule.winfo_exists()
+    assert ws.open_device_schedule() is schedule
+    assert len(schedule.table.get_children()) == 10
+
+    schedule._query_var.set("supply")
+    schedule.refresh_rows()
+    assert len(schedule.table.get_children()) == 2
+    schedule._query_var.set("")
+    schedule._category_var.set("air")
+    schedule.refresh_rows()
+    assert len(schedule.table.get_children()) == 5
+    schedule._category_var.set("all")
+    schedule.refresh_rows()
+
+    row_id = next(
+        iid for iid in schedule.table.get_children()
+        if schedule._row_ids[iid] == "supply-process"
+    )
+    schedule.table.selection_set(row_id)
+    assert schedule.select_current()
+    assert ws.selected.kind == "device"
+    assert ws.selected.item_id == "supply-process"
+    assert "Device schedule" in schedule.title()
+
+    # CSV output is explicitly user-directed and covers the displayed rows.
+    output = tmp_path / "schedule.csv"
+    monkeypatch.setattr(
+        "cleanroomx.studio_device_schedule.filedialog.asksaveasfilename",
+        lambda **_kwargs: str(output),
+    )
+    schedule.export_current()
+    assert output.read_text(encoding="utf-8-sig").count("supply-process") == 1
+
+    ws._studio_device_layers["air"].set(False)
+    ws._on_studio_device_layers_changed()
+    assert not ws.canvas_3d.find_withtag("device:supply-process")
+    before_zoom = ws.layout["view"]["zoom_3d"]
+    assert schedule.focus_current()
+    assert ws._studio_device_layers["air"].get()
+    assert ws.canvas_3d.find_withtag("device:supply-process")
+    assert ws.layout["view"]["zoom_3d"] >= before_zoom
+    assert not schedule.winfo_exists()
+    assert ws.selected.item_id == "supply-process"
+
+    again = ws.open_device_schedule()
+    assert again.winfo_exists()
+    assert len(again.table.get_children()) == 10
+    again.destroy()
+
+
+def test_device_schedule_auto_refreshes_on_model_redraw(gui):
+    gui.open_design_studio()
+    gui.root.update()
+    ws = gui.spatial_workspace
+    schedule = ws.open_device_schedule()
+    assert len(schedule.table.get_children()) == 10
+    ws.layout["devices"].pop()
+    ws.redraw()
+    assert len(schedule.table.get_children()) == 9
+    assert "9 of 9" in schedule._status_var.get()
+    schedule.destroy()

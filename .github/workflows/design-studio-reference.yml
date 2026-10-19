@@ -18,6 +18,7 @@ on:
       - "src/cleanroomx/gui_proofgraph.py"
       - "src/cleanroomx/studio_summary.py"
       - "src/cleanroomx/studio_canvas.py"
+      - "src/cleanroomx/studio_device_schedule.py"
       - "src/cleanroomx/studio_widgets.py"
       - "src/cleanroomx/gui_theme.py"
       - "tests/test_design_studio_reference.py"

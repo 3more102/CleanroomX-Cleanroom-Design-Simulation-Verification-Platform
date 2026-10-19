@@ -83,13 +83,18 @@ def prepare_room_study(project: dict, room_id: str, directory: str | Path, *,
 
 _TIME = re.compile(r"^Time = (\S+)\s*$", re.M)
 _RESIDUAL = re.compile(r"Solving for (\w+), Initial residual = ([^,\s]+), Final residual = ([^,\s]+)")
+_FATAL = re.compile(r"FOAM FATAL|^\s*(?:Floating point exception|Segmentation fault)\b", re.I | re.M)
 
 
 def read_solver_progress(directory: str | Path) -> dict:
-    """Read a bounded tail of actual logs; iterations are not convergence percent."""
+    """Read all nine stage logs, retaining numerical problems in earlier cases.
+
+    Log progress is diagnostic, not a substitute for exit codes or receipt audits.
+    """
     root = Path(directory)
     completed = 0
     latest = None
+    issues = []
     for cfg in (1, 2, 3):
         for program in ("blockMesh", "checkMesh", "simpleFoam"):
             path = root / f"configuration_{cfg}" / f"{program}.log"
@@ -98,16 +103,40 @@ def read_solver_progress(directory: str | Path) -> dict:
             try:
                 with path.open("rb") as stream:
                     stream.seek(max(0, path.stat().st_size - 32768))
-                    text = stream.read(32768).decode("utf-8", errors="replace")
+                    log_text = stream.read(32768).decode("utf-8", errors="replace")
             except OSError:
                 continue
-            lines = [line.strip() for line in text.splitlines() if line.strip()]
-            ended = bool(lines and lines[-1] == "End")
+            lines = [line.strip() for line in log_text.splitlines() if line.strip()]
+            # Do not classify a line the solver has not finished writing.
+            complete_text = log_text if log_text.endswith("\n") else log_text.rsplit("\n", 1)[0] if "\n" in log_text else ""
+            times = _TIME.findall(complete_text)
+            residuals = _RESIDUAL.findall(complete_text)
+            fatal = bool(_FATAL.search(log_text))
+            invalid_residual = None
+            for field, initial, final in residuals:
+                for stage, raw in (("initial", initial), ("final", final)):
+                    try:
+                        valid = math.isfinite(float(raw))
+                    except ValueError:
+                        valid = False
+                    if not valid:
+                        invalid_residual = f"{field} {stage} residual {raw}"
+                        break
+                if invalid_residual:
+                    break
+            has_error = fatal or invalid_residual is not None
+            ended = bool(lines and lines[-1] == "End" and not has_error)
             completed += int(ended)
-            times = _TIME.findall(text)
-            residuals = _RESIDUAL.findall(text)
-            latest = {"case": cfg, "program": program, "iteration": times[-1] if times else None,
-                      "residual": residuals[-1] if residuals else None, "ended": ended,
-                      "fatal_error": bool(re.search(r"FOAM FATAL|^Floating point exception\b|^Segmentation fault\b", text, re.I | re.M)),
-                      "log": str(path), "tail": "\n".join(lines[-12:])}
-    return {"completed_stages": completed, "total_stages": 9, "latest": latest}
+            tail = "\n".join(lines[-12:])
+            if has_error:
+                issues.append({
+                    "case": cfg, "program": program,
+                    "reason": "OpenFOAM fatal error" if fatal else f"Invalid/non-finite {invalid_residual}",
+                    "log": str(path), "tail": tail,
+                })
+            latest = {
+                "case": cfg, "program": program, "iteration": times[-1] if times else None,
+                "residual": residuals[-1] if residuals else None, "ended": ended,
+                "fatal_error": has_error, "log": str(path), "tail": tail,
+            }
+    return {"completed_stages": completed, "total_stages": 9, "latest": latest, "issues": issues}

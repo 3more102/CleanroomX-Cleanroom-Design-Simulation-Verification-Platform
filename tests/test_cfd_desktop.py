@@ -80,6 +80,55 @@ def test_progress_reports_written_solver_iterations_and_residuals(tmp_path):
     assert read_solver_progress(tmp_path)["latest"]["fatal_error"]
 
 
+
+def test_nonfinite_residual_is_not_counted_as_completed_even_after_end(tmp_path):
+    case = tmp_path / "configuration_1"
+    case.mkdir()
+    (case / "simpleFoam.log").write_text(
+        "Time = 6\n"
+        "smoothSolver: Solving for Ux, Initial residual = nan, Final residual = 0.1, No Iterations 2\n"
+        "End\n", encoding="utf-8",
+    )
+    progress = read_solver_progress(tmp_path)
+    assert progress["completed_stages"] == 0
+    assert progress["latest"]["fatal_error"]
+    assert progress["latest"]["ended"] is False
+    assert len(progress["issues"]) == 1
+    assert "Invalid/non-finite" in progress["issues"][0]["reason"]
+
+
+def test_earlier_solver_failure_remains_visible_when_later_case_logs_exist(tmp_path):
+    first = tmp_path / "configuration_1"
+    second = tmp_path / "configuration_2"
+    first.mkdir()
+    second.mkdir()
+    (first / "simpleFoam.log").write_text("FOAM FATAL ERROR\nEnd\n", encoding="utf-8")
+    (second / "blockMesh.log").write_text(
+        "sigFpe: Enabling floating point exception trapping (FOAM_SIGFPE).\nEnd\n",
+        encoding="utf-8",
+    )
+    progress = read_solver_progress(tmp_path)
+    assert progress["latest"]["case"] == 2
+    assert progress["latest"]["fatal_error"] is False
+    assert progress["completed_stages"] == 1
+    assert len(progress["issues"]) == 1
+    assert progress["issues"][0]["case"] == 1
+    assert progress["issues"][0]["program"] == "simpleFoam"
+
+
+def test_partial_residual_line_does_not_trigger_false_numerical_alarm(tmp_path):
+    case = tmp_path / "configuration_1"
+    case.mkdir()
+    (case / "simpleFoam.log").write_text(
+        "Time = 4\n"
+        "smoothSolver: Solving for Ux, Initial residual = 0.001, Final residual = na",
+        encoding="utf-8",
+    )
+    progress = read_solver_progress(tmp_path)
+    assert progress["issues"] == []
+    assert progress["latest"]["iteration"] == "4"
+
+
 def test_native_runtime_wrapper_keeps_shell_metacharacters_in_arguments(tmp_path):
     if os.name == "nt":
         command = [sys.executable, "-c", "pass"]

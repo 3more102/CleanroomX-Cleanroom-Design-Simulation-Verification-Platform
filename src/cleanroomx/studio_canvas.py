@@ -151,6 +151,20 @@ def _action(workspace, rect, label, action):
 
 
 def _room_panels(workspace, width, height, card_width):
+    canvas = workspace.canvas_3d
+    previous = set(canvas.find_all())
+    _room_panel_contents(workspace, width, card_width)
+    scale = min(1.0, max(.4, (height - (12 if height < 430 else 70)) / 346))
+    for item in set(canvas.find_all()) - previous:
+        canvas.addtag_withtag("studio-room-panel", item)
+        if scale < 1:
+            canvas.scale(item, 0, 0, 1, scale)
+            if canvas.type(item) == "text":
+                family, size, *style = canvas.tk.splitlist(canvas.itemcget(item, "font"))
+                canvas.itemconfigure(item, font=(family, max(6, round(int(size) * scale)), *style))
+
+
+def _room_panel_contents(workspace, width, card_width):
     canvas, p = workspace.canvas_3d, workspace._theme_palette
     room = dashboard_snapshot(workspace.layout, _selected_room_id(workspace))["selected_room"]
     x, y = width - card_width - 14, 12
@@ -219,10 +233,11 @@ def draw_scene(workspace: SpatialDesignWorkspace, overlay: dict) -> None:
     xx = center + 49
     _action(workspace, (xx, height - 43, xx + 76, height - 13),
             f'{layout["view"]["zoom_3d"] * 100:.0f}%', "fit")
-    canvas.create_text(width - 16, height - 18, anchor="se",
-                       text="Length X (m)\nWidth Y (m)\nHeight Z (m)",
-                       justify="right", fill=p["muted"], font=("TkDefaultFont", 8, "bold"),
-                       tags=("studio-ui",))
+    if height >= 430:
+        canvas.create_text(width - 16, height - 18, anchor="se",
+                           text="Length X (m)\nWidth Y (m)\nHeight Z (m)",
+                           justify="right", fill=p["muted"], font=("TkDefaultFont", 8, "bold"),
+                           tags=("studio-ui", "studio-dimension-labels"))
     workspace._draw_studio_axes(canvas)
 
 

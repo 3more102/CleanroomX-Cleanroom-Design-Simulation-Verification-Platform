@@ -79,6 +79,11 @@ The CI workflow also runs desktop interaction tests on Windows. A Windows CI
 result must be read from the current run; merely configuring the job is not
 a pass. The user's installed Windows desktop has not been inspected here.
 
+Desktop CI requires every selected case to run. If native Windows Tcl startup
+fails before a test executes, that case gets one isolated-process retry. An
+assertion failure or a further skip fails the job. The original JUnit reports,
+isolated retry reports and a coverage receipt are retained together.
+
 The Linux screenshots are visually reviewed against the supplied reference.
 The layout and listed components are reproduced; no pixel-identical claim or
 unmeasured visual-similarity percentage is made. Font rasterization and native
@@ -103,3 +108,6 @@ solver execution or merge itself into the default branch.
   with the actual saved size, accounting for native window decorations.
 - Saved window dimensions retain valid small-display client sizes instead of
   replacing them with defaults larger than the display.
+- Inline room cards scale to the available viewport height. The optional XYZ
+  widget appears when it fits below them; shorter views keep the primary room
+  actions visible. Screenshot capture waits for the final native repaint.

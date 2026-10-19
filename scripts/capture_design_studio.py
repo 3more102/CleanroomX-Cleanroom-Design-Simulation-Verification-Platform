@@ -55,6 +55,11 @@ def main() -> int:
         root.geometry(f"{args.width}x{args.height}+0+0")
         root.update_idletasks()
         root.update()
+        # Allow the native display to finish repainting after the final resize.
+        painted = tk.BooleanVar(root, value=False)
+        root.after(150, lambda: painted.set(True))
+        root.wait_variable(painted)
+        root.update_idletasks()
         dims = (root.winfo_width(), root.winfo_height())
         if dims != (args.width, args.height):
             raise RuntimeError(f"Unexpected Tk window dimensions: {dims!r}")
@@ -95,6 +100,7 @@ def main() -> int:
                 hashlib.sha256(args.reference.read_bytes()).hexdigest() if args.reference else None
             ),
             "studio_active": getattr(app.spatial_workspace, "_studio_active", False),
+            "workspace_status": app.workspace_status_var.get(),
             "room_wall_polygons": len(app.spatial_workspace.canvas_3d.find_withtag("studio-wall")),
             "room_floor_polygons": len(app.spatial_workspace.canvas_3d.find_withtag("studio-floor")),
             "opening_polygons": len(app.spatial_workspace.canvas_3d.find_withtag("studio-opening")),

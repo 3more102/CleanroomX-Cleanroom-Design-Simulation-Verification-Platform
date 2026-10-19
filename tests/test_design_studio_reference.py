@@ -160,8 +160,10 @@ def test_guided_stage_tracks_design_and_inputs_instead_of_highlighting_run(gui):
     assert gui.workflow_design_button.cget("style") == "CX.Primary.TButton"
 
 def test_real_3d_scene_renders_camera_oriented_xyz_axis_widget(gui):
+    gui.root.geometry("1920x1080")
     ws = gui.spatial_workspace
     ws.studio_view()
+    ws.show_inspector()  # Leaves room for the axis widget on small native displays.
     gui.root.update()
     axes = ws.canvas_3d.find_withtag("studio-axis")
     assert len(axes) >= 7  # lines + labels for X/Y/Z, and origin marker
@@ -289,6 +291,19 @@ def test_studio_resizes_without_rooms_overlapping_room_panels(gui, size):
         x0, y0, x1, y1 = canvas.bbox(f'room:{room["id"]}')
         assert nav_right < x0 < x1 < panels_left
         assert 0 < y0 < y1 < height - 43
+    panel = canvas.bbox("studio-room-panel")
+    assert panel is not None
+    assert 0 <= panel[1] < panel[3] < height
+    axes = canvas.bbox("studio-axis")
+    dimensions = canvas.bbox("studio-dimension-labels")
+    if axes:
+        assert panel[3] < axes[1]
+        assert dimensions is not None and axes[3] < dimensions[1]
+    if dimensions:
+        assert panel[3] < dimensions[1]
+    for action in ("focus", "isolate"):
+        bounds = canvas.bbox(f"studio-action:{action}")
+        assert bounds is not None and 0 <= bounds[1] < bounds[3] < height
 
 
 def test_studio_edit_save_reload_keeps_live_metrics_and_room_assignments(gui, tmp_path, monkeypatch):

@@ -4175,7 +4175,11 @@ class SpatialDesignWorkspace(ttk.Frame):
         height = max(160, canvas.winfo_height())
         origin = (width - 76.0, height - 64.0)
         if self._studio_active:
-            origin = (width - 76.0, height - 116.0)
+            # Keep the optional axis widget between the room cards and footer.
+            # Short viewports retain the model and primary room controls.
+            if not self.inspector_visible() and height < 500:
+                return
+            origin = (width - 76.0, height - 92.0)
         projected_origin = self._project_3d(0.0, 0.0, 0.0)
         axes = (
             ("X", (1.0, 0.0, 0.0), "#22d3ee"),

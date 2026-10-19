@@ -18,6 +18,8 @@ on:
       - "tests/test_gui_recovery_revision_workstations.py"
       - "tests/test_gui_state.py"
       - "scripts/capture_design_studio.py"
+      - "scripts/run_desktop_gui_tests.py"
+      - "tests/test_desktop_gui_runner.py"
       - ".github/workflows/design-studio-reference.yml"
   workflow_dispatch:
 
@@ -48,7 +50,7 @@ jobs:
         if: runner.os == 'Linux'
         run: >-
           xvfb-run -a -s "-screen 0 1920x1200x24"
-          python -m pytest -q
+          python scripts/run_desktop_gui_tests.py
           tests/test_design_studio_reference.py
           tests/test_gui_theme.py
           tests/test_gui_state.py
@@ -65,7 +67,7 @@ jobs:
       - name: Run actual Windows Tk desktop and model tests
         if: runner.os == 'Windows'
         run: >-
-          python -m pytest -q
+          python scripts/run_desktop_gui_tests.py --retry-tk-startup
           tests/test_design_studio_reference.py
           tests/test_gui_theme.py
           tests/test_gui_state.py

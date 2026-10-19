@@ -54,6 +54,42 @@ def test_missing_or_conflicting_supply_is_never_replaced_by_a_demo_value():
     assert source["supply_airflow_m3_h"] is None
 
 
+
+def test_duplicate_engineering_room_names_require_explicit_airflow(tmp_path):
+    project = demo()
+    layout = project["project"]["metadata"]["spatial_layout"]
+    duplicate = copy.deepcopy(layout["rooms"][0])
+    duplicate["id"] = "process-other"
+    duplicate["x_m"] = 30
+    layout["rooms"].append(duplicate)
+
+    original = room_study_input(project, "process")
+    other = room_study_input(project, "process-other")
+    assert original["supply_airflow_m3_h"] is None
+    assert other["supply_airflow_m3_h"] is None
+    assert original["supply_status"] == other["supply_status"] == "ambiguous_room_identity"
+    assert original["supply_sources"]
+    prepared = prepare_room_study(
+        project, "process", tmp_path / "run",
+        supply_airflow_m3_h=1800, mesh_cells=[6, 6, 6], max_iterations=50,
+    )
+    assert prepared["provenance"]["supply_origin"] == "user_override"
+    assert prepared["provenance"]["supply_status"] == "ambiguous_room_identity"
+
+
+def test_distinct_analysis_room_aliases_are_not_falsely_ambiguous():
+    project = demo()
+    layout = project["project"]["metadata"]["spatial_layout"]
+    another = copy.deepcopy(layout["rooms"][0])
+    another["id"] = "process-other"
+    another["x_m"] = 30
+    another["analysis_room_name"] = "A different engineering room"
+    layout["rooms"].append(another)
+    current = room_study_input(project, "process")
+    assert current["supply_status"] == "declared"
+    assert current["supply_airflow_m3_h"] == 2700
+
+
 @pytest.mark.parametrize("flow,mesh,iterations", [(float("nan"), [6, 6, 6], 10),
                                                    (100, [80, 80, 80], 10),
                                                    (100, [6, 6, 6], 0)])

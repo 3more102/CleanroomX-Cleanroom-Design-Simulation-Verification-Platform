@@ -14,7 +14,9 @@ pressure, velocity and flux values come from their output files.
 3. Choose the solver connection and press **Check runtime**. Review the console
    report, including executable paths, release, VTK and launch availability.
 4. Review supply airflow, mesh counts, iteration limit and the runs folder.
-   Missing or conflicting verification flow stays empty and requires a value.
+   Missing, conflicting or ambiguously linked verification flow stays empty and requires a value.
+   Two Studio rooms linked to the same engineering-room name never silently share
+   an automatically selected supply flow; enter and review a value explicitly.
 5. Press **Run room study**. The top Run button also starts this workflow while
    the OpenFOAM tab is active. Live progress reads the actual stage logs and
    displays recorded solver time and residuals; it is not convergence percentage. Fatal log diagnostics and invalid/non-finite

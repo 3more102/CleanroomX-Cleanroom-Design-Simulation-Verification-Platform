@@ -243,7 +243,8 @@ def _room_panel_contents(workspace, width, card_width):
     _panel(workspace, x, y, card_width, 180, selected=True)
     text = lambda yy, value, **kw: canvas.create_text(
         x + 12, yy, text=value, anchor="nw", fill=kw.pop("fill", p["muted"]),
-        font=kw.pop("font", ("TkDefaultFont", 9)), tags=("studio-ui",), **kw
+        font=kw.pop("font", ("TkDefaultFont", 9)),
+        tags=("studio-ui",) + tuple(kw.pop("tags", ())), **kw
     )
     text(y + 14, "SELECTED ROOM", fill=p["muted"], font=("TkDefaultFont", 7, "bold"))
     if room is None:
@@ -299,7 +300,7 @@ def _room_panel_contents(workspace, width, card_width):
              font=("TkDefaultFont", 8))
         text(y + 78, (f'X {selected_device["x_m"]:g} m   '
                        f'Y {selected_device["y_m"]:g} m   '
-                       f'Z +{selected_device["z_above_floor_m"]:g} m'),
+                       f'Z {selected_device["z_above_floor_m"]:+g} m'),
              font=("TkDefaultFont", 8), tags=("studio-selected-device-position",))
     middle = x + card_width / 2
     _action(workspace, (x + 11, y + 104, middle - 3, y + 129), "Focus room", "focus", primary=True)

@@ -376,6 +376,67 @@ def test_openfoam_event_drain_batches_output_and_yields_to_tk() -> None:
     assert scheduled[0][0] == 120
 
 
+
+@pytest.mark.parametrize("case", ["complete", "missing", "fatal"])
+def test_zero_exit_code_requires_all_real_stage_logs_before_auto_results(tmp_path, case):
+    """The GUI must not invent nine completed stages from exit code alone."""
+    workspace = OpenFOAMWorkspace.__new__(OpenFOAMWorkspace)
+    root = tmp_path / "cases"
+    root.mkdir()
+    for number in (1, 2, 3):
+        folder = root / f"configuration_{number}"
+        folder.mkdir()
+        for program in ("blockMesh", "checkMesh", "simpleFoam"):
+            if case == "missing" and number == 3 and program == "simpleFoam":
+                continue
+            content = "OpenFOAM completed\nEnd\n"
+            if case == "fatal" and number == 1 and program == "simpleFoam":
+                content = "FOAM FATAL ERROR\nEnd\n"
+            (folder / f"{program}.log").write_text(content, encoding="utf-8")
+
+    class Variable:
+        def __init__(self, value=None):
+            self.value = value
+
+        def get(self):
+            return self.value
+
+        def set(self, value):
+            self.value = value
+
+    output = []
+    status = []
+    analyzed = []
+    workspace._destroyed = False
+    workspace._events = queue.Queue()
+    workspace._events.put(("finished", 0))
+    workspace._process = None
+    workspace._progress_id = None
+    workspace._stop_requested = False
+    workspace._run_kind = "run"
+    workspace._progress_directory = str(root)
+    workspace.stage_var = Variable(0)
+    workspace.progress_var = Variable("")
+    workspace.result_directory_var = Variable(str(tmp_path / "results"))
+    workspace.open_results_var = Variable(True)
+    workspace._append = output.append
+    workspace._status_setter = status.append
+    workspace._set_busy = lambda value: None
+    workspace._analyze_results = lambda: analyzed.append(True)
+    workspace.after = lambda delay, callback: None
+
+    workspace._drain_events()
+
+    assert workspace.stage_var.get() == (9 if case == "complete" else 8)
+    assert analyzed == ([True] if case == "complete" else [])
+    if case == "complete":
+        assert "All 9 solver stages" in workspace.progress_var.get()
+    else:
+        assert "Unverified run" in workspace.progress_var.get()
+        assert any("incomplete" in entry.lower() or "warning" in entry.lower() for entry in output)
+        assert status[-1] != "OpenFOAM stages logged complete; scientific validation remains blocked"
+
+
 def test_openfoam_workspace_compact_console_stays_scrollable() -> None:
     try:
         root = tk.Tk()

@@ -213,7 +213,9 @@ class DeviceScheduleWindow(tk.Toplevel):
             room_id=labels[self._room_var.get()],
         )
         self._displayed_rows = rows
-        self.table.delete(*self.table.get_children(""))
+        existing = self.table.get_children("")
+        if existing:
+            self.table.delete(*existing)
         self._row_ids.clear()
         for i, item in enumerate(rows):
             iid = f"equipment-{i}"

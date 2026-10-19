@@ -441,6 +441,10 @@ def test_studio_minimap_device_selection_and_room_keyboard_context(gui):
     ws = gui.spatial_workspace
     markers = ws.navigator_canvas.find_withtag("navigator-device")
     assert markers, "Actual placed devices must appear in the navigator"
+    for room_id, count in (("process", 5), ("preparation", 3), ("ante", 2)):
+        items = ws.navigator_canvas.find_withtag(f"navigator-room-data:{room_id}")
+        assert items
+        assert ws.navigator_canvas.itemcget(items[0], "text").startswith(f"{count} dev")
     first_device = next(
         d for d in ws.layout["devices"]
         if ws.navigator_canvas.find_withtag(f'navigator-device:{d["id"]}')

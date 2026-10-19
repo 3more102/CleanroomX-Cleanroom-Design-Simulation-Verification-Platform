@@ -1,6 +1,7 @@
 """Bridge a Studio room to reproducible, explicitly idealized solver studies."""
 from __future__ import annotations
 
+from collections import deque
 import hashlib
 import json
 import math
@@ -141,10 +142,57 @@ _RESIDUAL = re.compile(r"Solving for (\w+), Initial residual = ([^,\s]+), Final 
 _FATAL = re.compile(r"FOAM FATAL|^\s*(?:Floating point exception|Segmentation fault)\b", re.I | re.M)
 
 
-def read_solver_progress(directory: str | Path) -> dict:
-    """Read all nine stage logs, retaining numerical problems in earlier cases.
+def _scan_solver_log_full(path: Path) -> tuple[list[str], list[str], list[tuple[str, str, str]], bool, str | None, bool]:
+    """Stream a finished stage log without retaining its entire contents.
 
-    Log progress is diagnostic, not a substitute for exit codes or receipt audits.
+    Live progress reads a bounded tail; the final audit cannot use that tail
+    because a solver may emit an error much earlier than the last 32 KiB.
+    """
+    recent: deque[str] = deque(maxlen=12)
+    last_time: str | None = None
+    last_residual: tuple[str, str, str] | None = None
+    fatal = False
+    invalid_residual: str | None = None
+    ended_marker = False
+    with path.open("r", encoding="utf-8", errors="replace") as stream:
+        for raw in stream:
+            entry = raw.strip()
+            if not entry:
+                continue
+            recent.append(entry)
+            if _FATAL.search(raw):
+                fatal = True
+            # Do not treat a partially written final line as a completed
+            # solver record or as a valid End marker.
+            complete = raw.endswith("\n")
+            ended_marker = complete and entry == "End"
+            if not complete:
+                continue
+            time_match = _TIME.fullmatch(entry)
+            if time_match:
+                last_time = time_match.group(1)
+            residual_match = _RESIDUAL.search(entry)
+            if residual_match:
+                last_residual = residual_match.groups()
+                for label, value in (("initial", last_residual[1]), ("final", last_residual[2])):
+                    try:
+                        finite = math.isfinite(float(value))
+                    except ValueError:
+                        finite = False
+                    if not finite and invalid_residual is None:
+                        invalid_residual = f"{last_residual[0]} {label} residual {value}"
+    return (
+        list(recent), [last_time] if last_time is not None else [],
+        [last_residual] if last_residual is not None else [],
+        fatal, invalid_residual, ended_marker,
+    )
+
+
+def read_solver_progress(directory: str | Path, *, full_scan: bool = False) -> dict:
+    """Inspect all nine stage logs, preserving errors in any configuration.
+
+    The bounded tail is for lightweight live updates. Use full_scan=True only
+    after a solver run to audit the entire log; neither mode proves convergence.
     """
     root = Path(directory)
     completed = 0
@@ -156,31 +204,37 @@ def read_solver_progress(directory: str | Path) -> dict:
             if path.is_symlink() or not path.is_file():
                 continue
             try:
-                with path.open("rb") as stream:
-                    stream.seek(max(0, path.stat().st_size - 32768))
-                    log_text = stream.read(32768).decode("utf-8", errors="replace")
+                if full_scan:
+                    lines, times, residuals, fatal, invalid_residual, ended_marker = (
+                        _scan_solver_log_full(path)
+                    )
+                else:
+                    with path.open("rb") as stream:
+                        stream.seek(max(0, path.stat().st_size - 32768))
+                        log_text = stream.read(32768).decode("utf-8", errors="replace")
+                    lines = [line.strip() for line in log_text.splitlines() if line.strip()]
+                    # Do not classify a line the solver has not finished writing.
+                    complete_text = log_text if log_text.endswith("\n") else log_text.rsplit("\n", 1)[0] if "\n" in log_text else ""
+                    times = _TIME.findall(complete_text)
+                    residuals = _RESIDUAL.findall(complete_text)
+                    fatal = bool(_FATAL.search(log_text))
+                    invalid_residual = None
+                    for field, initial, final in residuals:
+                        for stage, raw in (("initial", initial), ("final", final)):
+                            try:
+                                valid = math.isfinite(float(raw))
+                            except ValueError:
+                                valid = False
+                            if not valid:
+                                invalid_residual = f"{field} {stage} residual {raw}"
+                                break
+                        if invalid_residual:
+                            break
+                    ended_marker = bool(lines and lines[-1] == "End")
             except OSError:
                 continue
-            lines = [line.strip() for line in log_text.splitlines() if line.strip()]
-            # Do not classify a line the solver has not finished writing.
-            complete_text = log_text if log_text.endswith("\n") else log_text.rsplit("\n", 1)[0] if "\n" in log_text else ""
-            times = _TIME.findall(complete_text)
-            residuals = _RESIDUAL.findall(complete_text)
-            fatal = bool(_FATAL.search(log_text))
-            invalid_residual = None
-            for field, initial, final in residuals:
-                for stage, raw in (("initial", initial), ("final", final)):
-                    try:
-                        valid = math.isfinite(float(raw))
-                    except ValueError:
-                        valid = False
-                    if not valid:
-                        invalid_residual = f"{field} {stage} residual {raw}"
-                        break
-                if invalid_residual:
-                    break
             has_error = fatal or invalid_residual is not None
-            ended = bool(lines and lines[-1] == "End" and not has_error)
+            ended = bool(ended_marker and not has_error)
             completed += int(ended)
             tail = "\n".join(lines[-12:])
             if has_error:

@@ -1,0 +1,42 @@
+{
+  "capture_type": "real_desktop_screenshot",
+  "baseline": false,
+  "platform": "Linux-6.18.55-x86_64-with-glibc2.39",
+  "git_commit": "431688e88e13fe6444669999a293fcea9522c47c",
+  "resolution": [
+    1536,
+    960
+  ],
+  "desktop_capture_origin": [
+    0,
+    0
+  ],
+  "render_source_sha256": {
+    "gui.py": "0344e2f3d29c69b6ddea230560a7d66da31e325215eae1c987de0fc59c205cc9",
+    "gui_theme.py": "91ec7d29a173757302e3450bf52e68be8268ade03d89117fb76e7ced4ab73d75",
+    "spatial.py": "9f9ba2389c5712b45faa6e3d789600b96486478540d1dc2736fe136e5efb7ae8",
+    "spatial_transforms.py": "ec2bf271a4b3fd2e22ed2303d686084aaf40e4e59a16b0da182b19077a682313",
+    "studio_canvas.py": "adcd00a5ccd1532afc9c9048d4ba32b890519b2a2c3c69835ef3daab7558de85",
+    "studio_widgets.py": "e8e6cdda9c467db0fda305d7109f90edbb9587cef152d4e9d6cd844011f4bf87",
+    "studio_summary.py": "d8f884f9afaa4f6a05043ddf624db65ef7844324e3d6c39b9e85d624ad57012b",
+    "gui_proofgraph.py": "4fd11e20f3091ef5a754244d048a6567e0e34697f6123b162c0a247d4c7c6467"
+  },
+  "image_sha256": "78ececbbe4656daad2ac57c0891a9ceef6de06f51c655d33231382ae6ac86ff7",
+  "room_count": 3,
+  "floor_area_m2": 62.0,
+  "volume_m3": 186.0,
+  "placed_devices": 10,
+  "canvas_3d_pixels": [
+    1496,
+    476
+  ],
+  "camera_zoom_3d": 1.1851363763254763,
+  "automated_visual_similarity": "NOT MEASURED; manual review is separate",
+  "reference_image_sha256": "e1c29487f017745d060beb8249f0a53aad7b7c334d541d9c39a9b9a9969daf9f",
+  "studio_active": true,
+  "workspace_status": "Workspace: Design",
+  "room_wall_polygons": 6,
+  "room_floor_polygons": 3,
+  "opening_polygons": 4,
+  "openfoam_execution": "NOT PERFORMED"
+}

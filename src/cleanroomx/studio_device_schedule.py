@@ -108,6 +108,7 @@ class DeviceScheduleWindow(tk.Toplevel):
         self._sort_column = "room"
         self._sort_reverse = False
         self._last_rows_signature = None
+        self._last_scene_device_id = None
         self._room_var = tk.StringVar(master=self, value="All rooms")
         self._status_var = tk.StringVar(master=self, value="")
         self._room_labels: dict[str, str | None] = {"All rooms": None}
@@ -258,9 +259,24 @@ class DeviceScheduleWindow(tk.Toplevel):
             tuple(labels), self._query_var.get(), category,
             self._room_var.get(), self._sort_column, self._sort_reverse,
         )
+        scene_device_id = (
+            self.workspace.selected.item_id
+            if self.workspace.selected is not None
+            and self.workspace.selected.kind == "device" else None
+        )
         if signature == self._last_rows_signature:
+            if scene_device_id != self._last_scene_device_id:
+                for iid, device_id in self._row_ids.items():
+                    if device_id == scene_device_id:
+                        self.table.selection_set(iid)
+                        self.table.see(iid)
+                        break
+                else:
+                    self.table.selection_remove(*self.table.selection())
+                self._last_scene_device_id = scene_device_id
             return
         self._last_rows_signature = signature
+        self._last_scene_device_id = scene_device_id
         self._displayed_rows = rows
         existing = self.table.get_children("")
         if existing:

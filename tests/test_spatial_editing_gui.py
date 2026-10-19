@@ -17,7 +17,7 @@ from cleanroomx.spatial import _Hit
 
 
 @pytest.fixture
-def app(tmp_path):
+def app(tmp_path, request):
     try:
         root = tk.Tk()
     except tk.TclError as exc:
@@ -33,6 +33,11 @@ def app(tmp_path):
     )
     application.load_project_path(bundled_demo_project_path())
     application.notebook.select(application.spatial_workspace)
+    startup_size = getattr(request, "param", None)
+    if startup_size:
+        root.geometry(startup_size)
+    root.update()
+    root.focus_force()  # Simulate the foreground app before keyboard interactions.
     root.update()
     try:
         yield application
@@ -135,6 +140,7 @@ def test_editing_toolbar_controls_remain_visible(app, size):
 
 
 
+@pytest.mark.parametrize("app", [None, "1280x729"], indirect=True)
 def test_workspace_modes_make_2d_and_3d_first_class_views(app):
     workspace = app.spatial_workspace
 
@@ -556,7 +562,9 @@ def test_properties_action_reveals_hidden_design_inspector(app):
     app.root.update()
 
     assert workspace.inspector_visible()
-    assert workspace._property_entries["name"].focus_get() is not None
+    entry = workspace._property_entries["name"]
+    assert entry.winfo_ismapped()
+    assert entry.focus_get() is entry
 
 
 def test_reset_panel_layout_restores_design_inspector_too(app):
@@ -990,6 +998,9 @@ def test_window_size_persists_across_application_restart(tmp_path):
     root.geometry("1220x760")
     root.update_idletasks()
     root.update()
+    # Native window managers reserve space for their frame and taskbar.
+    # Persist and restore the actual client area rather than the requested size.
+    expected_width, expected_height = root.winfo_width(), root.winfo_height()
     first._save_ui_layout_state()
     first._autosave_manager.shutdown(wait=False)
     root.destroy()
@@ -1003,8 +1014,6 @@ def test_window_size_persists_across_application_restart(tmp_path):
     root2.update_idletasks()
     root2.update()
     try:
-        expected_width = min(1220, root2.winfo_screenwidth())
-        expected_height = min(760, root2.winfo_screenheight())
         assert root2.winfo_width() == expected_width
         assert root2.winfo_height() == expected_height
         state = load_gui_layout_state(state_path)

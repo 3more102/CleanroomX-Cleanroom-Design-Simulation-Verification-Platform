@@ -96,3 +96,8 @@ solver execution or merge itself into the default branch.
   causing an event loop; selection echoes are now ignored.
 - ProofGraph searches for an explicit node ID now anchor its immediate trace
   context instead of expanding copied provenance as additional direct hits.
+- Startup panel splits are restored after native Tk maps the panes, keeping
+  the editing canvas visible on smaller displays.
+- Inspector entry focus is deferred until the panel can receive keyboard input.
+  Windows tests activate their test window and compare restored client dimensions
+  with the actual saved size, accounting for native window decorations.

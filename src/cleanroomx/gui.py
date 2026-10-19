@@ -3059,7 +3059,17 @@ class CleanroomXApp:
         if workspace is not None:
             workspace.set_inspector_visible(bool(state["inspector_visible"]))
         self.root.update_idletasks()
-        self._apply_saved_panel_sashes()
+        # Native Tk can still report 1x1 here. Restore the saved split only
+        # after the panes are mapped, so startup layout cannot overwrite it.
+        if self.workspace_panes.winfo_ismapped():
+            self.root.after_idle(self._apply_saved_panel_sashes)
+        else:
+            def restore_on_map(event) -> None:
+                if event.widget is self.workspace_panes:
+                    self.workspace_panes.unbind("<Map>", map_binding)
+                    self.root.after_idle(self._apply_saved_panel_sashes)
+
+            map_binding = self.workspace_panes.bind("<Map>", restore_on_map, add="+")
         self.status_var.set("Ready")
 
     def _apply_menu_theme(self, menu: tk.Menu) -> None:

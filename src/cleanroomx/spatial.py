@@ -4082,8 +4082,13 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.show_inspector()
         entry = self._property_entries.get(key)
         if entry is not None and entry.winfo_manager():
-            entry.focus_set()
-            entry.selection_range(0, "end")
+            def focus_entry() -> None:
+                if entry.winfo_exists():
+                    entry.focus_set()
+                    entry.selection_range(0, "end")
+
+            # The inspector must be mapped before native Tk can focus an entry.
+            self.after_idle(focus_entry)
 
     def _build_context_menu_2d(self, hit: _Hit) -> tk.Menu:
         menu = tk.Menu(self, tearoff=False)

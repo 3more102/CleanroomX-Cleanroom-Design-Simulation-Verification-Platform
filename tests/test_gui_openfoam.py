@@ -4,6 +4,7 @@ import hashlib
 import queue
 import tkinter as tk
 import json
+import os
 import signal
 import subprocess
 import time
@@ -205,9 +206,10 @@ def test_process_group_launch_options_isolate_solver_children(monkeypatch) -> No
     }
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX process-group signals are not available on Windows")
 @pytest.mark.parametrize(
     ("force", "expected_signal"),
-    ((False, signal.SIGTERM), (True, signal.SIGKILL)),
+    ((False, signal.SIGTERM), (True, getattr(signal, "SIGKILL", signal.SIGTERM))),
 )
 def test_posix_process_stop_signals_the_openfoam_process_group(
     monkeypatch, force, expected_signal

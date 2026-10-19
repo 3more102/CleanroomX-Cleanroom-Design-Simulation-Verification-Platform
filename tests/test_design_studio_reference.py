@@ -685,11 +685,18 @@ def test_live_device_schedule_select_focus_export_and_reveal(gui, tmp_path, monk
     schedule.refresh_rows()
     assert len(schedule.table.get_children()) == 2
     schedule._query_var.set("")
-    schedule._category_var.set("air")
+    schedule._category_var.set("Air devices")
     schedule.refresh_rows()
     assert len(schedule.table.get_children()) == 5
-    schedule._category_var.set("all")
+    schedule._category_var.set("All equipment")
     schedule.refresh_rows()
+    schedule.sort_by("x")
+    numeric_x = [float(schedule.table.set(iid, "x")) for iid in schedule.table.get_children()]
+    assert numeric_x == sorted(numeric_x)
+    schedule.sort_by("x")
+    reverse_x = [float(schedule.table.set(iid, "x")) for iid in schedule.table.get_children()]
+    assert reverse_x == sorted(reverse_x, reverse=True)
+    schedule.sort_by("room")
 
     row_id = next(
         iid for iid in schedule.table.get_children()

@@ -8,6 +8,7 @@ import sys
 
 import pytest
 
+from cleanroomx import cfd_desktop
 from cleanroomx.cfd_desktop import (
     prepare_room_study, read_solver_progress, room_study_context_matches, room_study_input,
 )
@@ -40,6 +41,48 @@ def test_room_study_uses_current_geometry_and_declared_flow_without_mutating_pro
     with pytest.raises(FileExistsError):
         prepare_room_study(project, "process", tmp_path / "run", supply_airflow_m3_h=1800,
                            mesh_cells=[6, 6, 6], max_iterations=80)
+
+
+
+def test_room_preparation_failure_does_not_publish_partial_run(tmp_path, monkeypatch):
+    real_write = Path.write_text
+
+    def fail_project_snapshot(path, *args, **kwargs):
+        if path.name == "project-input.json":
+            raise OSError("simulated storage failure")
+        return real_write(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "write_text", fail_project_snapshot)
+    with pytest.raises(OSError, match="simulated storage failure"):
+        prepare_room_study(
+            demo(), "process", tmp_path / "new-run",
+            supply_airflow_m3_h=2700, mesh_cells=[6, 6, 6], max_iterations=40,
+        )
+
+    assert not (tmp_path / "new-run").exists()
+    assert list(tmp_path.glob(".cleanroomx-room-study-*")) == []
+
+
+def test_room_preparation_preserves_run_directory_created_during_staging(tmp_path, monkeypatch):
+    target = tmp_path / "new-run"
+    original_export = cfd_desktop.export_openfoam_cases
+
+    def conflicting_export(spec, staging_cases):
+        manifest = original_export(spec, staging_cases)
+        target.mkdir()
+        (target / "external.txt").write_text("someone else's run", encoding="utf-8")
+        return manifest
+
+    monkeypatch.setattr(cfd_desktop, "export_openfoam_cases", conflicting_export)
+    with pytest.raises(FileExistsError, match="appeared while preparing"):
+        prepare_room_study(
+            demo(), "process", target,
+            supply_airflow_m3_h=2700, mesh_cells=[6, 6, 6], max_iterations=40,
+        )
+
+    assert (target / "external.txt").read_text(encoding="utf-8") == "someone else's run"
+    assert not (target / "cases").exists()
+    assert list(tmp_path.glob(".cleanroomx-room-study-*")) == []
 
 
 def test_missing_or_conflicting_supply_is_never_replaced_by_a_demo_value():

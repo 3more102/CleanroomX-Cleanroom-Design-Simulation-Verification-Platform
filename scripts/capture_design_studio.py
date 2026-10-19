@@ -16,6 +16,7 @@ import tempfile
 import tkinter as tk
 
 from cleanroomx.gui import CleanroomXApp, bundled_demo_project_path
+from cleanroomx import gui as gui_module
 from cleanroomx.spatial import layout_metrics
 
 
@@ -23,13 +24,18 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--baseline", action="store_true")
+    parser.add_argument("--width", type=int, default=1920)
+    parser.add_argument("--height", type=int, default=1080)
+    parser.add_argument("--reference", type=Path)
     args = parser.parse_args()
+    if args.width < 1024 or args.height < 720:
+        parser.error("capture requires at least a 1024x720 desktop window")
 
     # Pillow is a screenshot-only dependency, deliberately not in production.
     from PIL import ImageGrab
 
     root = tk.Tk()
-    root.geometry("1920x1080+0+0")
+    root.geometry(f"{args.width}x{args.height}+0+0")
     with tempfile.TemporaryDirectory(prefix="cleanroomx-studio-capture-") as tmp:
         app = CleanroomXApp(
             root,
@@ -44,17 +50,18 @@ def main() -> int:
         root.update_idletasks()
         root.update()
         if not args.baseline:
-            app.spatial_workspace.studio_view()
+            app.open_design_studio()
         app.spatial_workspace.select_item("room", "process", notify=True)
-        root.geometry("1920x1080+0+0")
+        root.geometry(f"{args.width}x{args.height}+0+0")
         root.update_idletasks()
         root.update()
         dims = (root.winfo_width(), root.winfo_height())
-        if dims != (1920, 1080):
-            raise RuntimeError(f"Expected 1920x1080 Tk window, got {dims!r}")
+        if dims != (args.width, args.height):
+            raise RuntimeError(f"Unexpected Tk window dimensions: {dims!r}")
         args.output.parent.mkdir(parents=True, exist_ok=True)
-        image = ImageGrab.grab(bbox=(0, 0, 1920, 1080))
-        if image.size != (1920, 1080):
+        origin_x, origin_y = root.winfo_rootx(), root.winfo_rooty()
+        image = ImageGrab.grab(bbox=(origin_x, origin_y, origin_x + args.width, origin_y + args.height))
+        if image.size != dims:
             raise RuntimeError(f"Unexpected screenshot dimensions: {image.size!r}")
         image.save(args.output, format="PNG")
         snapshot = layout_metrics(app.spatial_workspace.layout)
@@ -65,7 +72,14 @@ def main() -> int:
             "git_commit": os.environ.get(
                 "CLEANROOMX_CAPTURE_SOURCE_SHA", os.environ.get("GITHUB_SHA")
             ),
-            "resolution": [1920, 1080],
+            "resolution": list(dims),
+            "desktop_capture_origin": [origin_x, origin_y],
+            "render_source_sha256": {
+                name: hashlib.sha256(path.read_bytes()).hexdigest()
+                for name in ("gui.py", "gui_theme.py", "spatial.py", "spatial_transforms.py",
+                             "studio_canvas.py", "studio_summary.py", "gui_proofgraph.py")
+                if (path := Path(gui_module.__file__).parent / name).is_file()
+            },
             "image_sha256": hashlib.sha256(args.output.read_bytes()).hexdigest(),
             "room_count": snapshot["room_count"],
             "floor_area_m2": snapshot["total_floor_area_m2"],
@@ -76,7 +90,14 @@ def main() -> int:
                 app.spatial_workspace.canvas_3d.winfo_height(),
             ],
             "camera_zoom_3d": app.spatial_workspace.layout["view"]["zoom_3d"],
-            "visual_reference_comparison": "NOT PERFORMED",
+            "automated_visual_similarity": "NOT MEASURED; manual review is separate",
+            "reference_image_sha256": (
+                hashlib.sha256(args.reference.read_bytes()).hexdigest() if args.reference else None
+            ),
+            "studio_active": getattr(app.spatial_workspace, "_studio_active", False),
+            "room_wall_polygons": len(app.spatial_workspace.canvas_3d.find_withtag("studio-wall")),
+            "room_floor_polygons": len(app.spatial_workspace.canvas_3d.find_withtag("studio-floor")),
+            "opening_polygons": len(app.spatial_workspace.canvas_3d.find_withtag("studio-opening")),
             "openfoam_execution": "NOT PERFORMED",
         }
         args.output.with_suffix(".json").write_text(

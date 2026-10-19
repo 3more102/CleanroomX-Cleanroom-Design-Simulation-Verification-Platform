@@ -10,10 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 
-def dashboard_snapshot(layout: dict, selected_room_id: str | None = None) -> dict[str, Any]:
-    """Compute live room/device cards and selected-room facts from the layout."""
-    rooms = layout.get("rooms", [])
-    devices = layout.get("devices", [])
+def _device_groups(devices: list[dict]) -> dict[str, int]:
     groups = {"ffu": 0, "supply": 0, "return_exhaust": 0, "other": 0}
     for device in devices:
         device_type = str(device.get("type") or "").lower()
@@ -24,6 +21,14 @@ def dashboard_snapshot(layout: dict, selected_room_id: str | None = None) -> dic
         else:
             # Includes doors, windows, openings, sensors and equipment.
             groups["other"] += 1
+    return groups
+
+
+def dashboard_snapshot(layout: dict, selected_room_id: str | None = None) -> dict[str, Any]:
+    """Compute live room/device cards and selected-room facts from the layout."""
+    rooms = layout.get("rooms", [])
+    devices = layout.get("devices", [])
+    groups = _device_groups(devices)
 
     floor_area = sum(float(r["length_m"]) * float(r["width_m"]) for r in rooms)
     volume = sum(
@@ -49,6 +54,9 @@ def dashboard_snapshot(layout: dict, selected_room_id: str | None = None) -> dic
             "floor_area_m2": length * width,
             "volume_m3": length * width * height,
             "device_count": sum(d.get("room_id") == selected["id"] for d in devices),
+            "device_groups": _device_groups(
+                [d for d in devices if d.get("room_id") == selected["id"]]
+            ),
             # A configured setpoint is NOT a solver-computed pressure.
             "pressure_setpoint_pa": selected.get("pressure_pa"),
         }

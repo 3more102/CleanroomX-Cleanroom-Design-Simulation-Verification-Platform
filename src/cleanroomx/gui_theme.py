@@ -277,6 +277,10 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         font=("TkDefaultFont", 10, "bold"),
     )
     style.configure(
+        "CX.StudioSection.TLabel", background=palette["background"],
+        foreground=palette["accent"], font=("TkDefaultFont", 10, "bold"),
+    )
+    style.configure(
         "CX.Navigator.Treeview",
         background=palette["tree"],
         fieldbackground=palette["tree"],
@@ -312,19 +316,20 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         "CX.StudioCard.TFrame",
         background=palette["panel"],
         bordercolor=palette["border"],
-        relief="solid",
+        relief="flat",
+        borderwidth=0,
     )
     style.configure(
         "CX.StudioCardTitle.TLabel",
         background=palette["panel"],
         foreground=palette["muted"],
-        font=("TkDefaultFont", 9, "bold"),
+        font=("TkDefaultFont", 8),
     )
     style.configure(
         "CX.StudioCardValue.TLabel",
         background=palette["panel"],
-        foreground=palette["accent"],
-        font=("TkDefaultFont", 15, "bold"),
+        foreground=palette["text"],
+        font=("TkDefaultFont", 18, "bold"),
     )
     style.configure(
         "CX.Toolbar.TFrame",

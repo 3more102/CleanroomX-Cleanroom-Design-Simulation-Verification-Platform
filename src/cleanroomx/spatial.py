@@ -8,10 +8,11 @@ import uuid
 from typing import Any, Callable
 
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import messagebox, simpledialog, ttk
 
 from .gui_theme import theme_palette
 from .studio_summary import dashboard_snapshot, navigator_rectangles
+from . import studio_canvas
 from .spatial_editing import duplicate_spatial_item, update_spatial_properties
 
 from .spatial_integrity import (
@@ -1655,6 +1656,12 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._studio_devices_var = tk.StringVar(value="No devices")
         self._studio_search_var = tk.StringVar()
         self._navigator_item_to_room: dict[int, str] = {}
+        self._navigator_scroll = 0
+        self._studio_active = False
+        self._studio_saved_menu = None
+        self._toolbar_layout_keys = {}
+        self._studio_more_tools = tk.BooleanVar(value=False)
+        self._interior_3d = tk.BooleanVar(value=True)
         self._zoom_var = tk.StringVar(value="Zoom 100%")
         self._validation_issues: list[dict] = []
         self._last_validation_key: tuple | None = None
@@ -1683,14 +1690,16 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.refresh()
 
     def _build(self) -> None:
-        commandbar = ttk.Frame(self, padding=(8, 7, 8, 4))
+        commandbar = ttk.Frame(self, padding=(8, 10, 8, 6))
         commandbar.pack(fill="x")
+        self._commandbar = commandbar
 
-        ttk.Label(
+        self._design_title = ttk.Label(
             commandbar,
             text="DESIGN",
             style="CX.Section.TLabel",
-        ).pack(side="left", padx=(0, 8))
+        )
+        self._design_title.pack(side="left", padx=(0, 8))
         ttk.Button(commandbar, text="+ Room", width=8, command=self.add_room).pack(
             side="left", padx=2
         )
@@ -1731,10 +1740,19 @@ class SpatialDesignWorkspace(ttk.Frame):
             commandbar, text="Redo", width=7, command=self.redo_edit, state="disabled"
         )
         self._redo_button.pack(side="left", padx=2)
+        self._studio_command_extras = [
+            (widget, widget.pack_info()) for widget in commandbar.winfo_children()[3:]
+        ]
+        self._studio_find_button = ttk.Button(
+            commandbar, text="Find room / device", command=self.prompt_design_search,
+        )
+        self._studio_find_button.pack(side="right", padx=2)
 
         modebar = ttk.Frame(self, padding=(8, 0, 8, 4))
         modebar.pack(fill="x")
-        ttk.Label(modebar, text="Workspace").pack(side="left", padx=(0, 6))
+        self._modebar = modebar
+        self._modebar_title = ttk.Label(modebar, text="Workspace")
+        self._modebar_title.pack(side="left", padx=(0, 6))
         for value, label in (("2d", "2D"), ("3d", "3D"), ("split", "Split")):
             ttk.Radiobutton(
                 modebar,
@@ -1747,6 +1765,9 @@ class SpatialDesignWorkspace(ttk.Frame):
             side="left", fill="y", padx=8
         )
         ttk.Button(modebar, text="Fit", width=6, command=self.fit_views).pack(
+            side="left", padx=2
+        )
+        ttk.Button(modebar, text="Balance", command=self.balance_studio_view).pack(
             side="left", padx=2
         )
         ttk.Button(modebar, text="Studio View", command=self.studio_view).pack(
@@ -1772,9 +1793,28 @@ class SpatialDesignWorkspace(ttk.Frame):
             command=self._on_pull_requested or (lambda: None),
             state="normal" if self._on_pull_requested is not None else "disabled",
         ).pack(side="right", padx=2)
+        self._studio_mode_extras = [
+            (widget, widget.pack_info()) for widget in modebar.winfo_children()
+            if isinstance(widget, ttk.Button)
+            and widget.cget("text") in {"Reset 2D", "Floor…", "Push to analysis", "Pull from analysis"}
+        ]
+        self._more_tools_button = ttk.Checkbutton(
+            modebar, text="More tools", variable=self._studio_more_tools,
+            command=self._apply_studio_chrome,
+        )
+        self._toolbar_pack_options = {
+            widget: widget.pack_info()
+            for row in (commandbar, modebar) for widget in row.winfo_children()
+            if widget.winfo_manager() == "pack"
+        }
+        self._toolbar_pack_options[self._more_tools_button] = {"side": "right"}
+        for row in (commandbar, modebar):
+            row.pack_propagate(False)
+            row.bind("<Configure>", lambda event, r=row: self._layout_toolbar(r))
 
         viewbar = ttk.Frame(self, padding=(8, 0, 8, 4))
         viewbar.pack(fill="x")
+        self._viewbar = viewbar
         ttk.Checkbutton(
             viewbar, text="Grid", variable=self._show_grid, command=self.redraw
         ).pack(side="left", padx=(2, 6))
@@ -1800,6 +1840,7 @@ class SpatialDesignWorkspace(ttk.Frame):
 
         overlaybar = ttk.Frame(self, padding=(8, 0, 8, 4))
         overlaybar.pack(fill="x")
+        self._overlaybar = overlaybar
         ttk.Label(
             overlaybar,
             text="ENGINEERING OVERLAY",
@@ -1821,28 +1862,30 @@ class SpatialDesignWorkspace(ttk.Frame):
             overlaybar,
             textvariable=self._overlay_summary_var,
         ).pack(side="left", padx=(12, 0))
+        for row in (viewbar, overlaybar):
+            self._toolbar_pack_options.update({widget: widget.pack_info()
+                for widget in row.winfo_children()})
+            row.pack_propagate(False)
+            row.bind("<Configure>", lambda event, r=row: self._layout_toolbar(r))
 
         studio_cards = ttk.Frame(self, padding=(8, 2, 8, 5))
         studio_cards.pack(fill="x")
-        for key, heading, unit in (
+        self._studio_cards = studio_cards
+        for column, (key, heading, unit) in enumerate((
             ("rooms", "ROOMS", ""),
             ("area", "FLOOR AREA", "m²"),
             ("volume", "GEOMETRIC VOLUME", "m³"),
             ("devices", "PLACED DEVICES", ""),
-        ):
-            card = ttk.Frame(studio_cards, style="CX.StudioCard.TFrame", padding=(10, 6))
-            card.pack(side="left", fill="x", expand=True, padx=3)
-            ttk.Label(card, text=heading, style="CX.StudioCardTitle.TLabel").pack(anchor="w")
-            value_row = ttk.Frame(card, style="CX.StudioCard.TFrame")
-            value_row.pack(fill="x")
+        )):
+            studio_cards.columnconfigure(column, weight=1, uniform="studio-metrics")
+            card = ttk.Frame(studio_cards, style="CX.StudioCard.TFrame", padding=(14, 8))
+            card.grid(row=0, column=column, sticky="nsew", padx=(0, 2))
             ttk.Label(
-                value_row, textvariable=self._studio_card_vars[key],
+                card, textvariable=self._studio_card_vars[key],
                 style="CX.StudioCardValue.TLabel",
-            ).pack(side="left")
-            if unit:
-                ttk.Label(
-                    value_row, text=unit, style="CX.StudioCardTitle.TLabel",
-                ).pack(side="left", padx=(5, 0))
+            ).pack(anchor="w")
+            ttk.Label(card, text=heading + (f" · {unit}" if unit else ""),
+                      style="CX.StudioCardTitle.TLabel").pack(anchor="w", pady=(5, 0))
 
         self._body = ttk.Panedwindow(self, orient="horizontal")
         self._body.pack(fill="both", expand=True, padx=8, pady=(2, 6))
@@ -1904,8 +1947,10 @@ class SpatialDesignWorkspace(ttk.Frame):
         ).pack(side="right", padx=(8, 0))
 
         self._three_d_frame = ttk.Frame(self._view_panes)
-        header3 = ttk.Frame(self._three_d_frame)
-        header3.pack(fill="x", padx=4, pady=(3, 4))
+        self._header3 = ttk.Frame(self)
+        self._header3.pack(fill="x", padx=8, pady=(5, 8), before=self._studio_cards)
+        header3 = ttk.Frame(self._header3)
+        header3.pack(fill="x", pady=(0, 4))
         ttk.Label(
             header3, text="3D MODEL", style="CX.ViewTitle.TLabel"
         ).pack(side="left")
@@ -1940,6 +1985,10 @@ class SpatialDesignWorkspace(ttk.Frame):
             "<<ComboboxSelected>>",
             lambda _event: self.set_3d_projection(self._projection_mode.get()),
         )
+        ttk.Button(header3, text="Reset", command=self.reset_3d).pack(side="left", padx=4)
+        ttk.Label(header3, text="Shift + drag orbit · Wheel zoom · F fit").pack(side="right", padx=4)
+        header3 = ttk.Frame(self._header3)
+        header3.pack(fill="x")
         ttk.Checkbutton(
             header3,
             text="Section",
@@ -1959,12 +2008,23 @@ class SpatialDesignWorkspace(ttk.Frame):
         section_height.bind("<Return>", self._apply_section_height)
         section_height.bind("<FocusOut>", self._apply_section_height)
         ttk.Label(header3, text="Z m").pack(side="left", padx=(0, 4))
-        ttk.Checkbutton(
+        self._xray_button = ttk.Checkbutton(
             header3,
             text="X-Ray",
             variable=self._xray_3d,
             command=self._draw_3d,
-        ).pack(side="left", padx=(4, 2))
+        )
+        self._xray_button.pack(side="left", padx=(4, 2))
+        self._studio_interior_button = ttk.Checkbutton(
+            header3, text="Interior", variable=self._interior_3d, command=self._draw_3d,
+        )
+        self._studio_display_button = ttk.Menubutton(header3, text="Display")
+        display_menu = tk.Menu(self._studio_display_button, tearoff=False)
+        for label, mode in (("Room colors", "None"), ("Pressure", "Pressure"),
+                            ("Air changes", "ACH"), ("Airflow", "Airflow"), ("Status", "Status")):
+            display_menu.add_command(label=label, command=lambda m=mode: self._set_overlay_mode(m))
+        display_menu.add_checkbutton(label="X-Ray", variable=self._xray_3d, command=self._draw_3d)
+        self._studio_display_button.configure(menu=display_menu)
         for label, delta in (("↺", -15), ("↻", 15)):
             ttk.Button(
                 header3,
@@ -1978,9 +2038,6 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Button(
             header3, text="↑", width=3, command=lambda: self.tilt_3d(5)
         ).pack(side="right", padx=2)
-        ttk.Button(header3, text="Reset", command=self.reset_3d).pack(
-            side="right", padx=2
-        )
         self.canvas_3d = tk.Canvas(
             self._three_d_frame,
             background=self._theme_palette["canvas_3d"],
@@ -1998,10 +2055,34 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
         self.navigator_canvas.place(relx=0.015, rely=0.985, anchor="sw")
         self.navigator_canvas.bind("<Button-1>", self._on_navigator_room_click)
+        self.navigator_canvas.bind("<Up>", lambda event: self._navigate_studio_room(-1))
+        self.navigator_canvas.bind("<Down>", lambda event: self._navigate_studio_room(1))
+        self.navigator_canvas.bind("<MouseWheel>", lambda event: self._scroll_room_navigator(-1 if event.delta > 0 else 1))
+        self.navigator_canvas.bind("<Button-4>", lambda event: self._scroll_room_navigator(-1))
+        self.navigator_canvas.bind("<Button-5>", lambda event: self._scroll_room_navigator(1))
 
-        inspector = ttk.Frame(self._body, padding=(10, 8))
-        self._inspector_frame = inspector
-        self._body.add(inspector, weight=2)
+        inspector_shell = ttk.Frame(self._body)
+        self._inspector_frame = inspector_shell
+        self._body.add(inspector_shell, weight=2)
+        self._inspector_scroll = tk.Canvas(
+            inspector_shell, width=330, highlightthickness=0,
+            background=self._theme_palette["background"],
+        )
+        inspector_scrollbar = ttk.Scrollbar(
+            inspector_shell, orient="vertical", command=self._inspector_scroll.yview,
+        )
+        inspector_scrollbar.pack(side="right", fill="y")
+        self._inspector_scroll.pack(side="left", fill="both", expand=True)
+        self._inspector_scroll.configure(yscrollcommand=inspector_scrollbar.set)
+        inspector = ttk.Frame(self._inspector_scroll, padding=(10, 8))
+        inspector_window = self._inspector_scroll.create_window(0, 0, window=inspector, anchor="nw")
+        self._inspector_scroll.bind(
+            "<Configure>", lambda event: self._inspector_scroll.itemconfigure(inspector_window, width=event.width),
+        )
+        inspector.bind(
+            "<Configure>", lambda event: self._inspector_scroll.configure(
+                scrollregion=self._inspector_scroll.bbox("all")),
+        )
         inspector_header = ttk.Frame(
             inspector,
             style="CX.PanelHeader.TFrame",
@@ -2127,9 +2208,10 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
 
         self._apply_workspace_mode()
+        self._apply_studio_chrome()
 
         self.canvas_2d.bind("<Configure>", lambda event: self.redraw())
-        self.canvas_3d.bind("<Configure>", lambda event: self._draw_3d())
+        self.canvas_3d.bind("<Configure>", self._on_3d_configure)
         self.canvas_2d.bind("<Motion>", self._on_motion)
         self.canvas_2d.bind("<Button-1>", self._on_left_down)
         self.canvas_2d.bind("<Escape>", self._on_escape)
@@ -2153,6 +2235,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.canvas_3d.bind("<Button-4>", lambda event: self._zoom_3d(1.1))
         self.canvas_3d.bind("<Button-5>", lambda event: self._zoom_3d(1 / 1.1))
         self.canvas_3d.bind("<Button-1>", self._on_3d_click)
+        self.canvas_3d.bind("<f>", lambda event: self.fit_3d())
+        self.canvas_3d.bind("<F>", lambda event: self.fit_3d())
         self.canvas_3d.bind("<Shift-Button-1>", self._on_orbit_3d_down)
         self.canvas_3d.bind("<Shift-B1-Motion>", self._on_orbit_3d_drag)
         self.canvas_3d.bind("<Button-2>", self._on_pan_3d_down)
@@ -2170,11 +2254,88 @@ class SpatialDesignWorkspace(ttk.Frame):
             canvas.bind("<Up>", lambda event: self._nudge_selected(0, -1))
             canvas.bind("<Down>", lambda event: self._nudge_selected(0, 1))
 
+    def _layout_toolbar(self, row) -> None:
+        compact = self._studio_active and not self._studio_more_tools.get()
+        extras = {widget for widget, _ in self._studio_command_extras + self._studio_mode_extras}
+        widgets = [widget for widget in row.winfo_children()
+                   if not (compact and widget in extras)]
+        width = max(300, row.winfo_width())
+        key = (width, self._studio_active, compact,
+               tuple((widget, widget.winfo_reqwidth(), widget.winfo_reqheight()) for widget in widgets))
+        if self._toolbar_layout_keys.get(row) == key:
+            return
+        self._toolbar_layout_keys[row] = key
+        for widget in row.winfo_children():
+            widget.pack_forget()
+            widget.place_forget()
+        left = [w for w in widgets if self._toolbar_pack_options.get(w, {}).get("side") != "right"]
+        right = [w for w in widgets if w not in left]
+        row_height = max((w.winfo_reqheight() for w in widgets), default=28) + 4
+        x, line = 8, 0
+        for widget in left + right:
+            required = widget.winfo_reqwidth()
+            if x + required > width - 8 and x > 8:
+                line += 1
+                x = 8
+            widget.place(x=x, y=5 + line * row_height + (row_height - widget.winfo_reqheight()) // 2,
+                         width=required, height=widget.winfo_reqheight())
+            x += required + 5
+        if line == 0:
+            edge = width - 8
+            for widget in right:
+                required = widget.winfo_reqwidth()
+                widget.place_configure(x=edge - required)
+                edge -= required + 5
+        row.configure(height=10 + (line + 1) * row_height)
+
+    def _apply_studio_chrome(self) -> None:
+        compact = self._studio_active and not self._studio_more_tools.get()
+        self._design_title.configure(
+            text="DESIGN STUDIO" if self._studio_active else "DESIGN",
+            style="CX.StudioSection.TLabel" if self._studio_active else "CX.Section.TLabel",
+        )
+        self._modebar_title.configure(text="View" if self._studio_active else "Workspace")
+        root = self.winfo_toplevel()
+        if compact:
+            menu = root.cget("menu")
+            if menu:
+                self._studio_saved_menu = menu
+                root.configure(menu="")
+        elif self._studio_saved_menu:
+            root.configure(menu=self._studio_saved_menu)
+        for widget in (self._viewbar, self._overlaybar):
+            if not self._studio_more_tools.get():
+                widget.pack_forget()
+            else:
+                widget.pack(fill="x", before=self._header3 if self._header3.winfo_manager() else self._body)
+        if self._studio_active:
+            self._xray_button.pack_forget()
+            self._studio_interior_button.pack(side="left", padx=4)
+            self._studio_display_button.pack(side="left", padx=4)
+        else:
+            for widget in (self._studio_interior_button, self._studio_display_button):
+                widget.pack_forget()
+            self._xray_button.pack(side="left", padx=(4, 2))
+        for row in (self._commandbar, self._modebar, self._viewbar, self._overlaybar):
+            self._toolbar_layout_keys.pop(row, None)
+            self._layout_toolbar(row)
+        self.redraw()
+
+    def _on_3d_configure(self, _event=None) -> None:
+        if self._studio_active:
+            studio_canvas.fit_camera(self, self._visible_3d_points())
+        self._draw_3d()
+
     def _apply_workspace_mode(self) -> None:
         mode = self._workspace_mode.get()
         if mode not in {"2d", "3d", "split"}:
             mode = "split"
             self._workspace_mode.set(mode)
+        if self._studio_active and mode != "3d":
+            self._studio_active = False
+            self._apply_studio_chrome()
+            self.navigator_canvas.configure(width=240, height=150)
+            self.navigator_canvas.place(relx=.015, rely=.985, x=0, y=0, anchor="sw")
         for frame in (self._two_d_frame, self._three_d_frame):
             try:
                 self._view_panes.forget(frame)
@@ -2184,6 +2345,13 @@ class SpatialDesignWorkspace(ttk.Frame):
             self._view_panes.add(self._two_d_frame, weight=5 if mode == "split" else 1)
         if mode in {"3d", "split"}:
             self._view_panes.add(self._three_d_frame, weight=5 if mode == "split" else 1)
+            self._header3.pack(fill="x", padx=8, pady=(5, 8), before=self._body)
+        else:
+            self._header3.pack_forget()
+        if self._studio_active:
+            self._studio_cards.pack(fill="x", before=self._body)
+        else:
+            self._studio_cards.pack_forget()
         self.redraw()
 
     def set_workspace_mode(self, mode: str) -> None:
@@ -2204,6 +2372,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             background=palette["canvas_3d"],
             highlightbackground=palette["border"],
         )
+        self._inspector_scroll.configure(background=palette["background"])
         if redraw:
             self.redraw()
 
@@ -2228,6 +2397,8 @@ class SpatialDesignWorkspace(ttk.Frame):
             body.forget(frame)
         state = "shown" if requested else "hidden"
         self._status_setter(f"Design Inspector {state}")
+        if self._studio_active:
+            self.after_idle(self.fit_3d)
 
     def toggle_inspector(self) -> None:
         self.set_inspector_visible(not self.inspector_visible())
@@ -2538,17 +2709,36 @@ class SpatialDesignWorkspace(ttk.Frame):
         return False
 
     def studio_view(self) -> None:
-        """Maximize the model in the actual application, retaining Inspector."""
+        """Open the reference workspace with live, in-viewport room panels."""
         if self._on_studio_requested is not None:
             self._on_studio_requested()
+        self._studio_active = True
+        self._studio_more_tools.set(False)
+        self._overlay_mode.set("None")
+        self.layout["view"]["overlay_mode"] = "none"
+        self.layout["view"]["show_pressure"] = False
+        self._show_pressure.set(False)
         self._workspace_mode.set("3d")
         self._apply_workspace_mode()
-        self.show_inspector()
+        self.set_inspector_visible(False)
+        self._apply_studio_chrome()
         # Force pending geometry calculations before camera fitting. Otherwise
         # fit_views can use the old, output-panel-constrained Canvas size and
         # leave the room geometry tiny in the enlarged studio workspace.
         self.update_idletasks()
         self.fit_views()
+
+    def balance_studio_view(self) -> None:
+        self.show_all()
+        self.layout["view"]["azimuth_deg"] = 35.0
+        self.layout["view"]["elevation_deg"] = 28.0
+        self.fit_3d()
+
+    def prompt_design_search(self) -> None:
+        term = simpledialog.askstring("Find room / device", "Room or device name / ID:", parent=self)
+        if term is not None:
+            self._studio_search_var.set(term)
+            self.find_design_item()
 
     def focus_room(self) -> None:
         if self.selected is None or self.selected.kind != "room":
@@ -2576,7 +2766,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             ("devices", str(snapshot["placed_devices"])),
         ):
             self._studio_card_vars[key].set(value)
-        groups = snapshot["device_groups"]
+        groups = (snapshot["selected_room"] or {}).get("device_groups", snapshot["device_groups"])
         self._studio_devices_var.set(
             f'FFU {groups["ffu"]}  ·  Supply {groups["supply"]}  ·  '
             f'Return/Exhaust {groups["return_exhaust"]}  ·  Other {groups["other"]}'
@@ -2600,6 +2790,9 @@ class SpatialDesignWorkspace(ttk.Frame):
 
     def _draw_room_navigator(self) -> None:
         """Draw a clickable scaled top-down plan from live model coordinates."""
+        if self._studio_active:
+            studio_canvas.draw_navigator(self)
+            return
         canvas = self.navigator_canvas
         canvas.delete("all")
         self._navigator_item_to_room.clear()
@@ -2639,13 +2832,32 @@ class SpatialDesignWorkspace(ttk.Frame):
             self._navigator_item_to_room[rect_id] = room["id"]
             self._navigator_item_to_room[label_id] = room["id"]
 
-    def _on_navigator_room_click(self, _event: tk.Event) -> None:
-        current = self.navigator_canvas.find_withtag("current")
-        if not current:
-            return
-        room_id = self._navigator_item_to_room.get(current[0])
-        if room_id:
-            self.select_item("room", room_id, notify=True)
+    def _on_navigator_room_click(self, event: tk.Event) -> None:
+        self.navigator_canvas.focus_set()
+        for item in reversed(self.navigator_canvas.find_overlapping(event.x, event.y, event.x, event.y)):
+            room_id = self._navigator_item_to_room.get(item)
+            if room_id:
+                self.select_item("room", room_id, notify=True)
+                break
+
+    def _scroll_room_navigator(self, delta: int) -> str:
+        self._navigator_scroll = max(0, self._navigator_scroll + delta)
+        self._draw_room_navigator()
+        return "break"
+
+    def _navigate_studio_room(self, delta: int) -> str:
+        rooms = self.layout["rooms"]
+        if rooms:
+            current = next((i for i, r in enumerate(rooms)
+                            if self.selected and r["id"] == self.selected.item_id), -1)
+            index = (current + delta) % len(rooms)
+            visible = max(1, (int(float(self.navigator_canvas.cget("height"))) - 157) // 27)
+            if index < self._navigator_scroll:
+                self._navigator_scroll = index
+            elif index >= self._navigator_scroll + visible:
+                self._navigator_scroll = index - visible + 1
+            self.select_item("room", rooms[index]["id"], notify=True)
+        return "break"
 
     def set_3d_projection(self, value: str) -> None:
         mode = str(value or "orthographic").strip().lower()
@@ -3182,11 +3394,11 @@ class SpatialDesignWorkspace(ttk.Frame):
             pan_y_px=self.layout["view"]["pan_y"],
         )
 
-    def fit_selected(self) -> None:
+    def fit_selected(self) -> bool:
         item = self._selected_object()
         if item is None or self.selected is None:
             self._status_setter("Select a room or device to fit")
-            return
+            return False
 
         if self.selected.kind == "room":
             min_x = item["x_m"]
@@ -3264,8 +3476,12 @@ class SpatialDesignWorkspace(ttk.Frame):
             self.layout["view"]["pan_3d_x"] = pan_3d_x
             self.layout["view"]["pan_3d_y"] = pan_3d_y
 
+        if self._studio_active:
+            studio_canvas.fit_camera(self, points_3d)
+
         self._status_setter("View fitted to selected object")
         self.redraw()
+        return True
 
     def _visible_3d_points(self) -> list[tuple[float, float, float]]:
         min_x, min_y, max_x, max_y = self._bounds()
@@ -3299,6 +3515,10 @@ class SpatialDesignWorkspace(ttk.Frame):
         points = self._visible_3d_points()
         if not points:
             self._status_setter("No visible 3D geometry to fit")
+            return
+        if self._studio_active:
+            studio_canvas.fit_camera(self, points)
+            self._draw_3d()
             return
         zoom, pan_x, pan_y = fit_3d_view(
             points,
@@ -3368,6 +3588,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.layout["view"]["zoom_3d"] = zoom_3d
         self.layout["view"]["pan_3d_x"] = pan_3d_x
         self.layout["view"]["pan_3d_y"] = pan_3d_y
+        if getattr(self, "_studio_active", False):
+            studio_canvas.fit_camera(self, self._visible_3d_points())
         self._persist("Fit spatial views")
 
     def reset_2d(self) -> None:
@@ -3378,6 +3600,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._persist("Reset 2D view")
 
     def redraw(self) -> None:
+        for row in (self._commandbar, self._modebar, self._viewbar, self._overlaybar):
+            self._layout_toolbar(row)
         self._refresh_validation()
         self._update_sync_summary()
         self._update_metrics()
@@ -3549,7 +3773,7 @@ class SpatialDesignWorkspace(ttk.Frame):
                 fill=color,
                 tags=("pressure_relationship_3d",),
             )
-            if self._show_labels.get():
+            if self._show_labels.get() and not self._studio_active:
                 self.canvas_3d.create_text(
                     (start[0] + end[0]) / 2.0,
                     (start[1] + end[1]) / 2.0 - 10,
@@ -3945,6 +4169,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         width = max(160, canvas.winfo_width())
         height = max(160, canvas.winfo_height())
         origin = (width - 76.0, height - 64.0)
+        if self._studio_active:
+            origin = (width - 76.0, height - 116.0)
         projected_origin = self._project_3d(0.0, 0.0, 0.0)
         axes = (
             ("X", (1.0, 0.0, 0.0), "#22d3ee"),
@@ -3982,6 +4208,14 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._notify_view_status()
         canvas = self.canvas_3d
         canvas.delete("all")
+        if self._studio_active:
+            overlay = engineering_overlay_state(
+                self.layout, self._analysis_getter(), self._result_getter(),
+                mode=self._overlay_mode.get().strip().lower(),
+            )
+            self._update_overlay_summary(overlay)
+            studio_canvas.draw_scene(self, overlay)
+            return
         if not self.layout["rooms"]:
             canvas.create_text(
                 max(1, canvas.winfo_width()) / 2,
@@ -4569,9 +4803,22 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._draw_3d()
 
     def _on_3d_click(self, event: tk.Event) -> None:
+        self.canvas_3d.focus_set()
         current = self.canvas_3d.find_withtag("current")
         if not current:
             return
+        actions = {
+            "focus": self.focus_room, "isolate": self.isolate_room,
+            "restore": self.show_all, "fit": self.fit_3d,
+            **{key: lambda p=key: self.set_3d_view_preset(p)
+               for key in ("top", "front", "iso")},
+        }
+        for tag in self.canvas_3d.gettags(current[0]):
+            if tag.startswith("studio-action:"):
+                action = actions.get(tag.split(":", 1)[1])
+                if action is not None:
+                    action()
+                return
         hit = self._parse_hit(self.canvas_3d.gettags(current[0]))
         if hit is None:
             return

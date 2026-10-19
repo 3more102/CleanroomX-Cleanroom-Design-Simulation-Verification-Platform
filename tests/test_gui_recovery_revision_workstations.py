@@ -42,6 +42,8 @@ def _revision(
     version: str,
     digest_char: str,
 ) -> ProjectRevisionRecord:
+    path.write_text("{}", encoding="utf-8")
+    artifact_stat = path.stat()
     return ProjectRevisionRecord(
         path=path,
         created_at_utc=created_at,
@@ -51,6 +53,7 @@ def _revision(
         application_version=version,
         artifact_size=1400,
         artifact_sha256=digest_char.upper() * 64,
+        artifact_identity=("file-id", artifact_stat.st_dev, artifact_stat.st_ino),
     )
 
 

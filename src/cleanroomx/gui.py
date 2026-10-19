@@ -3152,6 +3152,18 @@ class CleanroomXApp:
     def toggle_theme(self) -> None:
         self.set_theme("dark" if self.theme_var.get() == "light" else "light")
 
+    def open_design_studio(self) -> None:
+        """Enter the dark reference workspace using the currently loaded model."""
+        self.set_theme("dark", persist=False)
+        self.notebook.select(self.spatial_workspace)
+        self.root.update_idletasks()
+        self.root.update()
+        self.spatial_workspace.studio_view()
+        if self.spatial_workspace.selected is None and self.spatial_workspace.layout["rooms"]:
+            self.spatial_workspace.select_item(
+                "room", self.spatial_workspace.layout["rooms"][0]["id"], notify=True,
+            )
+
     def _restore_focus_workspace_snapshot(self, *, status: bool = True) -> bool:
         snapshot = getattr(self, "_focus_workspace_snapshot", None)
         if snapshot is None:
@@ -7389,6 +7401,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="Validate GUI/application imports and print capability information without opening a window",
     )
     parser.add_argument(
+        "--studio", action="store_true",
+        help="Open the loaded project in the dark, integrated 3D Design Studio",
+    )
+    parser.add_argument(
         "--smoke",
         action="store_true",
         help="Open the real Tk GUI, optionally load a project, run its active analysis, then exit",
@@ -7464,6 +7480,9 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"CleanroomX GUI smoke: FAIL — {exc}")
                 return 2
             messagebox.showerror("Open failed", str(exc), parent=root)
+
+    if not args.smoke and (args.studio or args.demo):
+        app.open_design_studio()
 
     if args.smoke:
         try:

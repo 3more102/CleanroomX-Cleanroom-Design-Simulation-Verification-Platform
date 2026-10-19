@@ -74,7 +74,8 @@ def test_analysis_picker_filters_canonical_workflows_without_mock_entries(app):
 
 
 def test_run_history_dialog_filters_retained_canonical_records_and_empty_state(app):
-    app.smoke_run_active()
+    run = app.smoke_run_active()
+    app._record_completed_run(app._current_analysis(), run)
     app.root.update()
 
     dialog = RunHistoryDialog(app.root, app.project.metadata)

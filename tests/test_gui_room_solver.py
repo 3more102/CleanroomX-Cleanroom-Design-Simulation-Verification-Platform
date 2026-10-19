@@ -63,6 +63,8 @@ def test_changed_room_geometry_requires_review_before_run(app, tmp_path, monkeyp
     monkeypatch.setattr(workspace, "_room_context_getter", lambda: (modified, room_id))
     commands = []
     monkeypatch.setattr(workspace, "_start_command", lambda label, command: commands.append(command))
+    workspace.runtime_mode_var.set("native")
+    workspace.bashrc_var.set("")
     workspace.runs_folder_var.set(str(tmp_path / "runs"))
     workspace.mesh_var.set("6 6 6")
 
@@ -92,6 +94,8 @@ def test_changed_auto_supply_clears_outdated_value_before_run(app, tmp_path, mon
     monkeypatch.setattr(workspace, "_room_context_getter", lambda: (modified, room_id))
     commands = []
     monkeypatch.setattr(workspace, "_start_command", lambda label, command: commands.append(command))
+    workspace.runtime_mode_var.set("native")
+    workspace.bashrc_var.set("")
     workspace.runs_folder_var.set(str(tmp_path / "runs"))
     workspace.mesh_var.set("6 6 6")
 

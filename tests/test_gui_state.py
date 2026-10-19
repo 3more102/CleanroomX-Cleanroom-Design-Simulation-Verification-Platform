@@ -49,7 +49,7 @@ def test_gui_layout_state_normalization_rejects_bad_types_and_bounds():
                 "alpha.cleanroomx.json",
                 "beta.cleanroomx.json",
             ],
-            "window_width": 640,
+            "window_width": 0,
             "window_height": "broken",
             "navigator_fraction": 0.31,
             "output_fraction": 2.0,
@@ -128,6 +128,13 @@ def test_gui_layout_state_limits_recent_projects_to_eight():
 def test_window_size_clamps_to_current_display():
     assert clamp_window_size_to_display(3000, 1800, 1366, 768) == (1366, 768)
     assert clamp_window_size_to_display(1220, 760, 1920, 1080) == (1220, 760)
+
+
+def test_gui_layout_state_preserves_small_display_client_size(tmp_path):
+    path = tmp_path / "small-display.json"
+    save_gui_layout_state(path, {"window_width": 1024, "window_height": 600})
+    restored = load_gui_layout_state(path)
+    assert (restored["window_width"], restored["window_height"]) == (1024, 600)
 
 
 def test_gui_layout_state_oversize_falls_back_without_unbounded_read(

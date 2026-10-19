@@ -101,3 +101,5 @@ solver execution or merge itself into the default branch.
 - Inspector entry focus is deferred until the panel can receive keyboard input.
   Windows tests activate their test window and compare restored client dimensions
   with the actual saved size, accounting for native window decorations.
+- Saved window dimensions retain valid small-display client sizes instead of
+  replacing them with defaults larger than the display.

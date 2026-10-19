@@ -1000,7 +1000,8 @@ def test_window_size_persists_across_application_restart(tmp_path):
     root.update()
     # Native window managers reserve space for their frame and taskbar.
     # Persist and restore the actual client area rather than the requested size.
-    expected_width, expected_height = root.winfo_width(), root.winfo_height()
+    expected_width = min(root.winfo_width(), root.winfo_screenwidth())
+    expected_height = min(root.winfo_height(), root.winfo_screenheight())
     first._save_ui_layout_state()
     first._autosave_manager.shutdown(wait=False)
     root.destroy()

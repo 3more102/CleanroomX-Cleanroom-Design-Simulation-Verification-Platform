@@ -114,3 +114,52 @@ def navigator_rectangles(
             }
         )
     return result
+
+def navigator_device_markers(
+    layout: dict,
+    *,
+    width_px: int = 240,
+    height_px: int = 150,
+    padding_px: int = 12,
+    header_px: int = 26,
+) -> list[dict[str, Any]]:
+    """Locate real devices using exactly the room navigator's model-to-pixel fit.
+
+    This read-only transform deliberately derives its scale and origin from the
+    same room rectangles shown on screen. It never alters room/device geometry
+    or treats a device position as a CFD simulation result.
+    """
+    rectangles = navigator_rectangles(
+        layout, width_px=width_px, height_px=height_px,
+        padding_px=padding_px, header_px=header_px,
+    )
+    if not rectangles:
+        return []
+    room = layout["rooms"][0]
+    length, width = float(room["length_m"]), float(room["width_m"])
+    if length <= 0 or width <= 0:
+        return []
+    x0, y0, x1, y1 = rectangles[0]["rect"]
+    x_scale = (x1 - x0) / length
+    y_scale = (y1 - y0) / width
+    markers = []
+    for device in layout.get("devices", []):
+        px = x0 + (float(device["x_m"]) - float(room["x_m"])) * x_scale
+        py = y0 + (float(device["y_m"]) - float(room["y_m"])) * y_scale
+        # Do not paint markers beyond the fitted plan into the navigator header
+        # or room list. Such devices remain selectable from 2D/3D and search.
+        if not (padding_px <= px <= width_px - padding_px
+                and header_px <= py <= height_px - padding_px):
+            continue
+        kind = str(device.get("type") or "").lower()
+        category = (
+            "opening" if kind in {"door", "window", "opening", "transfer"}
+            else "air" if kind in {"ffu", "supply", "return", "exhaust"}
+            else "other"
+        )
+        markers.append({
+            "id": device["id"], "name": device.get("name") or device["id"],
+            "room_id": device.get("room_id"),
+            "type": kind, "category": category, "point": (px, py),
+        })
+    return markers

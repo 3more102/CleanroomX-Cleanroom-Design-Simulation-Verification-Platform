@@ -174,8 +174,31 @@ def draw_navigator(workspace: SpatialDesignWorkspace) -> None:
         for item in items:
             workspace._navigator_item_to_room[item] = room["id"]
     canvas.create_text(17, height - 17,
-                       text="● Air   ◆ Opening   ■ Other   ↑↓ Rooms", anchor="w",
-                       fill=palette["muted"], font=("TkDefaultFont", 7))
+                       text="", anchor="w", fill=palette["muted"],
+                       font=("TkDefaultFont", 7), tags=("navigator-hint",))
+    update_navigator_hint(workspace)
+
+
+def update_navigator_hint(workspace: SpatialDesignWorkspace) -> None:
+    """Make dense device/room markers discoverable without changing selection."""
+    target = getattr(workspace, "_navigator_hover_target", None)
+    label = "● Air   ◆ Opening   ■ Other   ↑↓ Rooms"
+    if target is not None:
+        kind, item_id = target
+        collection = "devices" if kind == "device" else "rooms"
+        item = next((e for e in workspace.layout[collection]
+                     if e["id"] == item_id), None)
+        if item is not None:
+            name = str(item.get("name") or item["id"])
+            if kind == "device":
+                label = f'{name}  ·  {item.get("type") or "Device"}'
+            else:
+                label = f'{name}  ·  {item["length_m"] * item["width_m"]:g} m²'
+    canvas = workspace.navigator_canvas
+    canvas.itemconfigure("navigator-hint", text=fit_text(
+        canvas, label, int(float(canvas.cget("width"))) - 34,
+        ("TkDefaultFont", 7),
+    ))
 
 
 def _panel(workspace, x, y, width, height, *, selected=False):

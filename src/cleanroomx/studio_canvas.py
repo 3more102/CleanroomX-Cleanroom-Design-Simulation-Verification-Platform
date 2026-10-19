@@ -11,7 +11,7 @@ import math
 from typing import TYPE_CHECKING
 
 from .spatial_transforms import fit_3d_view
-from .studio_summary import dashboard_snapshot, navigator_device_markers, navigator_rectangles
+from .studio_summary import dashboard_snapshot, device_snapshot, navigator_device_markers, navigator_rectangles
 from .studio_widgets import blend, draw_icon, draw_metrics, fit_text, rounded_rect
 
 if TYPE_CHECKING:
@@ -233,6 +233,12 @@ def _room_panels(workspace, width, height, card_width):
 def _room_panel_contents(workspace, width, card_width):
     canvas, p = workspace.canvas_3d, workspace._theme_palette
     room = dashboard_snapshot(workspace.layout, _selected_room_id(workspace))["selected_room"]
+    selected_device = device_snapshot(
+        workspace.layout,
+        workspace.selected.item_id
+        if workspace.selected is not None and workspace.selected.kind == "device"
+        else None,
+    )
     x, y = width - card_width - 14, 12
     _panel(workspace, x, y, card_width, 180, selected=True)
     text = lambda yy, value, **kw: canvas.create_text(
@@ -264,20 +270,37 @@ def _room_panel_contents(workspace, width, card_width):
                        fill=p["accent"], font=("TkDefaultFont", 10, "bold"), tags=("studio-ui",))
     y += 194
     _panel(workspace, x, y, card_width, 140)
-    text(y + 13, "PLACED IN THIS ROOM", font=("TkDefaultFont", 7, "bold"))
-    canvas.create_text(x + card_width - 16, y + 18, text=f'{room["device_count"]:02d} total',
-                       anchor="e", fill=p["muted"], font=("TkDefaultFont", 7), tags=("studio-ui",))
-    groups = room["device_groups"]
-    for column, key, label, yy in (
-        (0, "ffu", "FFU", 48), (1, "supply", "Supply", 48),
-        (0, "return_exhaust", "Return / exhaust", 76), (1, "other", "Other", 76),
-    ):
-        xx = x + 12 + column * ((card_width - 24) / 2)
-        draw_icon(canvas, key, xx + 8, y + yy, 12, p["accent"], ("studio-ui",))
-        canvas.create_text(xx + 24, y + yy, text=str(groups[key]), anchor="w", fill=p["text"],
-                           font=("TkDefaultFont", 12 if len(str(groups[key])) < 4 else 8, "bold"), tags=("studio-ui",))
-        canvas.create_text(xx + 50, y + yy, text=label, anchor="w", fill=p["muted"],
-                           font=("TkDefaultFont", 7), tags=("studio-ui",))
+    if selected_device is None:
+        text(y + 13, "PLACED IN THIS ROOM", font=("TkDefaultFont", 7, "bold"))
+        canvas.create_text(x + card_width - 16, y + 18, text=f'{room["device_count"]:02d} total',
+                           anchor="e", fill=p["muted"], font=("TkDefaultFont", 7), tags=("studio-ui",))
+        groups = room["device_groups"]
+        for column, key, label, yy in (
+            (0, "ffu", "FFU", 48), (1, "supply", "Supply", 48),
+            (0, "return_exhaust", "Return / exhaust", 76), (1, "other", "Other", 76),
+        ):
+            xx = x + 12 + column * ((card_width - 24) / 2)
+            draw_icon(canvas, key, xx + 8, y + yy, 12, p["accent"], ("studio-ui",))
+            canvas.create_text(xx + 24, y + yy, text=str(groups[key]), anchor="w", fill=p["text"],
+                               font=("TkDefaultFont", 12 if len(str(groups[key])) < 4 else 8, "bold"), tags=("studio-ui",))
+            canvas.create_text(xx + 50, y + yy, text=label, anchor="w", fill=p["muted"],
+                               font=("TkDefaultFont", 7), tags=("studio-ui",))
+    else:
+        text(y + 13, "SELECTED DEVICE", font=("TkDefaultFont", 7, "bold"))
+        _action(workspace, (x + card_width - 79, y + 8, x + card_width - 12, y + 31),
+                "Inspect", "inspect-device")
+        text(y + 31, fit_text(canvas, selected_device["name"], card_width - 30,
+                              ("TkDefaultFont", 12, "bold")),
+             fill=p["text"], font=("TkDefaultFont", 12, "bold"),
+             tags=("studio-selected-device-name",))
+        text(y + 56, fit_text(canvas,
+                              f'{selected_device["type"]}  ·  {selected_device["room_name"]}',
+                              card_width - 30, ("TkDefaultFont", 8)),
+             font=("TkDefaultFont", 8))
+        text(y + 78, (f'X {selected_device["x_m"]:g} m   '
+                       f'Y {selected_device["y_m"]:g} m   '
+                       f'Z +{selected_device["z_above_floor_m"]:g} m'),
+             font=("TkDefaultFont", 8), tags=("studio-selected-device-position",))
     middle = x + card_width / 2
     _action(workspace, (x + 11, y + 104, middle - 3, y + 129), "Focus room", "focus", primary=True)
     _action(workspace, (middle + 3, y + 104, x + card_width - 11, y + 129),

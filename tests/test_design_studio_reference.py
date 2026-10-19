@@ -10,7 +10,7 @@ import tkinter as tk
 import pytest
 
 from cleanroomx.gui import CleanroomXApp, bundled_demo_project_path
-from cleanroomx.studio_summary import dashboard_snapshot, navigator_rectangles
+from cleanroomx.studio_summary import dashboard_snapshot, navigator_device_markers, navigator_rectangles
 
 
 def demo_layout() -> dict:
@@ -72,6 +72,39 @@ def test_navigator_preserves_geometry_relative_positions_and_bounds():
     assert navigator_rectangles({"rooms": []}) == []
     assert layout == original
 
+
+
+def test_navigator_device_positions_follow_rooms_and_never_mutate_model():
+    layout = demo_layout()
+    original = copy.deepcopy(layout)
+    markers = navigator_device_markers(
+        layout, width_px=240, height_px=128, padding_px=20, header_px=48,
+    )
+    assert markers
+    by_id = {marker["id"]: marker for marker in markers}
+    assert len(by_id) == len(markers)
+    for marker in markers:
+        assert marker["id"] in {device["id"] for device in layout["devices"]}
+        x, y = marker["point"]
+        assert 20 <= x <= 220
+        assert 48 <= y <= 108
+    # Changing a room's position moves all attached devices only when their
+    # coordinates are changed too; markers are derived from world coordinates.
+    device = next(d for d in layout["devices"] if d["id"] in by_id)
+    original_point = by_id[device["id"]]["point"]
+    device["x_m"] += 0.1
+    moved = {marker["id"]: marker for marker in navigator_device_markers(
+        layout, width_px=240, height_px=128, padding_px=20, header_px=48,
+    )}
+    assert moved[device["id"]]["point"][0] > original_point[0]
+    assert layout["devices"][0]["id"] == original["devices"][0]["id"]
+    assert navigator_device_markers({"rooms": [], "devices": layout["devices"]}) == []
+
+
+def test_navigator_device_markers_reject_degenerate_room_geometry():
+    layout = demo_layout()
+    layout["rooms"][0]["length_m"] = 0
+    assert navigator_device_markers(layout) == []
 
 @pytest.fixture
 def gui(tmp_path):
@@ -400,3 +433,31 @@ def test_studio_edit_card_opens_the_actual_room_inspector(gui):
     assert ws.inspector_visible()
     assert ws._property_entries["name"].winfo_ismapped()
     assert ws._property_vars["name"].get() == "Process"
+
+
+def test_studio_minimap_device_selection_and_room_keyboard_context(gui):
+    gui.open_design_studio()
+    gui.root.update()
+    ws = gui.spatial_workspace
+    markers = ws.navigator_canvas.find_withtag("navigator-device")
+    assert markers, "Actual placed devices must appear in the navigator"
+    first_device = next(
+        d for d in ws.layout["devices"]
+        if ws.navigator_canvas.find_withtag(f'navigator-device:{d["id"]}')
+        and d.get("room_id") in {room["id"] for room in ws.layout["rooms"]}
+    )
+    device_id, room_id = first_device["id"], first_device["room_id"]
+    click_tag(ws.navigator_canvas, f"navigator-device:{device_id}")
+    assert ws.selected.kind == "device"
+    assert ws.selected.item_id == device_id
+    assert room_id in {room["id"] for room in ws.layout["rooms"]}
+    assert ws.canvas_3d.find_withtag(f"device:{device_id}")
+    assert ws.canvas_3d.find_withtag("studio-room-panel")
+    active_id = next(room["id"] for room in ws.layout["rooms"] if room["id"] == room_id)
+    index = next(i for i, room in enumerate(ws.layout["rooms"]) if room["id"] == active_id)
+    ws._navigate_studio_room(1)
+    assert ws.selected.kind == "room"
+    assert ws.selected.item_id == ws.layout["rooms"][(index + 1) % len(ws.layout["rooms"])]["id"]
+    click_tag(ws.navigator_canvas, f"navigator-room:{room_id}")
+    assert ws.selected.kind == "room"
+    assert ws.selected.item_id == room_id

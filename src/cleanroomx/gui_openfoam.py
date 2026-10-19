@@ -1442,15 +1442,57 @@ class OpenFOAMWorkspace(ttk.Frame):
                     self.progress_var.set("Stopped · partial output retained; run is incomplete")
                 elif value == 0:
                     self._append(
-                        "\nProcess exited successfully. Review the command evidence; "
+                        "\nProcess exited with status 0. Review the command evidence; "
                         "this does not establish CFD convergence or validation.\n"
                     )
-                    self._status_setter("OpenFOAM command finished; scientific validation remains blocked")
-                    self.progress_var.set("Command finished · review measured output and numerical diagnostics")
                     if self._run_kind == "run":
-                        self.stage_var.set(9)
-                        if self.result_directory_var.get().strip() and self.open_results_var.get():
-                            self._analyze_results()
+                        diagnostic = (
+                            read_solver_progress(self._progress_directory)
+                            if self._progress_directory else None
+                        )
+                        completed = diagnostic["completed_stages"] if diagnostic else 0
+                        expected = diagnostic["total_stages"] if diagnostic else 9
+                        issues = diagnostic["issues"] if diagnostic else []
+                        self.stage_var.set(completed)
+                        if issues:
+                            first = issues[0]
+                            self._append(
+                                f"Run log warning: {len(issues)} affected stage(s); "
+                                f"first: case {first['case']}, {first['program']}, "
+                                f"{first['reason']}\nLog: {first['log']}\n"
+                            )
+                            self.progress_var.set(
+                                f"Unverified run · solver issues in {len(issues)} stage(s); "
+                                f"{completed}/{expected} finished"
+                            )
+                            self._status_setter("OpenFOAM numerical/log issue; inspect run evidence")
+                        elif completed != expected:
+                            self._append(
+                                f"Run evidence incomplete: only {completed}/{expected} "
+                                "solver stage logs end successfully. "
+                                "Automatic result loading is blocked.\n"
+                            )
+                            self.progress_var.set(
+                                f"Unverified run · {completed}/{expected} solver stages confirmed"
+                            )
+                            self._status_setter("OpenFOAM stage evidence incomplete; review logs")
+                        else:
+                            self.progress_var.set(
+                                f"All {expected} solver stages logged End · "
+                                "review measured output and numerical diagnostics"
+                            )
+                            self._status_setter(
+                                "OpenFOAM stages logged complete; scientific validation remains blocked"
+                            )
+                            if self.result_directory_var.get().strip() and self.open_results_var.get():
+                                self._analyze_results()
+                    else:
+                        self._status_setter(
+                            "OpenFOAM command finished; scientific validation remains blocked"
+                        )
+                        self.progress_var.set(
+                            "Command finished · review measured output and numerical diagnostics"
+                        )
                 else:
                     self._append(f"\nProcess exited with status {value}.\n")
                     self._status_setter(f"OpenFOAM command failed with status {value}")

@@ -12,6 +12,7 @@ from tkinter import messagebox, simpledialog, ttk
 
 from .gui_theme import theme_palette
 from .studio_summary import dashboard_snapshot, navigator_rectangles
+from .studio_device_schedule import DeviceScheduleWindow
 from . import studio_canvas
 from .spatial_editing import duplicate_spatial_item, update_spatial_properties
 
@@ -1667,6 +1668,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._studio_hover_action = None
         self._studio_action_styles = {}
         self._studio_saved_menu = None
+        self._studio_schedule: DeviceScheduleWindow | None = None
         self._toolbar_layout_keys = {}
         self._studio_more_tools = tk.BooleanVar(value=False)
         self._interior_3d = tk.BooleanVar(value=True)
@@ -1757,6 +1759,11 @@ class SpatialDesignWorkspace(ttk.Frame):
             style="CX.Ghost.TButton",
         )
         self._studio_find_button.pack(side="right", padx=2)
+        self._studio_schedule_button = ttk.Button(
+            commandbar, text="Device schedule", command=self.open_device_schedule,
+            style="CX.Ghost.TButton",
+        )
+        self._studio_schedule_button.pack(side="right", padx=2)
 
         modebar = ttk.Frame(self, padding=(8, 0, 8, 4))
         modebar.pack(fill="x")
@@ -2811,6 +2818,17 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.update_idletasks()
         self.fit_views()
 
+    def open_device_schedule(self) -> DeviceScheduleWindow:
+        """Open the live placed-equipment schedule without changing geometry."""
+        window = self._studio_schedule
+        if window is not None and window.winfo_exists():
+            window.refresh_rows()
+            window.lift()
+            window.focus_set()
+            return window
+        self._studio_schedule = DeviceScheduleWindow(self)
+        return self._studio_schedule
+
     def balance_studio_view(self) -> None:
         self.show_all()
         self.layout["view"]["azimuth_deg"] = 35.0
@@ -3750,6 +3768,9 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._draw_2d()
         self._draw_3d()
         self._draw_room_navigator()
+        schedule = self._studio_schedule
+        if schedule is not None and schedule.winfo_exists():
+            schedule.refresh_rows()
 
     def _pressure_relationships(
         self,
@@ -5010,6 +5031,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             "properties": self.inspect_room,
             "inspect-device": lambda: self._focus_property("name"),
             "focus-device": self.fit_selected,
+            "schedule": self.open_device_schedule,
             **{f"layer-{category}": lambda name=category: self.toggle_studio_device_layer(name)
                for category in ("air", "opening", "other")},
             **{key: lambda p=key: self.set_3d_view_preset(p)

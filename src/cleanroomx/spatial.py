@@ -4983,6 +4983,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             "restore": self.show_all, "fit": self.fit_3d,
             "properties": self.inspect_room,
             "inspect-device": lambda: self._focus_property("name"),
+            "focus-device": self.fit_selected,
             **{key: lambda p=key: self.set_3d_view_preset(p)
                for key in ("top", "front", "iso")},
         }

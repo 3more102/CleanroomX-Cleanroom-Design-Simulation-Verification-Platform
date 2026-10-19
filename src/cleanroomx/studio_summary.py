@@ -146,6 +146,16 @@ def device_snapshot(layout: dict, device_id: str | None) -> dict[str, Any] | Non
         "z_above_floor_m": float(device["z_m"]),
     }
 
+def device_layer_category(device: dict) -> str:
+    """Classify display-only equipment layers from canonical device types."""
+    kind = str(device.get("type") or "").strip().lower()
+    if kind in {"door", "window", "opening", "transfer"}:
+        return "opening"
+    if kind in {"ffu", "supply", "return", "exhaust"}:
+        return "air"
+    return "other"
+
+
 def navigator_device_markers(
     layout: dict,
     *,
@@ -182,12 +192,8 @@ def navigator_device_markers(
         if not (padding_px <= px <= width_px - padding_px
                 and header_px <= py <= height_px - padding_px):
             continue
-        kind = str(device.get("type") or "").lower()
-        category = (
-            "opening" if kind in {"door", "window", "opening", "transfer"}
-            else "air" if kind in {"ffu", "supply", "return", "exhaust"}
-            else "other"
-        )
+        kind = str(device.get("type") or "").strip().lower()
+        category = device_layer_category(device)
         markers.append({
             "id": device["id"], "name": device.get("name") or device["id"],
             "room_id": device.get("room_id"),

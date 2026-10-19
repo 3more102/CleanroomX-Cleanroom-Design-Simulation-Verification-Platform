@@ -49,6 +49,68 @@ def test_studio_room_prepares_real_case_inputs_and_top_run_routes_to_solver(app,
     assert workspace.verify_native_fields_var.get()
 
 
+
+def test_changed_room_geometry_requires_review_before_run(app, tmp_path, monkeypatch):
+    import copy
+
+    app.open_design_studio()
+    app.spatial_workspace.select_item("device", "supply-process", notify=True)
+    app.open_room_solver()
+    workspace = app.openfoam_workspace
+    reviewed, room_id = workspace._room_context_getter()
+    modified = copy.deepcopy(reviewed)
+    modified["project"]["metadata"]["spatial_layout"]["rooms"][0]["length_m"] = 9
+    monkeypatch.setattr(workspace, "_room_context_getter", lambda: (modified, room_id))
+    commands = []
+    monkeypatch.setattr(workspace, "_start_command", lambda label, command: commands.append(command))
+    workspace.runtime_mode_var.set("native")
+    workspace.bashrc_var.set("")
+    workspace.runs_folder_var.set(str(tmp_path / "runs"))
+    workspace.mesh_var.set("6 6 6")
+
+    workspace.run_room_study()
+    assert commands == []
+    assert not (tmp_path / "runs").exists()
+    assert "9 × 5 × 3" in workspace.room_info_var.get()
+    assert "review" in app.status_var.get().lower()
+
+    workspace.run_room_study()
+    assert len(commands) == 1
+    spec = json.loads((Path(workspace.case_directory_var.get()).parent / "specification.json").read_text())
+    assert spec["room_m"] == [9, 5, 3]
+
+
+def test_changed_auto_supply_clears_outdated_value_before_run(app, tmp_path, monkeypatch):
+    import copy
+
+    app.open_design_studio()
+    app.spatial_workspace.select_item("device", "supply-process", notify=True)
+    app.open_room_solver()
+    workspace = app.openfoam_workspace
+    assert workspace.supply_var.get() == "2700"
+    reviewed, room_id = workspace._room_context_getter()
+    modified = copy.deepcopy(reviewed)
+    modified["analyses"][0]["input"]["rooms"][0]["supply_airflow_m3_h"] = 3000
+    monkeypatch.setattr(workspace, "_room_context_getter", lambda: (modified, room_id))
+    commands = []
+    monkeypatch.setattr(workspace, "_start_command", lambda label, command: commands.append(command))
+    workspace.runtime_mode_var.set("native")
+    workspace.bashrc_var.set("")
+    workspace.runs_folder_var.set(str(tmp_path / "runs"))
+    workspace.mesh_var.set("6 6 6")
+
+    workspace.run_room_study()
+    assert commands == []
+    assert not (tmp_path / "runs").exists()
+    assert workspace.supply_var.get() == "3000"
+    assert "review" in app.status_var.get().lower()
+
+    workspace.run_room_study()
+    assert len(commands) == 1
+    spec = json.loads((Path(workspace.case_directory_var.get()).parent / "specification.json").read_text())
+    assert spec["supply_flow_m3_s"] == pytest.approx(3000 / 3600)
+
+
 def test_failed_child_process_sets_failure_and_unlocks_controls(app):
     import sys
     workspace = app.openfoam_workspace

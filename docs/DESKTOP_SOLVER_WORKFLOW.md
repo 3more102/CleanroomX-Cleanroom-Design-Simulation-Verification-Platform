@@ -17,7 +17,11 @@ pressure, velocity and flux values come from their output files.
    Missing, conflicting or ambiguously linked verification flow stays empty and requires a value.
    Two Studio rooms linked to the same engineering-room name never silently share
    an automatically selected supply flow; enter and review a value explicitly.
-5. Press **Run room study**. The top Run button also starts this workflow while
+5. Press **Run room study**. If the selected room's geometry, engineering
+   identity or verification airflow changed since opening the solver panel,
+   CleanroomX refreshes the inputs and requires another Run action after
+   review. Unrelated project-note edits do not force repeated review.
+   The top Run button also starts this workflow while
    the OpenFOAM tab is active. Live progress reads the actual stage logs and
    displays recorded solver time and residuals; it is not convergence percentage. Fatal log diagnostics and invalid/non-finite
 residual values are surfaced across all cases, even if subsequent logs exist;

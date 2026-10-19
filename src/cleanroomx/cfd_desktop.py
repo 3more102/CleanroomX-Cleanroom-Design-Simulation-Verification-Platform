@@ -45,7 +45,8 @@ def room_study_input(project: dict, room_id: str) -> dict:
                 candidates.append({"analysis_id": analysis["id"], "value_m3_h": value})
     values = {item["value_m3_h"] for item in candidates}
     return {
-        "room_id": room_id, "room_name": room["name"], "room_m": dimensions,
+        "room_id": room_id, "room_name": room["name"],
+        "engineering_room_name": name, "room_m": dimensions,
         "volume_m3": math.prod(dimensions),
         "supply_airflow_m3_h": next(iter(values)) if len(values) == 1 and not ambiguous_room_identity else None,
         "supply_sources": candidates,
@@ -54,6 +55,23 @@ def room_study_input(project: dict, room_id: str) -> dict:
         "project_sha256": hashlib.sha256(json.dumps(project, sort_keys=True, separators=(",", ":"),
                                                    ensure_ascii=False, allow_nan=False).encode()).hexdigest(),
     }
+
+
+# Only simulation-relevant input changes require another review. Changes to
+# unrelated project metadata must not continuously interrupt a CFD run.
+_REVIEW_FIELDS = (
+    "room_id", "room_name", "engineering_room_name", "room_m",
+    "volume_m3", "supply_airflow_m3_h", "supply_sources", "supply_status",
+)
+
+
+def room_study_context_matches(reviewed: dict, current: dict) -> bool:
+    """Check that a previously reviewed room context is still authoritative."""
+    return (
+        isinstance(reviewed, dict) and isinstance(current, dict)
+        and all(field in reviewed and field in current and reviewed[field] == current[field]
+                for field in _REVIEW_FIELDS)
+    )
 
 
 def prepare_room_study(project: dict, room_id: str, directory: str | Path, *,

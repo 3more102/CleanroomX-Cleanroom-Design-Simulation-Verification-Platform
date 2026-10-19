@@ -25,7 +25,9 @@ from .cfd_openfoam import verify_openfoam_case_bundle
 from .cfd_proofgraph import export_openfoam_proofgraph, export_two_room_proofgraph
 from .gui_theme import theme_palette
 from .strict_json import load_strict_json_snapshot
-from .cfd_desktop import prepare_room_study, read_solver_progress, room_study_input
+from .cfd_desktop import (
+    prepare_room_study, read_solver_progress, room_study_context_matches, room_study_input,
+)
 from .cfd_runtime import DEFAULT_BASHRC, runtime_command, wsl_stop_command
 
 
@@ -999,6 +1001,16 @@ class OpenFOAMWorkspace(ttk.Frame):
             if room_id != self._room_context["room_id"]:
                 self.use_selected_room()
                 self._status_setter("Selected room changed; review the updated inputs and run again")
+                return
+            current = room_study_input(project, room_id)
+            if not room_study_context_matches(self._room_context, current):
+                # A model edit can occur while the OpenFOAM panel remains open.
+                # Refresh both the geometry and any auto-filled supply airflow.
+                # Do not publish a case until the changed values are reviewed.
+                self.use_selected_room()
+                self._status_setter(
+                    "Room geometry or verification airflow changed; review the refreshed inputs and run again"
+                )
                 return
             mesh = [int(value) for value in self.mesh_var.get().replace(",", " ").split()]
             directory = Path(self.runs_folder_var.get().strip()).expanduser()

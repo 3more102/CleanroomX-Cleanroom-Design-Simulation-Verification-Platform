@@ -8,7 +8,9 @@ import sys
 
 import pytest
 
-from cleanroomx.cfd_desktop import prepare_room_study, read_solver_progress, room_study_input
+from cleanroomx.cfd_desktop import (
+    prepare_room_study, read_solver_progress, room_study_context_matches, room_study_input,
+)
 from cleanroomx.cfd_openfoam import verify_openfoam_case_bundle
 from cleanroomx.cfd_runtime import runtime_command, runtime_report, wsl_stop_command
 from cleanroomx.gui import bundled_demo_project_path
@@ -53,6 +55,43 @@ def test_missing_or_conflicting_supply_is_never_replaced_by_a_demo_value():
     assert source["supply_status"] == "conflicting"
     assert source["supply_airflow_m3_h"] is None
 
+
+
+
+def test_room_review_guard_rejects_changed_geometry_or_verification_flow():
+    project = demo()
+    reviewed = room_study_input(project, "process")
+    geometry_changed = copy.deepcopy(project)
+    geometry_changed["project"]["metadata"]["spatial_layout"]["rooms"][0]["width_m"] = 9
+    assert not room_study_context_matches(
+        reviewed, room_study_input(geometry_changed, "process"),
+    )
+
+    airflow_changed = copy.deepcopy(project)
+    airflow_changed["analyses"][0]["input"]["rooms"][0]["supply_airflow_m3_h"] = 3000
+    assert not room_study_context_matches(
+        reviewed, room_study_input(airflow_changed, "process"),
+    )
+
+
+def test_room_review_guard_rejects_alias_change_even_with_equal_numeric_flow():
+    project = demo()
+    reviewed = room_study_input(project, "process")
+    renamed = copy.deepcopy(project)
+    renamed["project"]["metadata"]["spatial_layout"]["rooms"][0]["analysis_room_name"] = "Other room"
+    assert not room_study_context_matches(
+        reviewed, room_study_input(renamed, "process"),
+    )
+
+
+def test_room_review_guard_ignores_unrelated_project_metadata():
+    project = demo()
+    reviewed = room_study_input(project, "process")
+    changed = copy.deepcopy(project)
+    changed["project"]["metadata"]["review_annotation"] = "Updated project notes"
+    current = room_study_input(changed, "process")
+    assert reviewed["project_sha256"] != current["project_sha256"]
+    assert room_study_context_matches(reviewed, current)
 
 
 def test_duplicate_engineering_room_names_require_explicit_airflow(tmp_path):

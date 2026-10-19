@@ -1655,6 +1655,10 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._studio_room_var = tk.StringVar(value="Select a room")
         self._studio_devices_var = tk.StringVar(value="No devices")
         self._studio_search_var = tk.StringVar()
+        self._studio_device_layers = {
+            category: tk.BooleanVar(value=True)
+            for category in ("air", "opening", "other")
+        }
         self._navigator_item_to_room: dict[int, str] = {}
         self._navigator_item_to_device: dict[int, str] = {}
         self._navigator_hover_target: tuple[str, str] | None = None
@@ -2019,6 +2023,14 @@ class SpatialDesignWorkspace(ttk.Frame):
                             ("Air changes", "ACH"), ("Airflow", "Airflow"), ("Status", "Status")):
             display_menu.add_command(label=label, command=lambda m=mode: self._set_overlay_mode(m))
         display_menu.add_checkbutton(label="X-Ray", variable=self._xray_3d, command=self._draw_3d)
+        display_menu.add_separator()
+        for label, category in (("Air devices", "air"), ("Openings", "opening"),
+                                ("Other equipment", "other")):
+            display_menu.add_checkbutton(
+                label=f"3D + navigator: {label}",
+                variable=self._studio_device_layers[category],
+                command=self._on_studio_device_layers_changed,
+            )
         self._studio_display_button.configure(menu=display_menu)
         for label, delta in (("↺", -15), ("↻", 15)):
             ttk.Button(
@@ -2917,6 +2929,12 @@ class SpatialDesignWorkspace(ttk.Frame):
             )
             self._navigator_item_to_room[rect_id] = room["id"]
             self._navigator_item_to_room[label_id] = room["id"]
+
+    def _on_studio_device_layers_changed(self) -> None:
+        """Redraw GUI layers only; model geometry and project data stay intact."""
+        self._navigator_hover_target = None
+        self._draw_3d()
+        self._draw_room_navigator()
 
     def _on_navigator_motion(self, event: tk.Event) -> None:
         canvas = self.navigator_canvas

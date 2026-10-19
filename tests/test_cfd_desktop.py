@@ -199,6 +199,47 @@ def test_progress_reports_written_solver_iterations_and_residuals(tmp_path):
 
 
 
+
+def test_full_log_audit_detects_fatal_message_outside_live_tail(tmp_path):
+    case = tmp_path / "configuration_1"
+    case.mkdir()
+    (case / "simpleFoam.log").write_text(
+        "FOAM FATAL ERROR\\n".replace("\\\\n", "\\n")
+        + "Time = 1\\n".replace("\\\\n", "\\n")
+        + ("normal solver output " * 3000) + "\\nEnd\\n",
+        encoding="utf-8",
+    )
+    live = read_solver_progress(tmp_path)
+    audited = read_solver_progress(tmp_path, full_scan=True)
+    assert live["completed_stages"] == 1  # Tail-only UI is not authoritative.
+    assert audited["completed_stages"] == 0
+    assert audited["issues"][0]["case"] == 1
+    assert audited["issues"][0]["program"] == "simpleFoam"
+
+
+def test_full_log_audit_catches_nonfinite_early_residual(tmp_path):
+    case = tmp_path / "configuration_1"
+    case.mkdir()
+    (case / "simpleFoam.log").write_text(
+        "Time = 1\\n".replace("\\\\n", "\\n")
+        + "smoothSolver: Solving for Ux, Initial residual = nan, Final residual = 1e-2, No Iterations 2\\n".replace("\\\\n", "\\n")
+        + ("normal solver output " * 3000) + "\\nEnd\\n",
+        encoding="utf-8",
+    )
+    audited = read_solver_progress(tmp_path, full_scan=True)
+    assert audited["completed_stages"] == 0
+    assert "non-finite" in audited["issues"][0]["reason"]
+
+
+def test_full_log_audit_requires_complete_end_line(tmp_path):
+    case = tmp_path / "configuration_1"
+    case.mkdir()
+    (case / "blockMesh.log").write_text("mesh generated\\nEnd".replace("\\\\n", "\\n"), encoding="utf-8")
+    audited = read_solver_progress(tmp_path, full_scan=True)
+    assert audited["completed_stages"] == 0
+    assert audited["latest"]["ended"] is False
+
+
 def test_nonfinite_residual_is_not_counted_as_completed_even_after_end(tmp_path):
     case = tmp_path / "configuration_1"
     case.mkdir()

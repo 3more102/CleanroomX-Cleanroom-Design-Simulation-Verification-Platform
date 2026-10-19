@@ -1657,6 +1657,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._studio_search_var = tk.StringVar()
         self._navigator_item_to_room: dict[int, str] = {}
         self._navigator_item_to_device: dict[int, str] = {}
+        self._navigator_hover_target: tuple[str, str] | None = None
         self._navigator_scroll = 0
         self._studio_active = False
         self._studio_hover_action = None
@@ -2049,6 +2050,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
         self.navigator_canvas.place(relx=0.015, rely=0.985, anchor="sw")
         self.navigator_canvas.bind("<Button-1>", self._on_navigator_room_click)
+        self.navigator_canvas.bind("<Motion>", self._on_navigator_motion)
+        self.navigator_canvas.bind("<Leave>", self._on_navigator_leave)
         self.navigator_canvas.bind("<Up>", lambda event: self._navigate_studio_room(-1))
         self.navigator_canvas.bind("<Down>", lambda event: self._navigate_studio_room(1))
         self.navigator_canvas.bind("<MouseWheel>", lambda event: self._scroll_room_navigator(-1 if event.delta > 0 else 1))
@@ -2914,6 +2917,30 @@ class SpatialDesignWorkspace(ttk.Frame):
             )
             self._navigator_item_to_room[rect_id] = room["id"]
             self._navigator_item_to_room[label_id] = room["id"]
+
+    def _on_navigator_motion(self, event: tk.Event) -> None:
+        canvas = self.navigator_canvas
+        target = None
+        for item in reversed(canvas.find_overlapping(event.x, event.y, event.x, event.y)):
+            device_id = self._navigator_item_to_device.get(item)
+            if device_id:
+                target = ("device", device_id)
+                break
+            room_id = self._navigator_item_to_room.get(item)
+            if room_id:
+                target = ("room", room_id)
+                break
+        canvas.configure(cursor="hand2" if target else "")
+        if target != self._navigator_hover_target:
+            self._navigator_hover_target = target
+            if self._studio_active:
+                studio_canvas.update_navigator_hint(self)
+
+    def _on_navigator_leave(self, _event: tk.Event | None = None) -> None:
+        self._navigator_hover_target = None
+        self.navigator_canvas.configure(cursor="")
+        if self._studio_active:
+            studio_canvas.update_navigator_hint(self)
 
     def _on_navigator_room_click(self, event: tk.Event) -> None:
         self.navigator_canvas.focus_set()

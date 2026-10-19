@@ -104,7 +104,10 @@ class DeviceScheduleWindow(tk.Toplevel):
         self.minsize(760, 370)
         self.transient(workspace.winfo_toplevel())
         self._query_var = tk.StringVar(master=self)
-        self._category_var = tk.StringVar(master=self, value="all")
+        self._category_var = tk.StringVar(master=self, value=CATEGORIES["all"])
+        self._sort_column = "room"
+        self._sort_reverse = False
+        self._last_rows_signature = None
         self._room_var = tk.StringVar(master=self, value="All rooms")
         self._status_var = tk.StringVar(master=self, value="")
         self._room_labels: dict[str, str | None] = {"All rooms": None}
@@ -128,7 +131,7 @@ class DeviceScheduleWindow(tk.Toplevel):
         ttk.Label(filters, text="Category").pack(side="left", padx=(0, 5))
         self.category_box = ttk.Combobox(
             filters, state="readonly", textvariable=self._category_var,
-            values=tuple(CATEGORIES), width=12,
+            values=tuple(CATEGORIES.values()), width=16,
         )
         self.category_box.pack(side="left", padx=(0, 16))
         ttk.Label(filters, text="Room").pack(side="left", padx=(0, 5))
@@ -152,7 +155,10 @@ class DeviceScheduleWindow(tk.Toplevel):
             ("z", "Z + floor (m)", 108, "e"),
             ("id", "Device ID", 165, "w"),
         ):
-            self.table.heading(col, text=title)
+            self.table.heading(
+                col, text=title,
+                command=lambda column=col: self.sort_by(column),
+            )
             self.table.column(col, width=width, minwidth=55, anchor=anchor)
         scroll = ttk.Scrollbar(table_frame, orient="vertical", command=self.table.yview)
         self.table.configure(yscrollcommand=scroll.set)
@@ -186,6 +192,18 @@ class DeviceScheduleWindow(tk.Toplevel):
         self.refresh_rows()
         search.focus_set()
 
+    def sort_by(self, column: str) -> None:
+        """Sort the current view without rewriting canonical device order."""
+        if column not in {"name", "type", "room", "x", "y", "z", "id"}:
+            raise ValueError(f"Unsupported schedule sort column: {column}")
+        if column == self._sort_column:
+            self._sort_reverse = not self._sort_reverse
+        else:
+            self._sort_column = column
+            self._sort_reverse = False
+        self._last_rows_signature = None
+        self.refresh_rows()
+
     def refresh_rows(self) -> None:
         """Refresh source rows and selection when the underlying model changes."""
         if not self.winfo_exists():
@@ -202,16 +220,47 @@ class DeviceScheduleWindow(tk.Toplevel):
         self.room_box.configure(values=tuple(labels))
         if self._room_var.get() not in labels:
             self._room_var.set("All rooms")
-        category = self._category_var.get()
-        if category not in CATEGORIES:
-            self._category_var.set("all")
+        selected_category = self._category_var.get()
+        category = next(
+            (key for key, label in CATEGORIES.items() if label == selected_category),
+            None,
+        )
+        if category is None:
             category = "all"
+            self._category_var.set(CATEGORIES[category])
         rows = equipment_schedule_rows(
             self.workspace.layout,
             query=self._query_var.get(),
             category=category,
             room_id=labels[self._room_var.get()],
         )
+        sort_fields = {
+            "name": "name", "type": "type", "room": "room",
+            "x": "x_m", "y": "y_m", "z": "z_offset_m", "id": "id",
+        }
+        value_key = sort_fields[self._sort_column]
+        rows = sorted(
+            rows,
+            key=lambda item: (
+                item[value_key] if self._sort_column in {"x", "y", "z"}
+                else str(item[value_key]).casefold(),
+                item["id"],
+            ),
+            reverse=self._sort_reverse,
+        )
+        # Scene redraws can happen frequently during hover/orbit. A schedule
+        # rebuild is only needed when actual model data, filters or sort change.
+        signature = (
+            tuple(tuple(item[k] for k in (
+                "id", "name", "type", "category", "room", "room_id",
+                "x_m", "y_m", "z_offset_m",
+            )) for item in rows),
+            tuple(labels), self._query_var.get(), category,
+            self._room_var.get(), self._sort_column, self._sort_reverse,
+        )
+        if signature == self._last_rows_signature:
+            return
+        self._last_rows_signature = signature
         self._displayed_rows = rows
         existing = self.table.get_children("")
         if existing:

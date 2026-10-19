@@ -1410,7 +1410,23 @@ class OpenFOAMWorkspace(ttk.Frame):
                     if candidate.isdigit() and 1 < int(candidate) < 2**31:
                         wsl_session["pid"] = int(candidate)
                 self._events.put(("output", line))
-        self._events.put(("finished", process.wait()))
+        exit_code = process.wait()
+        if self._run_kind == "run" and self._progress_directory:
+            # Full log auditing is I/O-bound and belongs in the existing
+            # worker thread, not the Tk event loop.
+            try:
+                final_audit = read_solver_progress(self._progress_directory, full_scan=True)
+            except (OSError, ValueError) as exc:
+                final_audit = {
+                    "completed_stages": 0, "total_stages": 9,
+                    "issues": [{
+                        "case": "?", "program": "audit", "reason": str(exc),
+                        "log": str(self._progress_directory), "tail": "",
+                    }],
+                }
+            self._events.put(("finished", {"exit_code": exit_code, "audit": final_audit}))
+        else:
+            self._events.put(("finished", exit_code))
 
     def _drain_events(self) -> None:
         if self._destroyed:
@@ -1430,6 +1446,8 @@ class OpenFOAMWorkspace(ttk.Frame):
                 self._append("".join(output_parts))
                 output_parts.clear()
             if kind == "finished":
+                exit_code = value["exit_code"] if isinstance(value, dict) else value
+                final_audit = value.get("audit") if isinstance(value, dict) else None
                 self._process = None
                 self._set_busy(False)
                 if self._progress_id is not None:
@@ -1440,14 +1458,16 @@ class OpenFOAMWorkspace(ttk.Frame):
                     self._append("\nOpenFOAM command and child solvers stopped.\n")
                     self._status_setter("OpenFOAM command stopped")
                     self.progress_var.set("Stopped · partial output retained; run is incomplete")
-                elif value == 0:
+                elif exit_code == 0:
                     self._append(
                         "\nProcess exited with status 0. Review the command evidence; "
                         "this does not establish CFD convergence or validation.\n"
                     )
                     if self._run_kind == "run":
                         diagnostic = (
-                            read_solver_progress(self._progress_directory)
+                            final_audit
+                            if final_audit is not None
+                            else read_solver_progress(self._progress_directory, full_scan=True)
                             if self._progress_directory else None
                         )
                         completed = diagnostic["completed_stages"] if diagnostic else 0
@@ -1494,9 +1514,9 @@ class OpenFOAMWorkspace(ttk.Frame):
                             "Command finished · review measured output and numerical diagnostics"
                         )
                 else:
-                    self._append(f"\nProcess exited with status {value}.\n")
-                    self._status_setter(f"OpenFOAM command failed with status {value}")
-                    self.progress_var.set(f"Failed (exit {value}) · inspect console and solver logs")
+                    self._append(f"\nProcess exited with status {exit_code}.\n")
+                    self._status_setter(f"OpenFOAM command failed with status {exit_code}")
+                    self.progress_var.set(f"Failed (exit {exit_code}) · inspect console and solver logs")
                     if self._progress_directory:
                         diagnostic = read_solver_progress(self._progress_directory)
                         if diagnostic["issues"]:

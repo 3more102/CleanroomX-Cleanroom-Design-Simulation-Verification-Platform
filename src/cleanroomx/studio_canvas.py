@@ -361,6 +361,18 @@ def draw_scene(workspace: SpatialDesignWorkspace, overlay: dict) -> None:
         canvas.create_text(18, 48, text=("Interior" if workspace._interior_3d.get() else "Exterior")
                            + " view  ·  " + workspace._projection_mode.get(), anchor="w", fill=p["muted"],
                            font=("TkDefaultFont", 8), tags=("studio-ui",))
+        device_counts = {"air": 0, "opening": 0, "other": 0}
+        for device in layout["devices"]:
+            device_counts[device_layer_category(device)] += 1
+        for x0, x1, category, name in (
+            (18, 94, "air", "AIR"), (99, 182, "opening", "OPEN"),
+            (187, 275, "other", "OTHER"),
+        ):
+            _action(
+                workspace, (x0, 68, x1, 95),
+                f'{name} {device_counts[category]}', f"layer-{category}",
+                active=workspace._studio_device_layers[category].get(),
+            )
     if not layout["rooms"]:
         canvas.create_text(width / 2, height / 2, text="Add a room to begin designing",
                            fill=p["muted"], tags=("studio-ui",))

@@ -437,6 +437,26 @@ def test_zero_exit_code_requires_all_real_stage_logs_before_auto_results(tmp_pat
         assert status[-1] != "OpenFOAM stages logged complete; scientific validation remains blocked"
 
 
+
+def test_solver_worker_attaches_full_log_audit_to_finished_event(tmp_path):
+    workspace = OpenFOAMWorkspace.__new__(OpenFOAMWorkspace)
+    case = tmp_path / "configuration_1"
+    case.mkdir()
+    (case / "blockMesh.log").write_text("FOAM FATAL ERROR\\n".replace("\\\\n", "\\n") + ("x" * 40000) + "\\nEnd\\n", encoding="utf-8")
+    workspace._run_kind = "run"
+    workspace._progress_directory = str(tmp_path)
+    workspace._events = queue.Queue()
+    process = SimpleNamespace(stdout=iter([]), wait=lambda: 0)
+
+    workspace._read_process(process)
+
+    kind, payload = workspace._events.get_nowait()
+    assert kind == "finished"
+    assert payload["exit_code"] == 0
+    assert payload["audit"]["completed_stages"] == 0
+    assert payload["audit"]["issues"][0]["case"] == 1
+
+
 def test_openfoam_workspace_compact_console_stays_scrollable() -> None:
     try:
         root = tk.Tk()

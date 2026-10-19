@@ -1,0 +1,14 @@
+{
+  "schema_version": "cleanroomx.openfoam.two-room.v1",
+  "name": "SYNTHETIC two-room 5 Pa integration fixture",
+  "room_m": [6.0, 4.0, 3.0],
+  "mesh_cells_per_room": [12, 12, 8],
+  "door_opening_m": [0.22, 0.2],
+  "supply_flow_m3_s": 0.1,
+  "density_kg_m3": 1.2,
+  "kinematic_viscosity_m2_s": 0.000015,
+  "target_delta_pressure_pa": 5.0,
+  "pressure_tolerance_pa": 1.0,
+  "max_iterations": 150,
+  "output_interval": 1
+}

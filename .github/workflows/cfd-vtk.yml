@@ -4,17 +4,77 @@ on:
   pull_request:
     paths:
       - "src/cleanroomx/cfd_*.py"
+      - "src/cleanroomx/gui_cfd_analysis.py"
+      - "src/cleanroomx/gui_proofgraph.py"
+      - "src/cleanroomx/spatial.py"
+      - "src/cleanroomx/gui_openfoam.py"
+      - "tests/test_cfd_result_analysis.py"
+      - "tests/test_cfd_desktop.py"
+      - "tests/test_cfd_domain_ventilation.py"
+      - "tests/test_gui_room_solver.py"
+      - "tests/test_cfd_cell_regions.py"
+      - "tests/test_cfd_sync_case_analysis.py"
+      - "tests/test_cfd_native_grid_analysis.py"
+      - "tests/test_cfd_proofgraph.py"
+      - "tests/test_gui_cfd_analysis.py"
+      - "tests/test_gui_engineering_panels.py"
+      - "tests/test_gui_proofgraph_integration.py"
+      - "tests/test_gui_recovery_revision_workstations.py"
+      - "tests/test_gui_workstation_dialogs.py"
+      - "tests/test_gui_cfd_verified_bundle.py"
+      - "tests/test_gui_openfoam_native_sync.py"
+      - "tests/test_cfd_integration_contract.py"
+      - "tests/test_cfd_two_room_analysis.py"
+      - "tests/test_cfd_analysis_bundle.py"
+      - "tests/cfd_analysis_fixtures.py"
       - "tests/test_cfd_pipeline.py"
+      - "tests/test_cfd_convergence_triage.py"
       - "tests/test_cfd_scalar_audit.py"
       - "tests/test_cfd_grid_study.py"
+      - "tests/test_cfd_vtk_time_selection.py"
       - "tests/test_cfd_study.py"
+      - "tests/test_openfoam_v10_capability_matrix.py"
+      - "docs/OPENFOAM_FOUNDATION_V10_PARITY.md"
+      - "docs/openfoam_foundation_v10_capabilities.csv"
+      - "docs/openfoam_foundation_v10_source_inventory.csv"
+      - "scripts/openfoam_v10_parity_score.py"
       - "pyproject.toml"
       - ".github/workflows/cfd-vtk.yml"
   push:
     paths:
       - "src/cleanroomx/cfd_*.py"
+      - "src/cleanroomx/gui_cfd_analysis.py"
+      - "src/cleanroomx/gui_proofgraph.py"
+      - "src/cleanroomx/spatial.py"
+      - "src/cleanroomx/gui_openfoam.py"
+      - "tests/test_cfd_result_analysis.py"
+      - "tests/test_cfd_desktop.py"
+      - "tests/test_cfd_domain_ventilation.py"
+      - "tests/test_gui_room_solver.py"
+      - "tests/test_cfd_cell_regions.py"
+      - "tests/test_cfd_sync_case_analysis.py"
+      - "tests/test_cfd_native_grid_analysis.py"
+      - "tests/test_cfd_proofgraph.py"
+      - "tests/test_gui_cfd_analysis.py"
+      - "tests/test_gui_engineering_panels.py"
+      - "tests/test_gui_proofgraph_integration.py"
+      - "tests/test_gui_recovery_revision_workstations.py"
+      - "tests/test_gui_workstation_dialogs.py"
+      - "tests/test_gui_cfd_verified_bundle.py"
+      - "tests/test_gui_openfoam_native_sync.py"
+      - "tests/test_cfd_integration_contract.py"
+      - "tests/test_cfd_two_room_analysis.py"
+      - "tests/test_cfd_analysis_bundle.py"
+      - "tests/cfd_analysis_fixtures.py"
       - "tests/test_cfd_pipeline.py"
+      - "tests/test_cfd_convergence_triage.py"
+      - "tests/test_cfd_vtk_time_selection.py"
       - "tests/test_cfd_study.py"
+      - "tests/test_openfoam_v10_capability_matrix.py"
+      - "docs/OPENFOAM_FOUNDATION_V10_PARITY.md"
+      - "docs/openfoam_foundation_v10_capabilities.csv"
+      - "docs/openfoam_foundation_v10_source_inventory.csv"
+      - "scripts/openfoam_v10_parity_score.py"
       - "pyproject.toml"
       - ".github/workflows/cfd-vtk.yml"
   workflow_dispatch:
@@ -35,5 +95,13 @@ jobs:
         run: python -m pip install -e ".[dev,cfd]"
       - name: Verify VTK reader and plotting available
         run: python -c "import vtk, matplotlib; print(vtk.vtkVersion.GetVTKVersion(), matplotlib.__version__)"
+      - name: Verify Foundation v10 capability matrix and score
+        run: python scripts/openfoam_v10_parity_score.py
       - name: CFD focused regression with real VTK fixtures
-        run: python -m pytest -q tests/test_cfd_study.py tests/test_cfd_pipeline.py tests/test_cfd_scalar_audit.py tests/test_cfd_grid_study.py -ra
+        run: python -m pytest -q tests/test_cfd_study.py tests/test_cfd_pipeline.py tests/test_cfd_scalar_audit.py tests/test_cfd_grid_study.py tests/test_cfd_vtk_time_selection.py tests/test_cfd_convergence_triage.py tests/test_openfoam_v10_capability_matrix.py tests/test_cfd_result_analysis.py tests/test_cfd_desktop.py tests/test_cfd_domain_ventilation.py tests/test_cfd_cell_regions.py tests/test_cfd_sync_case_analysis.py tests/test_cfd_native_grid_analysis.py tests/test_cfd_proofgraph.py tests/test_cfd_openfoam_runtime_sync.py tests/test_cfd_integration_contract.py tests/test_cfd_two_room_analysis.py tests/test_cfd_analysis_bundle.py tests/test_gui_openfoam_native_sync.py -ra
+      - name: Install virtual display for solver-result explorer
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb tk
+      - name: Exercise analysis, room fitting and evidence navigation with real Tk widgets
+        run: xvfb-run -a python -m pytest -q tests/test_gui_room_solver.py tests/test_gui_cfd_analysis.py tests/test_gui_cfd_verified_bundle.py tests/test_gui_engineering_panels.py tests/test_gui_proofgraph_integration.py tests/test_gui_recovery_revision_workstations.py tests/test_gui_workstation_dialogs.py -ra

@@ -29,6 +29,11 @@ _THEME_PALETTES: dict[str, dict[str, str]] = {
         "canvas_3d": "#111820",
         "plot": "#ffffff",
         "grid": "#d7dee7",
+        "design": "#08796d", "design_surface": "#e1f2ee",
+        "analyze": "#2d65a2", "analyze_surface": "#e4eef9",
+        "verify": "#8d6006", "verify_surface": "#f7efd9",
+        "evidence": "#7050a7", "evidence_surface": "#efe9f7",
+        "release": "#287444", "release_surface": "#e5f3e9",
     },
     "dark": {
         "background": "#0a1423",
@@ -51,6 +56,11 @@ _THEME_PALETTES: dict[str, dict[str, str]] = {
         "canvas_3d": "#080f1b",
         "plot": "#0b2032",
         "grid": "#2b4b61",
+        "design": "#65d9c6", "design_surface": "#183a3b",
+        "analyze": "#84b8ff", "analyze_surface": "#20384e",
+        "verify": "#efc467", "verify_surface": "#44371f",
+        "evidence": "#c5a8ff", "evidence_surface": "#392f4d",
+        "release": "#78d89a", "release_surface": "#213d2c",
     },
 }
 
@@ -82,6 +92,10 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         "TFrame",
         background=palette["background"],
     )
+    style.configure("Horizontal.TProgressbar", background=palette["accent"],
+                    troughcolor=palette["surface"], bordercolor=palette["border"],
+                    lightcolor=palette["accent"], darkcolor=palette["accent"])
+    style.configure("Horizontal.TScale", background=palette["surface"], troughcolor=palette["surface_alt"])
     style.configure(
         "TLabel",
         background=palette["background"],

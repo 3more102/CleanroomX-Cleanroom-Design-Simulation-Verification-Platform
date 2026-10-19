@@ -84,6 +84,7 @@ from .gui_theme import configure_ttk_theme, normalize_theme_name
 from .runtime_diagnostics import install_tk_exception_handler
 from .gui_windowing import fit_window_to_display
 from .gui_proofgraph import ProofGraphViewer
+from .gui_openfoam import OpenFOAMWorkspace
 from .gui_start import StartCenter
 from .project_dossier import (
     build_project_engineering_dossier,
@@ -2611,6 +2612,11 @@ class CleanroomXApp:
             command=lambda: self._guided_action("report", self.export_project_engineering_dossier),
         )
         self.workflow_report_button.pack(side="left", padx=1)
+        self.workflow_cfd_button = ttk.Button(
+            workflowbar, text="CFD / simulation…", style="CX.Compact.TButton",
+            command=self.open_room_solver,
+        )
+        self.workflow_cfd_button.pack(side="left", padx=(12, 1))
 
         panes = ttk.Panedwindow(self.root, orient="horizontal")
         self.main_panes = panes
@@ -2803,6 +2809,18 @@ class CleanroomXApp:
             status_setter=self.status_var.set,
         )
         self.notebook.add(self.proofgraph_viewer, text="ProofGraph")
+
+        self.openfoam_workspace = OpenFOAMWorkspace(
+            self.notebook,
+            on_proofgraph_loaded=lambda document: (
+                self.proofgraph_viewer.set_documents([document]),
+                self.notebook.select(self.proofgraph_viewer),
+            ),
+            status_setter=self.status_var.set,
+            room_context_getter=self._room_solver_context,
+            busy_setter=self._set_solver_running,
+        )
+        self.notebook.add(self.openfoam_workspace, text="OpenFOAM")
 
         output_host = ttk.Frame(self.workspace_panes, padding=(0, 5, 0, 0))
         self.output_panel = output_host
@@ -3149,6 +3167,10 @@ class CleanroomXApp:
         workspace = getattr(self, "spatial_workspace", None)
         if workspace is not None:
             workspace.apply_theme(self.theme_var.get(), redraw=redraw)
+
+        openfoam_workspace = getattr(self, "openfoam_workspace", None)
+        if openfoam_workspace is not None:
+            openfoam_workspace.apply_theme(self.theme_var.get())
 
         menubar = getattr(self, "menubar", None)
         if isinstance(menubar, tk.Menu):
@@ -3920,6 +3942,20 @@ class CleanroomXApp:
             self.load_project_path(candidate)
         except Exception as exc:
             messagebox.showerror("Open failed", str(exc), parent=self.root)
+
+    def select_demo_plot_analysis(self) -> None:
+        """Select the bundled fan/system numerical calculation."""
+        analysis_id = demo_plot_analysis_id(self.project)
+        self.project.active_analysis_id = analysis_id
+        self._refresh_analysis_list(select_id=analysis_id)
+        self._update_title()
+
+    def open_demo_plot_analysis(self) -> None:
+        """Run the example fan/system calculation and show its computed graph."""
+        self.select_demo_plot_analysis()
+        self.notebook.select(self.plot_canvas.master)
+        self.workspace_status_var.set("Workspace: Plot — calculating example fan/system curves")
+        self.run_current()
 
     def _open_bundled_demo_from_start(self) -> None:
         if self._running:
@@ -6980,6 +7016,12 @@ class CleanroomXApp:
         messagebox.showinfo("Validation", "Input is valid for the selected backend workflow.")
 
     def run_current(self) -> None:
+        if self.openfoam_workspace._busy:
+            self.status_var.set("Wait for the solver operation to finish or press Stop")
+            return
+        if self.notebook.select() == str(self.openfoam_workspace):
+            self.openfoam_workspace.run_active()
+            return
         if self._running:
             return
         try:
@@ -7024,7 +7066,31 @@ class CleanroomXApp:
 
         threading.Thread(target=worker, daemon=True).start()
 
+    def _room_solver_context(self) -> tuple[dict, str]:
+        if self._running:
+            raise ValueError("Wait for the current engineering analysis to finish")
+        selected_tab = self.notebook.select()
+        self._commit_editor()
+        self.notebook.select(selected_tab)
+        workspace = self.spatial_workspace
+        selected = workspace._selected_object()
+        if selected is None:
+            raise ValueError("Select a room or an assigned device in Design Studio first")
+        room_id = selected.get("room_id") if workspace.selected.kind == "device" else selected["id"]
+        if not room_id:
+            raise ValueError("The selected device is not assigned to a room")
+        return copy.deepcopy(self.project.to_dict()), room_id
+
+    def open_room_solver(self) -> None:
+        self.notebook.select(self.openfoam_workspace)
+        self.workspace_status_var.set("Workspace: Solver simulation")
+        self.openfoam_workspace.use_selected_room()
+        self.notebook.select(self.openfoam_workspace)
+
     def cancel_run(self) -> None:
+        if getattr(getattr(self, "openfoam_workspace", None), "_busy", False):
+            self.openfoam_workspace._stop()
+            return
         if not self._running or self._abandon_requested:
             return
         self._abandon_requested = True
@@ -7038,6 +7104,11 @@ class CleanroomXApp:
         self.run_button.configure(state="disabled" if running else "normal")
         self.cancel_button.configure(state="normal" if running else "disabled")
         self.input_text.configure(state="disabled" if running else "normal")
+
+    def _set_solver_running(self, running: bool) -> None:
+        self.run_button.configure(state="disabled" if running else "normal")
+        self.cancel_button.configure(text="Stop" if running else "Abandon",
+                                     state="normal" if running and self.openfoam_workspace._process is not None else "disabled")
 
     def _poll_worker(self) -> None:
         try:
@@ -7397,6 +7468,13 @@ class CleanroomXApp:
         self.root.destroy()
 
 
+def demo_plot_analysis_id(project: ProjectDocument) -> str:
+    for analysis in project.analyses:
+        if analysis.kind == "fan_operating_point":
+            return analysis.id
+    raise ValueError("The demo has no fan/system operating-point analysis with a plot")
+
+
 def bundled_demo_project_path() -> Path:
     """Return the self-contained demonstration project shipped in the package."""
     path = Path(__file__).resolve().parent / "demo" / "gui_demo.cleanroomx.json"
@@ -7422,6 +7500,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="Validate GUI/application imports and print capability information without opening a window",
     )
     parser.add_argument(
+        "--demo-results", action="store_true",
+        help="Run the bundled fan/system calculation and display its computed graph",
+    )
+    parser.add_argument(
         "--studio", action="store_true",
         help="Open the loaded project in the dark, integrated 3D Design Studio",
     )
@@ -7445,8 +7527,10 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    if args.demo and args.project:
-        parser.error("project path and --demo cannot be used together")
+    if args.demo and args.demo_results:
+        parser.error("--demo and --demo-results cannot be used together")
+    if (args.demo or args.demo_results) and args.project:
+        parser.error("project path and demo mode cannot be used together")
     if args.autosave_interval_seconds < 0:
         parser.error("--autosave-interval-seconds must be zero or greater")
     if args.check:
@@ -7454,7 +7538,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     registry = validate_application_registry()
-    project_path = bundled_demo_project_path() if args.demo else args.project
+    project_path = bundled_demo_project_path() if (args.demo or args.demo_results) else args.project
 
     root = tk.Tk()
     app = CleanroomXApp(
@@ -7495,6 +7579,11 @@ def main(argv: list[str] | None = None) -> int:
     if project_path and not recovered_at_startup:
         try:
             app.load_project_path(project_path)
+            if args.demo_results:
+                if args.smoke:
+                    app.select_demo_plot_analysis()
+                else:
+                    app.open_demo_plot_analysis()
         except Exception as exc:
             if args.smoke:
                 root.destroy()

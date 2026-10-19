@@ -640,12 +640,18 @@ def test_theme_switch_is_view_only_and_rethemes_engineering_surfaces(app):
     assert app.spatial_workspace.canvas_3d.cget("background") == dark["canvas_3d"]
     assert app.plot_canvas.cget("background") == dark["plot"]
     assert app.input_text.cget("background") == dark["field"]
+    assert app.spatial_workspace._inspector_canvas.cget("background") == dark["background"]
+    assert app.openfoam_workspace._workflow_canvas.cget("background") == dark["background"]
+    assert app.openfoam_workspace.output.cget("background") == dark["field"]
     assert app.project.to_dict() == project_before
 
     app.toggle_theme()
     app.root.update()
     assert app.theme_var.get() == "light"
-    assert app.spatial_workspace.canvas_2d.cget("background") == "#f7f9fb"
+    light = theme_palette("light")
+    assert app.spatial_workspace.canvas_2d.cget("background") == light["canvas_2d"]
+    assert app.spatial_workspace._inspector_canvas.cget("background") == light["background"]
+    assert app.openfoam_workspace._workflow_canvas.cget("background") == light["background"]
     assert app.project.to_dict() == project_before
 
 
@@ -1074,3 +1080,131 @@ def test_floor_properties_apply_as_one_transaction_and_preserve_cancel_safety(
     workspace.edit_floor()
     app.root.update()
     assert workspace.layout == applied
+
+
+def test_design_inspector_scrolls_on_compact_pane_without_project_changes(app):
+    workspace = app.spatial_workspace
+    room = workspace.layout["rooms"][0]
+    project_before = copy.deepcopy(app.project.to_dict())
+    workspace.select_item("room", room["id"])
+    app.root.update()
+
+    canvas = workspace._inspector_canvas
+    canvas.pack_configure(fill="x", expand=False)
+    canvas.configure(height=85)
+    app.root.update_idletasks()
+    app.root.update()
+
+    region = canvas.bbox("all")
+    assert region is not None
+    assert region[3] > canvas.winfo_height()
+    assert workspace._apply_properties_button.winfo_ismapped()
+    assert workspace._inspector_sync_label.winfo_manager() == "pack"
+
+    canvas.yview_moveto(0)
+    workspace._property_entries["height_m"].event_generate(
+        "<MouseWheel>", delta=-120
+    )
+    app.root.update()
+    assert canvas.yview()[0] > 0
+    assert app.project.to_dict() == project_before
+
+
+def test_context_menu_property_focus_reveals_field_on_compact_inspector(app):
+    app.root.minsize(800, 300)
+    app.root.geometry("1200x900")
+    workspace = app.spatial_workspace
+    app.set_focus_workspace(True)
+    workspace.show_inspector()
+    app.notebook.select(workspace)
+    app.root.update()
+    room = workspace.layout["rooms"][0]
+    project_before = copy.deepcopy(app.project.to_dict())
+    workspace.select_item("room", room["id"])
+    app.root.update()
+
+    canvas = workspace._inspector_canvas
+    canvas.pack_configure(fill="x", expand=False)
+    canvas.configure(height=85)
+    app.root.update_idletasks()
+    assert canvas.winfo_height() >= 80
+    canvas.yview_moveto(0)
+    app.root.update()
+
+    for key in ("analysis_room_name", "x_m"):
+        entry = workspace._property_entries[key]
+        workspace._focus_property(key)
+        app.root.update()
+
+        canvas_top = canvas.winfo_rooty()
+        assert entry.winfo_rooty() >= canvas_top
+        assert entry.winfo_rooty() + entry.winfo_height() <= (
+            canvas_top + canvas.winfo_height()
+        )
+    assert app.project.to_dict() == project_before
+
+
+def test_openfoam_workbench_controls_scroll_while_output_stays_visible(app):
+    workspace = app.openfoam_workspace
+    app.root.minsize(800, 300)
+    app.root.geometry("900x420")
+    app.set_focus_workspace(True)
+    app.notebook.select(workspace)
+    app.root.update()
+
+    canvas = workspace._workflow_canvas
+    canvas.pack_configure(fill="x", expand=False)
+    canvas.configure(height=85)
+    app.root.update_idletasks()
+    app.root.update()
+
+    region = canvas.bbox("all")
+    assert region is not None
+    assert region[3] > canvas.winfo_height()
+    assert workspace.output.winfo_ismapped()
+    assert workspace._output_frame.winfo_height() >= 100
+
+    canvas.yview_moveto(0)
+    workspace.sync_vtk_button.event_generate("<MouseWheel>", delta=-120)
+    app.root.update()
+    assert canvas.yview()[0] > 0
+
+
+def test_openfoam_case_preflight_is_background_and_preserves_project(app, monkeypatch, tmp_path):
+    workspace = app.openfoam_workspace
+    app.notebook.select(workspace)
+    workspace.case_directory_var.set(str(tmp_path / "cases"))
+    project_before = copy.deepcopy(app.project.to_dict())
+    report = {
+        "files_checked": 24,
+        "files_expected": 24,
+        "boundary_audits_passed": 3,
+        "total_bytes_checked": 2048,
+        "manifest_sha256": "b" * 64,
+    }
+    monkeypatch.setattr(
+        "cleanroomx.gui_openfoam.verify_openfoam_case_bundle",
+        lambda directory: report,
+    )
+
+    class ImmediateThread:
+        def __init__(self, *, target, args, **_kwargs):
+            self.target = target
+            self.args = args
+
+        def start(self):
+            self.target(*self.args)
+
+    monkeypatch.setattr("cleanroomx.gui_openfoam.threading.Thread", ImmediateThread)
+    workspace._verify_case_bundle()
+
+    assert workspace.verify_button.instate(["disabled"])
+    assert workspace.stop_button.instate(["disabled"])
+    workspace._drain_events()
+    app.root.update()
+
+    assert not workspace.verify_button.instate(["disabled"])
+    assert workspace.stop_button.instate(["disabled"])
+    assert "Generated inputs: 24/24" in workspace.output.get("1.0", "end")
+    assert "Scientific validation: BLOCKED" in workspace.output.get("1.0", "end")
+    assert app.project.to_dict() == project_before

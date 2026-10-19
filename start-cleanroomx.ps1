@@ -46,7 +46,7 @@ if ([string]::IsNullOrWhiteSpace($env:PYTHONPATH)) {
 }
 
 if (-not $CleanroomXArgs -or $CleanroomXArgs.Count -eq 0) {
-    $CleanroomXArgs = @("--demo")
+    $CleanroomXArgs = @("--demo-results")
 }
 
 if ($pythonPrefix) {

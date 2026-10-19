@@ -1,0 +1,33 @@
+{
+  "regression": {
+    "passed": 2838,
+    "failed": 0,
+    "skips": [
+      {
+        "test": ".tests.test_bim_ifc_native",
+        "reason": "collection skipped"
+      }
+    ]
+  },
+  "desktop": {
+    "passed": 258,
+    "failed": 0,
+    "skips": []
+  },
+  "source_commit": "173f3ff533bf4f8573f6bcd2c7a2a4d997095792",
+  "source_tree": "4cd940125df007a655f90255a7e89c99645c2479",
+  "equivalent_local_source_commit": "f78c0e48e8e8f86dff027b90dbd06b390115b6d8",
+  "windows_wsl_solver_execution": "NOT PERFORMED; command contracts and Windows desktop CI are separate",
+  "artifact_sha256": {
+    "actual-solver-flow_balance.png": "7a93a2a7243bd762513cbc936b1649bb598a2f1943aa4e6036efd633542f3e6d",
+    "actual-solver-residuals.png": "3d4947eebdd14d5bd6a981f48d349a6aaf8deca90323231748a7e95e5784eba4",
+    "actual-solver-supply_ach.png": "0989d413036d55c0a5b04d6794791ddd0068507fe83a0cc5613677b64f8d71c0",
+    "actual-solver-workflow.png": "1e9bc5c67f632d8a58825e18689209ca945813b082d635710b5d40fc61ae97d6",
+    "desktop-console.log": "0c494a32c99d0c7fda3460dfd3313ed500145b5b86194bf6da6ce03483d13e57",
+    "desktop.coverage.json": "3313b38c2e4058177266b9325f568494e51f0d38c0db4733afccba94d93bb632",
+    "desktop.xml": "2136f7305abfe415e10b86252e76df7dfe2e2f50087637a775dec54ccf02796e",
+    "native-solver-evidence.zip": "798f85e1877182d4bd3544afb668d3b869fa6341f905325e1268b42c40a94f91",
+    "regression.xml": "397fd1f8fb1817c22acdd7fc0cee64726a950051fc917823e3e689f61e22f084",
+    "verification.json": "063f4634184ba66dc7727d7d1e9d84706fef96502932c249c0755d7a794b9852"
+  }
+}

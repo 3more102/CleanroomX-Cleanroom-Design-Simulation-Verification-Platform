@@ -1,0 +1,771 @@
+
+Room study prepared from project inputs:
+{
+  "schema_version": "cleanroomx.desktop-room-study.v1",
+  "room_id": "process",
+  "room_name": "Process",
+  "room_m": [
+    6.0,
+    5.0,
+    3.0
+  ],
+  "volume_m3": 90.0,
+  "supply_airflow_m3_h": 2700,
+  "supply_sources": [
+    {
+      "analysis_id": "verification",
+      "value_m3_h": 2700
+    }
+  ],
+  "supply_status": "declared",
+  "project_sha256": "3d6377fa3b38e303dd39cad7c5bd3eaacefe993a27ea23300c8d056ca83c9ad1",
+  "supply_airflow_m3_h_used": 2700.0,
+  "supply_origin": "declared_verification_input",
+  "input_supply_ach_per_h": 30.0,
+  "case_spec_sha256": "70b90abba5516496974391319272f1945d5979aafe8edd95aad482038e0f3b77",
+  "model": "Three alternative idealized steady isothermal laminar rectangular-room layouts",
+  "assumptions": [
+    "Uses selected-room dimensions and declared or edited supply airflow",
+    "Device locations, obstructions, doors and inter-room connections are not meshed",
+    "Pressure setpoints are not computed pressure results",
+    "No turbulence, heat, contaminant or particle transport is solved"
+  ],
+  "scientific_validation": "BLOCKED"
+}
+OpenFOAM Foundation v10 run
+$ argv = ["/usr/bin/bash", "--noprofile", "--norc", "-c", "source \"$1\" >/dev/null && shift && exec \"$@\"", "cleanroomx", "/workspace/scratch/a50b614113ea/foam-runtime/root/opt/openfoam10/etc/bashrc", "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/bin/python3", "-m", "cleanroomx.cfd_pipeline_cli", "run", "/workspace/scratch/a50b614113ea/desktop_solver_final_native/runs/run-c9ae74ad4694/cases", "--timeout-seconds", "3600", "--sync-results", "/workspace/scratch/a50b614113ea/desktop_solver_final_native/runs/run-c9ae74ad4694/results", "--simulation-id", "run-c9ae74ad4694"]
+/workspace/scratch/a50b614113ea/foam-runtime/root/opt/openfoam10/etc/config.sh/mpi: line 46: mpicc: command not found
+{
+  "status": "executed_requires_convergence_review",
+  "cases": {
+    "1": {
+      "status": "executed_requires_convergence_review",
+      "stages": [
+        {
+          "program": "blockMesh",
+          "returncode": 0,
+          "log": "configuration_1/blockMesh.log",
+          "log_sha256": "fd1f934765e0c336f197f46c8f1694d29a2bf5b91c9f86e969b0129462bbb621",
+          "openfoam": {
+            "version": "10",
+            "website": "https://openfoam.org",
+            "build": "10-c4cf895ad8fa",
+            "is_foundation_v10": true
+          }
+        },
+        {
+          "program": "checkMesh",
+          "returncode": 0,
+          "log": "configuration_1/checkMesh.log",
+          "log_sha256": "7c173d0c1cea9678eefe85ab56142ca7ed251bfc869739c26395b2a6e70e6e35",
+          "openfoam": {
+            "version": "10",
+            "website": "https://openfoam.org",
+            "build": "10-c4cf895ad8fa",
+            "is_foundation_v10": true
+          },
+          "mesh_quality_diagnostics": {
+            "schema_version": "cleanroomx.openfoam-checkmesh-diagnostics.v1",
+            "parse_status": "complete",
+            "source_log_sha256": "7c173d0c1cea9678eefe85ab56142ca7ed251bfc869739c26395b2a6e70e6e35",
+            "interpretation": "diagnostic_only",
+            "project_acceptance": "not_assessed_no_project_criteria",
+            "counts": {
+              "cell_types": {
+                "hexahedra": 720,
+                "prisms": 0,
+                "wedges": 0,
+                "pyramids": 0,
+                "tet_wedges": 0,
+                "tetrahedra": 0,
+                "polyhedra": 0
+              },
+              "points": 1001,
+              "faces": 2412,
+              "internal_faces": 1908,
+              "cells": 720,
+              "faces_per_cell": 6,
+              "boundary_patches": 3,
+              "point_zones": 0,
+              "face_zones": 0,
+              "cell_zones": 0,
+              "regions": 1
+            },
+            "geometry": {
+              "domain_bounding_box": [
+                [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                [
+                  6.0,
+                  5.0,
+                  3.0
+                ]
+              ],
+              "geometric_directions": [
+                1,
+                1,
+                1
+              ],
+              "solution_directions": [
+                1,
+                1,
+                1
+              ],
+              "max_cell_openness": 0.0,
+              "max_aspect_ratio": 1.0,
+              "max_skewness": 0.0,
+              "face_area_range_m2": [
+                0.25,
+                0.25
+              ],
+              "cell_volume_range_m3": [
+                0.125,
+                0.125,
+                90.0
+              ],
+              "non_orthogonality_deg_max_average": [
+                0.0,
+                0.0
+              ],
+              "boundary_openness_vector": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "coupled_point_location_average": 0.0
+            },
+            "reported_checks": {
+              "number_of_regions": "ok",
+              "patch_topology": "ok",
+              "cell_openness": "ok",
+              "aspect_ratio": "ok",
+              "skewness": "ok",
+              "face_area_magnitudes": "ok",
+              "cell_volumes": "ok",
+              "boundary_openness": "ok",
+              "non_orthogonality": "ok",
+              "boundary_definition": "ok",
+              "cell_to_face_addressing": "ok",
+              "point_usage": "ok",
+              "upper_triangular_ordering": "ok",
+              "face_vertices": "ok",
+              "face_pyramids": "ok",
+              "coupled_point_location": "ok"
+            },
+            "patch_topology": [
+              {
+                "name": "inlet",
+                "faces": 16,
+                "points": 25,
+                "status": "ok",
+                "description": "non-closed singly connected"
+              },
+              {
+                "name": "outlet",
+                "faces": 40,
+                "points": 66,
+                "status": "ok",
+                "description": "non-closed singly connected"
+              },
+              {
+                "name": "walls",
+                "faces": 448,
+                "points": 479,
+                "status": "ok",
+                "description": "non-closed singly connected"
+              }
+            ],
+            "reported_check_failures": [],
+            "mesh_result": "mesh_ok",
+            "missing_fields": [],
+            "ambiguous_fields": [],
+            "invalid_fields": []
+          }
+        },
+        {
+          "program": "simpleFoam",
+          "returncode": 0,
+          "log": "configuration_1/simpleFoam.log",
+          "log_sha256": "cbefd182763acc318d1c42a56559f7034cb40bd89494b5fd1f209843269aaf40",
+          "openfoam": {
+            "version": "10",
+            "website": "https://openfoam.org",
+            "build": "10-c4cf895ad8fa",
+            "is_foundation_v10": true
+          }
+        }
+      ],
+      "solver_flux": {
+        "status": "MEASURED_DIAGNOSTIC_ONLY",
+        "case_id": "configuration_1",
+        "last_solver_time": "150",
+        "phi_path": "configuration_1/150/phi",
+        "phi_sha256": "bc3c161dfbb6aa384a1c6688a0c7344e5555adcecf19e4c72c05b60abf16f04c",
+        "poly_mesh_boundary_sha256": "dcb748d5b7a09a085acc5f46ae60e2c3ae6059b1b5542674a57e450dec21fb52",
+        "patch_face_counts": {
+          "inlet": 16,
+          "outlet": 40,
+          "walls": 448
+        },
+        "inlet": {
+          "gross_inward_m3_s": 0.75,
+          "reverse_outward_m3_s": 0.0,
+          "net_inward_m3_s": 0.75
+        },
+        "outlet": {
+          "gross_outward_m3_s": 0.750003452377,
+          "reverse_inward_m3_s": 0.0,
+          "net_outward_m3_s": 0.750003452377
+        },
+        "walls_net_outward_m3_s": 0.0,
+        "partition_net_outward_m3_s": 0.0,
+        "net_boundary_outward_m3_s": 3.45237699995e-06,
+        "absolute_flux_imbalance_m3_s": 3.45237699995e-06,
+        "relative_flux_imbalance_percent": 0.000460316933326,
+        "flow_balance_assessment": "NO_PROJECT_ACCEPTANCE_CRITERION",
+        "scientific_validation": "BLOCKED"
+      }
+    },
+    "2": {
+      "status": "executed_requires_convergence_review",
+      "stages": [
+        {
+          "program": "blockMesh",
+          "returncode": 0,
+          "log": "configuration_2/blockMesh.log",
+          "log_sha256": "a98f69e2d03daead324e503ea479f51b4a31cd8a6553e5c818e60105d9ceff01",
+          "openfoam": {
+            "version": "10",
+            "website": "https://openfoam.org",
+            "build": "10-c4cf895ad8fa",
+            "is_foundation_v10": true
+          }
+        },
+        {
+          "program": "checkMesh",
+          "returncode": 0,
+          "log": "configuration_2/checkMesh.log",
+          "log_sha256": "73d03d049ceeaa8b94113ef141004c7d83b4be7fca20f9885f0d1f0e758af65e",
+          "openfoam": {
+            "version": "10",
+            "website": "https://openfoam.org",
+            "build": "10-c4cf895ad8fa",
+            "is_foundation_v10": true
+          },
+          "mesh_quality_diagnostics": {
+            "schema_version": "cleanroomx.openfoam-checkmesh-diagnostics.v1",
+            "parse_status": "complete",
+            "source_log_sha256": "73d03d049ceeaa8b94113ef141004c7d83b4be7fca20f9885f0d1f0e758af65e",
+            "interpretation": "diagnostic_only",
+            "project_acceptance": "not_assessed_no_project_criteria",
+            "counts": {
+              "cell_types": {
+                "hexahedra": 720,
+                "prisms": 0,
+                "wedges": 0,
+                "pyramids": 0,
+                "tet_wedges": 0,
+                "tetrahedra": 0,
+                "polyhedra": 0
+              },
+              "points": 1001,
+              "faces": 2412,
+              "internal_faces": 1908,
+              "cells": 720,
+              "faces_per_cell": 6,
+              "boundary_patches": 3,
+              "point_zones": 0,
+              "face_zones": 0,
+              "cell_zones": 0,
+              "regions": 1
+            },
+            "geometry": {
+              "domain_bounding_box": [
+                [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                [
+                  6.0,
+                  5.0,
+                  3.0
+                ]
+              ],
+              "geometric_directions": [
+                1,
+                1,
+                1
+              ],
+              "solution_directions": [
+                1,
+                1,
+                1
+              ],
+              "max_cell_openness": 0.0,
+              "max_aspect_ratio": 1.0,
+              "max_skewness": 0.0,
+              "face_area_range_m2": [
+                0.25,
+                0.25
+              ],
+              "cell_volume_range_m3": [
+                0.125,
+                0.125,
+                90.0
+              ],
+              "non_orthogonality_deg_max_average": [
+                0.0,
+                0.0
+              ],
+              "boundary_openness_vector": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "coupled_point_location_average": 0.0
+            },
+            "reported_checks": {
+              "number_of_regions": "ok",
+              "patch_topology": "ok",
+              "cell_openness": "ok",
+              "aspect_ratio": "ok",
+              "skewness": "ok",
+              "face_area_magnitudes": "ok",
+              "cell_volumes": "ok",
+              "boundary_openness": "ok",
+              "non_orthogonality": "ok",
+              "boundary_definition": "ok",
+              "cell_to_face_addressing": "ok",
+              "point_usage": "ok",
+              "upper_triangular_ordering": "ok",
+              "face_vertices": "ok",
+              "face_pyramids": "ok",
+              "coupled_point_location": "ok"
+            },
+            "patch_topology": [
+              {
+                "name": "inlet",
+                "faces": 30,
+                "points": 120,
+                "status": "ok",
+                "description": "non-closed singly connected"
+              },
+              {
+                "name": "outlet",
+                "faces": 40,
+                "points": 66,
+                "status": "ok",
+                "description": "non-closed singly connected"
+              },
+              {
+                "name": "walls",
+                "faces": 434,
+                "points": 488,
+                "status": "ok",
+                "description": "non-closed singly connected"
+              }
+            ],
+            "reported_check_failures": [],
+            "mesh_result": "mesh_ok",
+            "missing_fields": [],
+            "ambiguous_fields": [],
+            "invalid_fields": []
+          }
+        },
+        {
+          "program": "simpleFoam",
+          "returncode": 0,
+          "log": "configuration_2/simpleFoam.log",
+          "log_sha256": "a4b32a2e3549ec3182b849d565653f12cf0bc3e49ad708dc49f3040f411aa790",
+          "openfoam": {
+            "version": "10",
+            "website": "https://openfoam.org",
+            "build": "10-c4cf895ad8fa",
+            "is_foundation_v10": true
+          }
+        }
+      ],
+      "solver_flux": {
+        "status": "MEASURED_DIAGNOSTIC_ONLY",
+        "case_id": "configuration_2",
+        "last_solver_time": "150",
+        "phi_path": "configuration_2/150/phi",
+        "phi_sha256": "e608d8244a3892f65c88627bd338cbd469f0734613a75303a9d38bc7d3431ad5",
+        "poly_mesh_boundary_sha256": "19647380f7c797301e3f285e26e0370f760b9918c7df08f691f3e849dbd65a84",
+        "patch_face_counts": {
+          "inlet": 30,
+          "outlet": 40,
+          "walls": 434
+        },
+        "inlet": {
+          "gross_inward_m3_s": 0.75,
+          "reverse_outward_m3_s": 0.0,
+          "net_inward_m3_s": 0.75
+        },
+        "outlet": {
+          "gross_outward_m3_s": 0.74967884243,
+          "reverse_inward_m3_s": 0.0,
+          "net_outward_m3_s": 0.74967884243
+        },
+        "walls_net_outward_m3_s": 0.0,
+        "partition_net_outward_m3_s": 0.0,
+        "net_boundary_outward_m3_s": -0.00032115757,
+        "absolute_flux_imbalance_m3_s": 0.00032115757,
+        "relative_flux_imbalance_percent": 0.0428210093333,
+        "flow_balance_assessment": "NO_PROJECT_ACCEPTANCE_CRITERION",
+        "scientific_validation": "BLOCKED"
+      }
+    },
+    "3": {
+      "status": "executed_requires_convergence_review",
+      "stages": [
+        {
+          "program": "blockMesh",
+          "returncode": 0,
+          "log": "configuration_3/blockMesh.log",
+          "log_sha256": "70e8a93380e4491712749a54265e231f19092e8d2f2bceccfec13511c3e5c2cd",
+          "openfoam": {
+            "version": "10",
+            "website": "https://openfoam.org",
+            "build": "10-c4cf895ad8fa",
+            "is_foundation_v10": true
+          }
+        },
+        {
+          "program": "checkMesh",
+          "returncode": 0,
+          "log": "configuration_3/checkMesh.log",
+          "log_sha256": "be14d343d1b9de8cde877166fb06404aa4aabf11ccfe043a28c4a12f5562b0ca",
+          "openfoam": {
+            "version": "10",
+            "website": "https://openfoam.org",
+            "build": "10-c4cf895ad8fa",
+            "is_foundation_v10": true
+          },
+          "mesh_quality_diagnostics": {
+            "schema_version": "cleanroomx.openfoam-checkmesh-diagnostics.v1",
+            "parse_status": "complete",
+            "source_log_sha256": "be14d343d1b9de8cde877166fb06404aa4aabf11ccfe043a28c4a12f5562b0ca",
+            "interpretation": "diagnostic_only",
+            "project_acceptance": "not_assessed_no_project_criteria",
+            "counts": {
+              "cell_types": {
+                "hexahedra": 720,
+                "prisms": 0,
+                "wedges": 0,
+                "pyramids": 0,
+                "tet_wedges": 0,
+                "tetrahedra": 0,
+                "polyhedra": 0
+              },
+              "points": 1001,
+              "faces": 2412,
+              "internal_faces": 1908,
+              "cells": 720,
+              "faces_per_cell": 6,
+              "boundary_patches": 3,
+              "point_zones": 0,
+              "face_zones": 0,
+              "cell_zones": 0,
+              "regions": 1
+            },
+            "geometry": {
+              "domain_bounding_box": [
+                [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                [
+                  6.0,
+                  5.0,
+                  3.0
+                ]
+              ],
+              "geometric_directions": [
+                1,
+                1,
+                1
+              ],
+              "solution_directions": [
+                1,
+                1,
+                1
+              ],
+              "max_cell_openness": 0.0,
+              "max_aspect_ratio": 1.0,
+              "max_skewness": 0.0,
+              "face_area_range_m2": [
+                0.25,
+                0.25
+              ],
+              "cell_volume_range_m3": [
+                0.125,
+                0.125,
+                90.0
+              ],
+              "non_orthogonality_deg_max_average": [
+                0.0,
+                0.0
+              ],
+              "boundary_openness_vector": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "coupled_point_location_average": 0.0
+            },
+            "reported_checks": {
+              "number_of_regions": "ok",
+              "patch_topology": "ok",
+              "cell_openness": "ok",
+              "aspect_ratio": "ok",
+              "skewness": "ok",
+              "face_area_magnitudes": "ok",
+              "cell_volumes": "ok",
+              "boundary_openness": "ok",
+              "non_orthogonality": "ok",
+              "boundary_definition": "ok",
+              "cell_to_face_addressing": "ok",
+              "point_usage": "ok",
+              "upper_triangular_ordering": "ok",
+              "face_vertices": "ok",
+              "face_pyramids": "ok",
+              "coupled_point_location": "ok"
+            },
+            "patch_topology": [
+              {
+                "name": "inlet",
+                "faces": 30,
+                "points": 120,
+                "status": "ok",
+                "description": "non-closed singly connected"
+              },
+              {
+                "name": "outlet",
+                "faces": 30,
+                "points": 120,
+                "status": "ok",
+                "description": "non-closed singly connected"
+              },
+              {
+                "name": "walls",
+                "faces": 444,
+                "points": 506,
+                "status": "ok",
+                "description": "non-closed singly connected"
+              }
+            ],
+            "reported_check_failures": [],
+            "mesh_result": "mesh_ok",
+            "missing_fields": [],
+            "ambiguous_fields": [],
+            "invalid_fields": []
+          }
+        },
+        {
+          "program": "simpleFoam",
+          "returncode": 0,
+          "log": "configuration_3/simpleFoam.log",
+          "log_sha256": "3948bb7b5abc6f0662432608aefec42943146855f84fffa3e5abe8598426974c",
+          "openfoam": {
+            "version": "10",
+            "website": "https://openfoam.org",
+            "build": "10-c4cf895ad8fa",
+            "is_foundation_v10": true
+          }
+        }
+      ],
+      "solver_flux": {
+        "status": "MEASURED_DIAGNOSTIC_ONLY",
+        "case_id": "configuration_3",
+        "last_solver_time": "150",
+        "phi_path": "configuration_3/150/phi",
+        "phi_sha256": "ba6b9fb222a0dae3787f210d721aae5f328b839a5a952718a6f5763e8d06d10a",
+        "poly_mesh_boundary_sha256": "ba6c8aaa2ab15ac302540e380a1be16c95bfa7921b747cd8a188e00d8920a9cd",
+        "patch_face_counts": {
+          "inlet": 30,
+          "outlet": 30,
+          "walls": 444
+        },
+        "inlet": {
+          "gross_inward_m3_s": 0.75,
+          "reverse_outward_m3_s": 0.0,
+          "net_inward_m3_s": 0.75
+        },
+        "outlet": {
+          "gross_outward_m3_s": 0.74929221503,
+          "reverse_inward_m3_s": 0.0,
+          "net_outward_m3_s": 0.74929221503
+        },
+        "walls_net_outward_m3_s": 0.0,
+        "partition_net_outward_m3_s": 0.0,
+        "net_boundary_outward_m3_s": -0.00070778497,
+        "absolute_flux_imbalance_m3_s": 0.00070778497,
+        "relative_flux_imbalance_percent": 0.0943713293333,
+        "flow_balance_assessment": "NO_PROJECT_ACCEPTANCE_CRITERION",
+        "scientific_validation": "BLOCKED"
+      }
+    }
+  },
+  "schema_version": "cleanroomx.openfoam-execution.v1",
+  "boundary_audits": {
+    "1": {
+      "schema_version": "cleanroomx.openfoam-boundary-audit.v1",
+      "status": "input_geometry_and_inlet_flow_consistent",
+      "configuration": 1,
+      "inlet": {
+        "face_count": 16,
+        "area_m2": 4.0,
+        "outward_normal_area_m2": {
+          "+z": 4.0
+        },
+        "velocity_m_s": [
+          0.0,
+          0.0,
+          -0.1875
+        ],
+        "prescribed_inward_volume_flow_m3_s": 0.75,
+        "requested_volume_flow_m3_s": 0.75
+      },
+      "outlet": {
+        "face_count": 40,
+        "area_m2": 10.0,
+        "outward_normal_area_m2": {
+          "+x": 5.0,
+          "-x": 5.0
+        },
+        "actual_solver_volume_flow_m3_s": null,
+        "actual_solver_flux_status": "not_measured"
+      },
+      "flow_balance_status": "not_measured",
+      "scientific_validation": "BLOCKED"
+    },
+    "2": {
+      "schema_version": "cleanroomx.openfoam-boundary-audit.v1",
+      "status": "input_geometry_and_inlet_flow_consistent",
+      "configuration": 2,
+      "inlet": {
+        "face_count": 30,
+        "area_m2": 7.5,
+        "outward_normal_area_m2": {
+          "+z": 7.5
+        },
+        "velocity_m_s": [
+          0.0,
+          0.0,
+          -0.1
+        ],
+        "prescribed_inward_volume_flow_m3_s": 0.75,
+        "requested_volume_flow_m3_s": 0.75
+      },
+      "outlet": {
+        "face_count": 40,
+        "area_m2": 10.0,
+        "outward_normal_area_m2": {
+          "+x": 5.0,
+          "-x": 5.0
+        },
+        "actual_solver_volume_flow_m3_s": null,
+        "actual_solver_flux_status": "not_measured"
+      },
+      "flow_balance_status": "not_measured",
+      "scientific_validation": "BLOCKED"
+    },
+    "3": {
+      "schema_version": "cleanroomx.openfoam-boundary-audit.v1",
+      "status": "input_geometry_and_inlet_flow_consistent",
+      "configuration": 3,
+      "inlet": {
+        "face_count": 30,
+        "area_m2": 7.5,
+        "outward_normal_area_m2": {
+          "+z": 7.5
+        },
+        "velocity_m_s": [
+          0.0,
+          0.0,
+          -0.1
+        ],
+        "prescribed_inward_volume_flow_m3_s": 0.75,
+        "requested_volume_flow_m3_s": 0.75
+      },
+      "outlet": {
+        "face_count": 30,
+        "area_m2": 7.5,
+        "outward_normal_area_m2": {
+          "-z": 7.5
+        },
+        "actual_solver_volume_flow_m3_s": null,
+        "actual_solver_flux_status": "not_measured"
+      },
+      "flow_balance_status": "not_measured",
+      "scientific_validation": "BLOCKED"
+    }
+  },
+  "solver_release": "OpenFOAM Foundation v10",
+  "solver_build": "10-c4cf895ad8fa",
+  "executables": {
+    "blockMesh": "/opt/openfoam10/platforms/linux64GccDPInt32Opt/bin/blockMesh",
+    "checkMesh": "/opt/openfoam10/platforms/linux64GccDPInt32Opt/bin/checkMesh",
+    "simpleFoam": "/opt/openfoam10/platforms/linux64GccDPInt32Opt/bin/simpleFoam"
+  },
+  "warning": "Review residuals, mass conservation, mesh sensitivity and physical validity",
+  "simulation_id": "run-c9ae74ad4694",
+  "result_synchronization": {
+    "1": {
+      "status": "results_synced",
+      "simulation_id": "run-c9ae74ad4694",
+      "case_id": "configuration_1",
+      "configuration_hash": "e1901952173aa7b3af720df0d0431b882b0776c3678ce0050895c18d3c5f818e",
+      "manifest": "/workspace/scratch/a50b614113ea/desktop_solver_final_native/runs/run-c9ae74ad4694/results/run-c9ae74ad4694/configuration_1/sync_manifest.json",
+      "manifest_sha256": "79138574e83da7f86caafec369ac879954d21697928b82099f9947b47b8e441f",
+      "record_count": 3,
+      "times": [
+        "50",
+        "100",
+        "150"
+      ],
+      "error_count": 0,
+      "scientific_validation": "BLOCKED"
+    },
+    "2": {
+      "status": "results_synced",
+      "simulation_id": "run-c9ae74ad4694",
+      "case_id": "configuration_2",
+      "configuration_hash": "08efa221adfeeebc3597927ceb0a1ddb40fb053a512458042cc8d564d9a09da9",
+      "manifest": "/workspace/scratch/a50b614113ea/desktop_solver_final_native/runs/run-c9ae74ad4694/results/run-c9ae74ad4694/configuration_2/sync_manifest.json",
+      "manifest_sha256": "fb65fd5556010ead2a65a73f94d22dc78792e25435b287ef588abd299ef59273",
+      "record_count": 3,
+      "times": [
+        "50",
+        "100",
+        "150"
+      ],
+      "error_count": 0,
+      "scientific_validation": "BLOCKED"
+    },
+    "3": {
+      "status": "results_synced",
+      "simulation_id": "run-c9ae74ad4694",
+      "case_id": "configuration_3",
+      "configuration_hash": "a0560ed0c79d4557ff9f48c9109acb848d7ca24975889567be8ddaf43f1b84a3",
+      "manifest": "/workspace/scratch/a50b614113ea/desktop_solver_final_native/runs/run-c9ae74ad4694/results/run-c9ae74ad4694/configuration_3/sync_manifest.json",
+      "manifest_sha256": "4f55a91205558df7305b4af200b2aff9eb58a114db6d58d7d448c62b66f0fbb4",
+      "record_count": 3,
+      "times": [
+        "50",
+        "100",
+        "150"
+      ],
+      "error_count": 0,
+      "scientific_validation": "BLOCKED"
+    }
+  }
+}
+
+Process exited successfully. Review the command evidence; this does not establish CFD convergence or validation.

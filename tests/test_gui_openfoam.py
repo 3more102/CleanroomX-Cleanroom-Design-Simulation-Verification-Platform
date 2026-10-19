@@ -206,12 +206,18 @@ def test_process_group_launch_options_isolate_solver_children(monkeypatch) -> No
 
 
 @pytest.mark.parametrize(
-    ("force", "expected_signal"),
-    ((False, signal.SIGTERM), (True, signal.SIGKILL)),
+    ("force", "expected_signal_name"),
+    ((False, "SIGTERM"), (True, "SIGKILL")),
 )
 def test_posix_process_stop_signals_the_openfoam_process_group(
-    monkeypatch, force, expected_signal
+    monkeypatch, force, expected_signal_name
 ) -> None:
+    # Windows does not define SIGKILL or os.killpg. Exercise the explicit
+    # POSIX branch with test doubles rather than failing during collection.
+    synthetic_kill = 9
+    if not hasattr(gui_openfoam.signal, "SIGKILL"):
+        monkeypatch.setattr(gui_openfoam.signal, "SIGKILL", synthetic_kill, raising=False)
+    expected_signal = getattr(gui_openfoam.signal, expected_signal_name)
     calls = []
     monkeypatch.setattr(
         gui_openfoam.os,
@@ -219,6 +225,7 @@ def test_posix_process_stop_signals_the_openfoam_process_group(
         lambda process_group, received_signal: calls.append(
             (process_group, received_signal)
         ),
+        raising=False,
     )
     process = SimpleNamespace(pid=4321)
 

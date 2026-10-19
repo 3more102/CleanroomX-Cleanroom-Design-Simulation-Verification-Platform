@@ -5,6 +5,8 @@ import hashlib
 import json
 import math
 import re
+import shutil
+import tempfile
 from pathlib import Path
 
 from .cfd_openfoam import SCHEMA, export_openfoam_cases, validate_openfoam_spec
@@ -89,22 +91,46 @@ def prepare_room_study(project: dict, room_id: str, directory: str | Path, *,
     root = Path(directory)
     if root.exists() or root.is_symlink():
         raise FileExistsError("Choose a new run directory; previous runs are retained")
-    # The existing exporter also verifies all boundary inputs before publication.
-    manifest = export_openfoam_cases(spec, root / "cases")
-    provenance = {"schema_version": "cleanroomx.desktop-room-study.v1", **source,
-                  "supply_airflow_m3_h_used": supply_airflow_m3_h,
-                  "supply_origin": "declared_verification_input" if supply_airflow_m3_h == source["supply_airflow_m3_h"] else "user_override",
-                  "input_supply_ach_per_h": supply_airflow_m3_h / source["volume_m3"],
-                  "case_spec_sha256": manifest["spec_sha256"],
-                  "model": "Three alternative idealized steady isothermal laminar rectangular-room layouts",
-                  "assumptions": ["Uses selected-room dimensions and declared or edited supply airflow",
-                                  "Device locations, obstructions, doors and inter-room connections are not meshed",
-                                  "Pressure setpoints are not computed pressure results",
-                                  "No turbulence, heat, contaminant or particle transport is solved"],
-                  "scientific_validation": "BLOCKED"}
-    (root / "specification.json").write_text(json.dumps(spec, indent=2, allow_nan=False) + "\n", encoding="utf-8")
-    (root / "project-input.json").write_text(json.dumps(project, indent=2, ensure_ascii=False, allow_nan=False) + "\n", encoding="utf-8")
-    (root / "room-study.json").write_text(json.dumps(provenance, indent=2, ensure_ascii=False, allow_nan=False) + "\n", encoding="utf-8")
+    root.parent.mkdir(parents=True, exist_ok=True)
+
+    # Stage every case and provenance file in a private sibling directory.
+    # Publishing the finished directory via same-parent rename means failed
+    # writes cannot leave a half-prepared run at the requested destination.
+    staging = Path(tempfile.mkdtemp(prefix=".cleanroomx-room-study-", dir=root.parent))
+    published = False
+    try:
+        manifest = export_openfoam_cases(spec, staging / "cases")
+        provenance = {"schema_version": "cleanroomx.desktop-room-study.v1", **source,
+                      "supply_airflow_m3_h_used": supply_airflow_m3_h,
+                      "supply_origin": "declared_verification_input" if supply_airflow_m3_h == source["supply_airflow_m3_h"] else "user_override",
+                      "input_supply_ach_per_h": supply_airflow_m3_h / source["volume_m3"],
+                      "case_spec_sha256": manifest["spec_sha256"],
+                      "model": "Three alternative idealized steady isothermal laminar rectangular-room layouts",
+                      "assumptions": ["Uses selected-room dimensions and declared or edited supply airflow",
+                                      "Device locations, obstructions, doors and inter-room connections are not meshed",
+                                      "Pressure setpoints are not computed pressure results",
+                                      "No turbulence, heat, contaminant or particle transport is solved"],
+                      "scientific_validation": "BLOCKED"}
+        (staging / "specification.json").write_text(
+            json.dumps(spec, indent=2, allow_nan=False) + "\n", encoding="utf-8"
+        )
+        (staging / "project-input.json").write_text(
+            json.dumps(project, indent=2, ensure_ascii=False, allow_nan=False) + "\n",
+            encoding="utf-8",
+        )
+        (staging / "room-study.json").write_text(
+            json.dumps(provenance, indent=2, ensure_ascii=False, allow_nan=False) + "\n",
+            encoding="utf-8",
+        )
+        # Another process might have created the requested destination during
+        # generation. Preserve its files rather than knowingly replacing it.
+        if root.exists() or root.is_symlink():
+            raise FileExistsError("Run directory appeared while preparing; choose another")
+        staging.rename(root)
+        published = True
+    finally:
+        if not published:
+            shutil.rmtree(staging)
     return {"directory": str(root), "cases": str(root / "cases"),
             "results": str(root / "results"), "specification": str(root / "specification.json"),
             "provenance": provenance}

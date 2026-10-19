@@ -20,6 +20,16 @@ def room_study_input(project: dict, room_id: str) -> dict:
     if any(type(v) not in (float, int) or not math.isfinite(v) or v <= 0 for v in dimensions):
         raise ValueError("The selected room needs finite, positive dimensions")
     name = room.get("analysis_room_name") or room["name"]
+    # Verification inputs are keyed by engineering room names rather than
+    # Studio IDs. Never auto-assign a shared name's airflow to multiple rooms.
+    identity = name.strip().casefold()
+    same_identity = [
+        item for item in layout.get("rooms", [])
+        if isinstance(item, dict)
+        and isinstance(item.get("analysis_room_name") or item.get("name"), str)
+        and (item.get("analysis_room_name") or item.get("name")).strip().casefold() == identity
+    ]
+    ambiguous_room_identity = len(same_identity) != 1
     candidates = []
     for analysis in project.get("analyses", []):
         payload = analysis.get("input", {})
@@ -37,9 +47,10 @@ def room_study_input(project: dict, room_id: str) -> dict:
     return {
         "room_id": room_id, "room_name": room["name"], "room_m": dimensions,
         "volume_m3": math.prod(dimensions),
-        "supply_airflow_m3_h": next(iter(values)) if len(values) == 1 else None,
+        "supply_airflow_m3_h": next(iter(values)) if len(values) == 1 and not ambiguous_room_identity else None,
         "supply_sources": candidates,
-        "supply_status": "declared" if len(values) == 1 else "conflicting" if values else "missing",
+        "supply_status": "ambiguous_room_identity" if ambiguous_room_identity else
+                         "declared" if len(values) == 1 else "conflicting" if values else "missing",
         "project_sha256": hashlib.sha256(json.dumps(project, sort_keys=True, separators=(",", ":"),
                                                    ensure_ascii=False, allow_nan=False).encode()).hexdigest(),
     }

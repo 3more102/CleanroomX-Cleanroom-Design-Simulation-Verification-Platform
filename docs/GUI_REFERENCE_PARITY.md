@@ -153,3 +153,5 @@ Open **Display** in Design Studio to toggle **3D + navigator: Air devices**, **O
 ## Type-specific 3D equipment symbols
 
 The 3D scene now distinguishes model device types with native Tk vectors: an FFU has a three-blade fan icon, supply has a downward arrow in a square, return/exhaust an upward arrow in a square, and other equipment a diamond icon. A selected device has a visible circular halo. These glyphs retain actual model selection hit tags and do not alter coordinates, volume, physical airflow, or simulated results.
+
+The upper-left **Room Composition** header now includes one-click, dynamically counted AIR / OPEN / OTHER category chips. Clicking a chip toggles the matching Display-menu setting in both 3D and the mini-map; disabled chips visually deselect, and the room/device data remain unchanged. Controls hide on compact view heights rather than colliding with room geometry.

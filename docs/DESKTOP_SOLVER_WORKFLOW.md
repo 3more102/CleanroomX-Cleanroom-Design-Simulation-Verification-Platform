@@ -27,7 +27,14 @@ pressure, velocity and flux values come from their output files.
 residual values are surfaced across all cases, even if subsequent logs exist;
 affected stages are not counted as finished by the indicator. Verified receipts
 and the process exit status remain authoritative for success.
-6. The result explorer opens automatically after successful synchronization.
+6. For room studies, a zero process exit code is not interpreted as nine
+   completed solver stages. The UI recounts the nine native blockMesh/checkMesh/
+   simpleFoam log endings and checks any recorded fatal or non-finite residual
+   diagnostics. Missing or erroneous stage evidence blocks automatic results
+   opening and is shown as an unverified run. The backend's evidence receipts
+   and field hashes still require independent verification.
+7. The result explorer opens automatically only after stage-log screening and
+   successful synchronization.
    Select field history, residuals, boundary flow balance, whole-domain supply ACH,
    spatial cell samples or region statistics. **Export report + data…** retains
    the selected graphs, raw graph values, sources and hashes.

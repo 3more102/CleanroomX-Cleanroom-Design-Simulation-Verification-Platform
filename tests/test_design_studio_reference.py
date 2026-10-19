@@ -505,6 +505,11 @@ def test_studio_device_inspection_card_uses_shared_selection(gui):
     )
     assert "X 1.5 m" in canvas.itemcget(position[0], "text")
     assert "Y 2 m" in canvas.itemcget(position[0], "text")
+    before_zoom = ws.layout["view"]["zoom_3d"]
+    click_tag(canvas, "studio-action:focus-device")
+    assert ws.selected.kind == "device"
+    assert ws.selected.item_id == "supply-process"
+    assert ws.layout["view"]["zoom_3d"] > before_zoom
     click_tag(canvas, "studio-action:inspect-device")
     gui.root.update()
     assert ws.selected.kind == "device"

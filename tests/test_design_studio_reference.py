@@ -223,7 +223,12 @@ def click_tag(canvas, tag):
     items = canvas.find_withtag(tag)
     assert items, f"Missing visible control: {tag}"
     x0, y0, x1, y1 = canvas.bbox(items[-1])
-    x, y = round((x0 + x1) / 2), round((y0 + y1) / 2)
+    # Room miniatures can contain legitimate equipment markers at their centers.
+    # Click an unobstructed room corner to exercise room-selection semantics.
+    if tag.startswith("navigator-room:"):
+        x, y = round(x0 + min(3, (x1 - x0) / 5)), round(y0 + min(3, (y1 - y0) / 5))
+    else:
+        x, y = round((x0 + x1) / 2), round((y0 + y1) / 2)
     canvas.event_generate("<Motion>", x=x, y=y)
     canvas.update()
     canvas.event_generate("<Button-1>", x=x, y=y)

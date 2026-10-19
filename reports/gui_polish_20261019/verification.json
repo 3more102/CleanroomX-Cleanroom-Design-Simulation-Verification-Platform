@@ -1,0 +1,63 @@
+{
+  "source_commit": "431688e88e13fe6444669999a293fcea9522c47c",
+  "source_tree": "1b0e17539cd897218e33da9684c35a77c962f851",
+  "local_validation_commit": "fadfb6d7445c4bb65e573518905075408a2c4d76",
+  "source_trees_match": true,
+  "full_local_regression": {
+    "tests": 2409,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 1,
+    "passed": 2408,
+    "duration_seconds": 149.642,
+    "junit_sha256": "2e18aa55c7d6919a2541aecf5ebf5fd11e709efd3e0ed31a08813f17233837f0"
+  },
+  "desktop_local_regression": {
+    "tests": 191,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "passed": 191,
+    "duration_seconds": 22.41,
+    "junit_sha256": "a3ca7adf77491ab49cdf58cb5f857b6ef0b63800d001a1b4816902b4a74e7622"
+  },
+  "captures": [
+    {
+      "receipt": "design_studio_1280x800.json",
+      "resolution": [
+        1280,
+        800
+      ],
+      "image_sha256": "d3c9c36dfc4830c88d98da5ad726409056a96a6dbdbc7a220e304b648d5735aa"
+    },
+    {
+      "receipt": "design_studio_1536x960.json",
+      "resolution": [
+        1536,
+        960
+      ],
+      "image_sha256": "78ececbbe4656daad2ac57c0891a9ceef6de06f51c655d33231382ae6ac86ff7"
+    },
+    {
+      "receipt": "design_studio_1920x1080.json",
+      "resolution": [
+        1920,
+        1080
+      ],
+      "image_sha256": "a8904d586ddf95c9d82f132f190ad75178da7e6ec346ed995c34778a6d4a4958"
+    }
+  ],
+  "visual_review": {
+    "method": "Direct inspection of actual Linux desktop captures at all three resolutions",
+    "room_geometry_and_counts": "Live canonical spatial model",
+    "new_interactions": [
+      "Action hover feedback",
+      "Active camera preset",
+      "Edit room Inspector",
+      "Focus/Isolate from selected device room"
+    ],
+    "windows_native_appearance": "Not manually inspected"
+  },
+  "ci_results": "Current-head GitHub Actions results are linked from PR #1354",
+  "launch_command": "cleanroomx-gui --demo"
+}

@@ -38,13 +38,35 @@ codes, privacy considerations, and limitations.
 - Compare three supply/exhaust layouts: central ceiling / low-wall, distributed ceiling / low-wall, and distributed ceiling / raised perforated floor.
 - Post-process externally computed velocity vectors, concentration fields, and solver-labelled recirculation regions with volume weighting and supply/exhaust balance checks.
 - Require matching case conditions and explicit project tolerances before comparison; **never infer CFD results from the study handout**.
-- This feature is **not an integrated CFD solver**. See [CFD Ventilation Study](docs/CFD_VENTILATION_STUDY.md).
+- Study comparisons consume supplied solver results; the desktop execution workflow is described below. See [CFD Ventilation Study](docs/CFD_VENTILATION_STUDY.md).
 
 ### CFD solver case pipeline (external OpenFOAM)
 
+- **Studio → CFD / simulation… → Run room study** now launches real solver cases from the selected room's dimensions and declared airflow, shows live log progress, retains run inputs, and opens verified result graphs automatically.
+- Native Linux and Windows WSL connections, plus measured boundary balance and whole-domain supply ACH: [Desktop solver workflow](docs/DESKTOP_SOLVER_WORKFLOW.md).
+
 - Parameterized 3D case generation for all three ventilation layouts, with physically explicit inlet/outlet patches and SHA-256 manifest.
 - Opt-in OpenFOAM Foundation v10 laminar flow execution, VTK cell field import, and cross-section previews.
+- Bounded two-room Foundation v10 integration case with an aligned internal door opening, room pressure probes, measured `phi` flux diagnostics, and a hash-bound run receipt.
 - This is **not a physically validated end-to-end CFD/particle solver**. See [OpenFOAM CFD Pipeline](docs/CFD_OPENFOAM_PIPELINE.md).
+- The two-room synthetic integration case and its limits are documented in [Two-Room OpenFOAM Workflow](docs/CFD_TWO_ROOM.md).
+- Track documented Foundation v10 capabilities, measured parity scores, and open evidence gaps in the [Foundation v10 capability matrix](docs/OPENFOAM_FOUNDATION_V10_PARITY.md).
+
+### Interactive solver-result analysis
+
+- Open **Analyze / graph results…** in the OpenFOAM workspace for verified native runtime-sync stores, or **Analyze results…** in the two-room panel.
+- Load a complete nine-case OpenFOAM grid run with its configuration/resolution identities. Select the matching grid family and **Verify original OpenFOAM field files** to check native time/field bytes and attach hash-bound solver/mesh diagnostics.
+- Inspect volume-weighted speed, kinematic pressure, kelvin temperature and other recorded scalar/vector components; select a case and solver time for 2D cell slabs or interactive 3D cell samples.
+- Select signed `U_x`/`U_y`/`U_z`, choose a comparison run explicitly, or limit field statistics and spatial plots to a custom cell-center box. The **Region & statistics** tab reports selected cells, full-cell volume, mesh-volume coverage, means and ranges.
+- Compare configuration/run means at the same solver time, inspect linear residual histories and mesh warnings, and graph two-room probe pressure differences, signed boundary flow balance and whole-domain inlet supply ACH.
+- Export PNG/SVG figures, plotted-point and full selected-cell CSV, complete residual histories, JSON analysis, a Markdown report, and extended ProofGraph evidence with source hashes. Missing fields remain **not available**.
+- Region exports include `selections.csv`, exact box bounds and selected-cell identity hashes; an empty box remains unavailable. Box selection does not establish per-room airflow or ACH.
+- [Analysis guide and data requirements](docs/CFD_RESULT_ANALYSIS.md). Spatial samples are not interpolated contours; these calculations do not establish solver convergence or physical cleanroom validation.
+
+Actual Tk explorer capture using an explicitly labeled synthetic parser fixture
+(no OpenFOAM solver run):
+
+![CleanroomX solver-result analysis explorer](docs/screenshots/cfd-analysis/cfd-analysis-field-history.png)
 
 ### Source-driven CFD passive tracer and numerical audit
 
@@ -133,12 +155,36 @@ Spatial and engineering data remain deliberately separated.
 
 ### Windows — repository checkout
 
-From PowerShell:
+Install Git and Python 3.11 or newer with Tcl/Tk first. From PowerShell,
+run this on a laptop without a checkout. It clones the computed-graph branch to
+your user folder and launches the demo:
 
 ```powershell
-cd C:\CleanroomX
+$repoPath = Join-Path $env:USERPROFILE 'CleanroomX'
+$repoBranch = 'feat/demo-computed-graphs-20261016'
+$repoUrl = 'https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform.git'
+if (Test-Path $repoPath) {
+    if (-not (Test-Path (Join-Path $repoPath '.git'))) {
+        throw 'The CleanroomX folder exists but is not a Git checkout. Choose another path or move it first.'
+    }
+    $currentBranch = git -C $repoPath branch --show-current
+    if ($LASTEXITCODE -ne 0) { throw 'Could not read the current CleanroomX branch.' }
+    if ($currentBranch -ne $repoBranch) {
+        throw "The existing checkout is on '$currentBranch'. Switch it to '$repoBranch' or use another folder."
+    }
+} else {
+    git clone --branch $repoBranch $repoUrl $repoPath
+    if ($LASTEXITCODE -ne 0) { throw 'Git clone failed.' }
+}
+Set-Location $repoPath
 .\start-cleanroomx.ps1
 ```
+
+The launchers open a computed **fan/system operating-point example graph** by
+default. It is based on bundled, explicitly illustrative engineering inputs,
+not a validated CFD field or physical cleanroom measurement. Use
+`.\start-cleanroomx.ps1 --demo` to open the synchronized 2D/3D design demo
+instead.
 
 CMD is also supported:
 
@@ -166,6 +212,13 @@ Open the packaged demonstration:
 
 ```bash
 cleanroomx-gui --demo
+```
+
+To run the example fan/system calculation and display the computed graph at
+startup:
+
+```bash
+cleanroomx-gui --demo-results
 ```
 
 Headless readiness check:
@@ -206,6 +259,25 @@ cleanroomx-project-check project.cleanroomx.json
 See [Project Diagnostics](docs/PROJECT_DIAGNOSTICS.md) for rule scope, severity, freshness behavior, and exit codes.
 
 Other installed CLIs cover HVAC, qualification, duct flow, loop networks, fan/network studies, uncertainty, consistency checks, and engineering dossiers.
+
+Generate and audit a synthetic two-room OpenFOAM integration case:
+
+```bash
+cleanroomx-cfd-pipeline two-room-generate examples/cfd_two_room_5pa.example.json ./two_room_case
+cleanroomx-cfd-pipeline two-room-audit ./two_room_case
+```
+
+With OpenFOAM Foundation v10 sourced, run it and write a receipt outside the
+case directory:
+
+```bash
+cleanroomx-cfd-pipeline two-room-run ./two_room_case --receipt-directory ./two_room_receipt
+cleanroomx-cfd-pipeline two-room-receipt-audit ./two_room_receipt/two_room_run_receipt.json
+cleanroomx-cfd-pipeline two-room-proofgraph ./two_room_case ./two_room_receipt/two_room_run_receipt.json ./two-room-proofgraph.json
+```
+
+See [Two-Room OpenFOAM Workflow](docs/CFD_TWO_ROOM.md) for the input schema,
+evidence fields, CI smoke run, and limits of the synthetic 5 Pa target.
 
 ## Validation
 

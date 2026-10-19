@@ -1,0 +1,124 @@
+from __future__ import annotations
+
+import copy
+import json
+import os
+from pathlib import Path
+import sys
+
+import pytest
+
+from cleanroomx.cfd_desktop import prepare_room_study, read_solver_progress, room_study_input
+from cleanroomx.cfd_openfoam import verify_openfoam_case_bundle
+from cleanroomx.cfd_runtime import runtime_command, runtime_report, wsl_stop_command
+from cleanroomx.gui import bundled_demo_project_path
+
+
+def demo():
+    return json.loads(bundled_demo_project_path().read_text(encoding="utf-8"))
+
+
+def test_room_study_uses_current_geometry_and_declared_flow_without_mutating_project(tmp_path):
+    project = demo()
+    project["project"]["metadata"]["spatial_layout"]["rooms"][0]["length_m"] = 8
+    before = copy.deepcopy(project)
+    source = room_study_input(project, "process")
+    assert source["room_m"] == [8, 5, 3]
+    assert source["supply_airflow_m3_h"] == 2700
+    prepared = prepare_room_study(project, "process", tmp_path / "run", supply_airflow_m3_h=1800,
+                                  mesh_cells=[6, 6, 6], max_iterations=80)
+    spec = json.loads(Path(prepared["specification"]).read_text())
+    assert spec["room_m"] == [8, 5, 3]
+    assert spec["supply_flow_m3_s"] == .5
+    assert prepared["provenance"]["supply_origin"] == "user_override"
+    assert prepared["provenance"]["input_supply_ach_per_h"] == 15
+    assert prepared["provenance"]["scientific_validation"] == "BLOCKED"
+    assert verify_openfoam_case_bundle(prepared["cases"])["files_checked"] == 24
+    assert project == before
+    with pytest.raises(FileExistsError):
+        prepare_room_study(project, "process", tmp_path / "run", supply_airflow_m3_h=1800,
+                           mesh_cells=[6, 6, 6], max_iterations=80)
+
+
+def test_missing_or_conflicting_supply_is_never_replaced_by_a_demo_value():
+    project = demo()
+    project["analyses"] = []
+    assert room_study_input(project, "process")["supply_airflow_m3_h"] is None
+    project = demo()
+    other = copy.deepcopy(project["analyses"][0])
+    other["id"] = "other"
+    other["input"]["rooms"][0]["supply_airflow_m3_h"] = 3600
+    project["analyses"].append(other)
+    source = room_study_input(project, "process")
+    assert source["supply_status"] == "conflicting"
+    assert source["supply_airflow_m3_h"] is None
+
+
+@pytest.mark.parametrize("flow,mesh,iterations", [(float("nan"), [6, 6, 6], 10),
+                                                   (100, [80, 80, 80], 10),
+                                                   (100, [6, 6, 6], 0)])
+def test_invalid_room_settings_do_not_publish_a_case(tmp_path, flow, mesh, iterations):
+    with pytest.raises(ValueError):
+        prepare_room_study(demo(), "process", tmp_path / "bad", supply_airflow_m3_h=flow,
+                           mesh_cells=mesh, max_iterations=iterations)
+    assert not (tmp_path / "bad").exists()
+
+
+def test_progress_reports_written_solver_iterations_and_residuals(tmp_path):
+    case = tmp_path / "configuration_1"
+    case.mkdir()
+    (case / "blockMesh.log").write_text("real mesh log\nEnd\n")
+    (case / "simpleFoam.log").write_text("sigFpe: Enabling floating point exception trapping (FOAM_SIGFPE).\nTime = 42\nsmoothSolver: Solving for Uy, Initial residual = 0.0012, Final residual = 7e-08, No Iterations 2\n")
+    progress = read_solver_progress(tmp_path)
+    assert progress["completed_stages"] == 1
+    assert progress["latest"]["iteration"] == "42"
+    assert progress["latest"]["residual"] == ("Uy", "0.0012", "7e-08")
+    assert not progress["latest"]["ended"]
+    assert not progress["latest"]["fatal_error"]
+    with (case / "simpleFoam.log").open("a") as stream:
+        stream.write("FOAM FATAL ERROR\n")
+    assert read_solver_progress(tmp_path)["latest"]["fatal_error"]
+
+
+def test_native_runtime_wrapper_keeps_shell_metacharacters_in_arguments(tmp_path):
+    if os.name == "nt":
+        command = [sys.executable, "-c", "pass"]
+        assert runtime_command(command, mode="native", bashrc="") == command
+        return
+    bashrc = tmp_path / "runtime with ' quotes ; $(ignored)"
+    bashrc.write_text("export WM_PROJECT=OpenFOAM\nexport WM_PROJECT_VERSION=10\n")
+    import subprocess
+    command = [sys.executable, "-c", "import sys;print(sys.argv[1])", "case ' ; $(not-a-command)"]
+    wrapped = runtime_command(command, mode="native", bashrc=str(bashrc))
+    result = subprocess.run(wrapped, capture_output=True, text=True, check=True)
+    assert result.stdout.strip() == command[-1]
+
+
+def test_wsl_runtime_uses_host_package_and_translates_only_path_arguments(monkeypatch, tmp_path):
+    from cleanroomx import cfd_runtime
+    monkeypatch.setattr(cfd_runtime.shutil, "which", lambda name: "wsl.exe")
+    case, results = str(tmp_path / "case folder"), str(tmp_path / "result folder")
+    command = ["python.exe", "-m", "cleanroomx.cfd_pipeline_cli", "run", case,
+               "--sync-results", results, "--simulation-id", "run-01"]
+    wrapped = runtime_command(command, mode="wsl", bashrc="/opt/openfoam10/etc/bashrc",
+                              distribution="Ubuntu ' test", path_mapper=lambda path: "mapped:" + path,
+                              wsl_python="/home/operator/solver env/bin/python")
+    assert wrapped[:3] == ["wsl.exe", "--distribution", "Ubuntu ' test"]
+    assert wrapped[-8:] == ["-m", "cleanroomx.cfd_pipeline_cli", "run", "mapped:" + case,
+                           "--sync-results", "mapped:" + results, "--simulation-id", "run-01"]
+    assert "/home/operator/solver env/bin/python" in wrapped
+    assert "PYTHONPATH" in wrapped[wrapped.index("-c") + 1]
+    stopped = wsl_stop_command(wrapped, 1234)
+    assert stopped[:3] == wrapped[:3]
+    assert stopped[-4:] == ["kill", "-TERM", "--", "-1234"]
+    with pytest.raises(ValueError):
+        wsl_stop_command(wrapped, -1)
+
+
+def test_runtime_check_reports_missing_runtime_instead_of_simulated_success(monkeypatch):
+    from cleanroomx import cfd_runtime
+    monkeypatch.setattr(cfd_runtime.shutil, "which", lambda name: None)
+    monkeypatch.delenv("WM_PROJECT", raising=False)
+    report = runtime_report()
+    assert report["status"] == "unavailable"
+    assert any("blockMesh" in issue for issue in report["issues"])

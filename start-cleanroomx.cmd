@@ -36,7 +36,7 @@ if errorlevel 1 (
 )
 
 if "%~1"=="" (
-    "%CLEANROOMX_PY%" %CLEANROOMX_PY_ARGS% -m cleanroomx.gui --demo
+    "%CLEANROOMX_PY%" %CLEANROOMX_PY_ARGS% -m cleanroomx.gui --demo-results
 ) else (
     "%CLEANROOMX_PY%" %CLEANROOMX_PY_ARGS% -m cleanroomx.gui %*
 )

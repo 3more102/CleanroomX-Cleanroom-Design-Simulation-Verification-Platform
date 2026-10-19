@@ -123,12 +123,14 @@ def normalize_gui_layout_state(value: Any) -> dict[str, Any]:
         "window_width": _bounded_dimension(
             source.get("window_width"),
             _DEFAULT_GUI_LAYOUT_STATE["window_width"],
-            minimum=1050,
+            # Small displays can have a client area below the nominal minimum.
+            # The application enforces its usable minimum against that display.
+            minimum=1,
         ),
         "window_height": _bounded_dimension(
             source.get("window_height"),
             _DEFAULT_GUI_LAYOUT_STATE["window_height"],
-            minimum=680,
+            minimum=1,
         ),
         "navigator_fraction": _bounded_fraction(
             source.get("navigator_fraction"),

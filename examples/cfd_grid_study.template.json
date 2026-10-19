@@ -1,10 +1,11 @@
 {
-  "schema_version": "cleanroomx.cfd-grid-study.v1",
+  "schema_version": "cleanroomx.cfd-grid-study.v2",
   "name": "UNVALIDATED TEMPLATE -- actual VTK files and solver logs required",
   "configuration": 1,
   "room_volume_m3": 12,
   "quantity": "velocity_mean_m_s",
   "unit": "m/s",
+  "contaminant_array": null,
   "criteria": {
     "min_refinement_ratio": 1.1,
     "max_relative_volume_error": 0.001,

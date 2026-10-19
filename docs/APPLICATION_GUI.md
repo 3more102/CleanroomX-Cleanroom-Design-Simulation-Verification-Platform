@@ -28,13 +28,25 @@ Open the self-contained demonstration project shipped inside the installed packa
 cleanroomx-gui --demo
 ```
 
+Open a *calculated* example and its graph automatically:
+
+```bash
+cleanroomx-gui --demo-results
+```
+
+This selects the bundled fan/system operating-point case, executes the actual
+numerical backend in a worker thread, and opens the **Plot** tab. The graph
+comes from solved example inputs (fan/system curves and the operating point),
+not fabricated display data. It is not OpenFOAM CFD, independent measured
+evidence, or cleanroom performance validation.
+
 On Windows, a repository checkout can launch the current source tree without relying on the console-script PATH:
 
 ```powershell
 .\start-cleanroomx.ps1
 ```
 
-The launcher prefers `.venv\Scripts\python.exe`, sets the repository `src` directory for imports, and defaults to `--demo`, which exposes the synchronized **Design 2D + 3D** workspace. `.\start-cleanroomx.cmd` provides the same behavior from PowerShell, Command Prompt, or Explorer. Both launchers validate the selected interpreter before importing CleanroomX: Python must be 3.11 or newer and Tkinter must be available. Unsupported runtimes fail immediately with an actionable startup message instead of entering the GUI import path.
+The launcher prefers `.venv\Scripts\python.exe`, sets the repository `src` directory for imports, and defaults to `--demo-results`, which opens the calculated fan/system graph. Pass `--demo` explicitly to open the synchronized **Design 2D + 3D** workspace instead. `.\start-cleanroomx.cmd` provides the same behavior from PowerShell, Command Prompt, or Explorer. Both launchers validate the selected interpreter before importing CleanroomX: Python must be 3.11 or newer and Tkinter must be available. Unsupported runtimes fail immediately with an actionable startup message instead of entering the GUI import path.
 
 Check that the application layer, GUI imports, and every declared parser/runner/reporter binding are usable without opening a window:
 
@@ -150,9 +162,9 @@ Consistency and dossier workflows resolve relative file references against proje
 
 The main notebook now includes **Design 2D + 3D**, a synchronized cleanroom layout workspace backed by project metadata. It is intentionally separate from the engineering solver implementations: spatial edits do not silently change analysis inputs.
 
-The desktop shell now presents that capability as a professional engineering workspace rather than a flat analysis/form layout. A hierarchical **Project Navigator** groups the building/floor/rooms, devices, HVAC, pressure network, analyses, requirements, ProofGraph, evidence, and reports. Room/device selection is synchronized between the navigator and the design workspace. The design surface provides explicit **2D**, **3D**, and **Split** modes (Ctrl+1/Ctrl+2/Ctrl+3) so either viewport can use the primary screen area instead of being permanently compressed beside the other. The properties inspector is grouped by geometry, cleanroom, identity, and placement context, and hides fields that do not apply to the current spatial object. A compact **Guided Workflow** strip keeps the common path visible as **Design → Inputs → Validate → Run → Save & Verify → Report**, while the full menus, command palette, 2D/3D controls, diagnostics, and advanced engineering tools remain available.
+The desktop shell now presents that capability as a professional engineering workspace rather than a flat analysis/form layout. A hierarchical **Project Navigator** groups the building/floor/rooms, devices, HVAC, pressure network, analyses, requirements, ProofGraph, evidence, and reports. Room/device selection is synchronized between the navigator and the design workspace. The design surface provides explicit **2D**, **3D**, and **Split** modes (Ctrl+1/Ctrl+2/Ctrl+3) so either viewport can use the primary screen area instead of being permanently compressed beside the other. The properties inspector is grouped by geometry, cleanroom, identity, and placement context, and hides fields that do not apply to the current spatial object. Its fields scroll inside the inspector while the selection summary and Apply/engineering-sync actions remain visible in compact panes. A compact **Guided Workflow** strip keeps the common path visible as **Design → Inputs → Validate → Run → Save & Verify → Report**, while the full menus, command palette, 2D/3D controls, diagnostics, and advanced engineering tools remain available.
 
-The 2D view supports room creation, selection, drag movement with metric grid snapping, property editing and resizing, deletion, zoom, pan, fit-to-view, coordinate feedback, and placement of doors, FFUs, supply points, returns, exhausts, equipment, sensors, and transfer openings. The professional 2D interaction layer adds hover highlighting, a live grid snap crosshair, selected-room dimension annotations, and a right-click context menu for properties, duplication/deletion, doors/openings/devices, and analysis linking. Right-click is reserved for contextual commands; middle-button drag remains the pan gesture. Selected rooms expose a drag resize handle; floor name/elevation/default ceiling height and grid spacing are edited through **Floor…**. Snap-to-grid, pressure color, labels, devices, and pressure-cascade relationship arrows can be toggled independently. Drag translation is computed from immutable gesture-start coordinates, so snapped final geometry does not depend on intermediate mouse-motion event sampling. A click/release or drag that returns to the starting geometry is a no-op and does not dirty the project, record undo history, or schedule autosave. Spatial model edits participate in the same bounded application-wide transactional **Undo/Redo** stream as analysis and project edits: add, delete, property changes, and a full drag gesture are each one transaction; redo is invalidated by a new divergent edit, and undo/redo restores selection without rewinding the current camera/view state. The spatial toolbar delegates to that same global history, with Ctrl+Z, Ctrl+Y, and Ctrl+Shift+Z available while a spatial canvas has focus. When room pressure is present in a verification input, the layout visualizes only that supplied pressure data; it does not invent pressure values.
+The 2D view supports room creation, selection, drag movement with metric grid snapping, property editing and resizing, deletion, zoom, pan, fit-to-view, coordinate feedback, and placement of doors, FFUs, supply points, returns, exhausts, equipment, sensors, and transfer openings. The professional 2D interaction layer adds hover highlighting, a live grid snap crosshair, selected-room dimension annotations, and a right-click context menu for properties, duplication/deletion, doors/openings/devices, and analysis linking. Properties and analysis-link shortcuts scroll their target field into view, including in compact inspector panes. Right-click is reserved for contextual commands; middle-button drag remains the pan gesture. Selected rooms expose a drag resize handle; floor name/elevation/default ceiling height and grid spacing are edited through **Floor…**. Snap-to-grid, pressure color, labels, devices, and pressure-cascade relationship arrows can be toggled independently. Drag translation is computed from immutable gesture-start coordinates, so snapped final geometry does not depend on intermediate mouse-motion event sampling. A click/release or drag that returns to the starting geometry is a no-op and does not dirty the project, record undo history, or schedule autosave. Spatial model edits participate in the same bounded application-wide transactional **Undo/Redo** stream as analysis and project edits: add, delete, property changes, and a full drag gesture are each one transaction; redo is invalidated by a new divergent edit, and undo/redo restores selection without rewinding the current camera/view state. The spatial toolbar delegates to that same global history, with Ctrl+Z, Ctrl+Y, and Ctrl+Shift+Z available while a spatial canvas has focus. When room pressure is present in a verification input, the layout visualizes only that supplied pressure data; it does not invent pressure values.
 
 Detailed controls, persistence behavior, spatial metadata, and limitations are documented in [LAYOUT_2D_3D.md](LAYOUT_2D_3D.md).
 
@@ -197,6 +209,57 @@ Cached desktop results are also bound to the canonical SHA-256 of the exact subm
 Runtime implementation provenance fingerprints the installed CleanroomX Python source tree before and after analysis execution. Source capture is fail-closed and resource-bounded: an individual Python source file may contribute at most 16 MiB and the complete source tree at most 128 MiB. Accepted files are read with an explicit manifest-derived byte ceiling while retaining the existing descriptor/path revision checks, so provenance cannot be forced into an unbounded source-content read.
 
 When a supplied fan curve and operating point are available, the application builds a lightweight plot model and renders it with Tk canvas primitives. Fan/system plots reuse backend-computed system-pressure samples, label the two series, and do not reimplement system-curve equations in the GUI.
+
+## OpenFOAM result analysis explorer
+
+The OpenFOAM workspace's **Analyze / graph results…** action reads the native
+runtime-sync store using the entered result directory and simulation ID. Supply
+the matching case bundle to inspect its `simpleFoam.log` and `checkMesh.log`.
+The two-room panel's **Analyze results…** action uses its existing case and
+run-receipt directory. Install the `cfd` extras for VTK and Matplotlib.
+
+Choose a graph, field, case/region and solver time, then **Draw graph**. Field
+histories show volume-weighted means with minimum/maximum bands. Comparisons use
+the exact selected solver time, without substituting another run's latest
+output. **Add comparison…** selects another simulation directory containing
+`configuration_1/…` or a standalone native store. Use **Run** to choose the data
+source; case, field and recorded time choices follow that run. For spatial plots
+choose one run, case and time; the slab axis,
+position and thickness use metres. The Matplotlib toolbar provides pan, zoom,
+reset and save; the 3D view also supports mouse rotation.
+
+Choose **Cell selection → Custom box** to open **Region & statistics**. Enter a
+label and x/y/z minimum and maximum in mesh coordinates, or start with **Use
+selected case mesh bounds**. **Apply box and draw graph** selects cells whose
+centers satisfy `minimum <= coordinate < maximum` on every axis. Full selected
+cell volumes are used; cut cells are not clipped to the box. Adjacent boxes do
+not double-count centers on a shared face. Labels do not verify room identity.
+
+The summary and table show selected cells, volume, volume as a percentage of
+the whole mesh, volume-weighted mean and range. These statistics use all selected
+cells before plot sampling. Empty selections have zero selected volume and an
+unavailable mean. `U_x`, `U_y` and `U_z` retain signed native velocity; `speed` is
+the magnitude. Boxes apply to field and spatial plots, not probe histories,
+boundary flux or ACH. **Refresh solver data** clears graphs and statistics
+before rechecking files; a failed recheck removes stale sessions.
+
+**Sources, statistics, mesh and warnings** contains the full analysis metadata.
+Optional fields and unsupported analyses display **Not available** when no
+matching solver data exists. Logs from older native sync manifests are labeled
+**UNVERIFIED LOG (run unknown)** if the manifest lacks a solver-log hash.
+Future completed runs record that hash; the analysis rejects a changed log.
+
+Use **Add graph to report** to retain up to 16 figures, then **Export report +
+data…** and name a new directory outside the case/result stores.
+The export includes PNG/SVG, plotted data CSV/JSON, all parsed residuals, all
+selected spatial cells before display reduction, the analysis report and
+`selections.csv` with selected-cell statistics, and extended ProofGraph evidence.
+All source hashes are checked again before
+publication. The ProofGraph viewer opens the exported graph when available.
+
+See [the analysis guide](CFD_RESULT_ANALYSIS.md) for source requirements,
+engineering limits, CLI commands and genuine GUI captures. The capture fixtures
+are explicitly synthetic and do not represent an OpenFOAM run.
 
 ## Runtime diagnostics
 

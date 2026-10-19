@@ -29,28 +29,38 @@ _THEME_PALETTES: dict[str, dict[str, str]] = {
         "canvas_3d": "#111820",
         "plot": "#ffffff",
         "grid": "#d7dee7",
+        "design": "#08796d", "design_surface": "#e1f2ee",
+        "analyze": "#2d65a2", "analyze_surface": "#e4eef9",
+        "verify": "#8d6006", "verify_surface": "#f7efd9",
+        "evidence": "#7050a7", "evidence_surface": "#efe9f7",
+        "release": "#287444", "release_surface": "#e5f3e9",
     },
     "dark": {
-        "background": "#14191f",
-        "surface": "#1b2129",
-        "surface_alt": "#232a33",
-        "panel": "#1e252d",
-        "text": "#e6edf3",
-        "muted": "#9aa7b4",
-        "border": "#394451",
-        "accent": "#2f81f7",
-        "accent_hover": "#58a6ff",
-        "accent_text": "#ffffff",
-        "selection": "#264f78",
-        "selection_text": "#ffffff",
-        "field": "#11161c",
-        "field_text": "#e6edf3",
-        "tree": "#171d24",
-        "disabled": "#6f7b87",
-        "canvas_2d": "#1b222a",
-        "canvas_3d": "#0d1117",
-        "plot": "#131920",
-        "grid": "#33404c",
+        "background": "#0a1423",
+        "surface": "#101f31",
+        "surface_alt": "#192c42",
+        "panel": "#122438",
+        "text": "#edf4ff",
+        "muted": "#93aac5",
+        "border": "#293f58",
+        "accent": "#49d7d1",
+        "accent_hover": "#80efe7",
+        "accent_text": "#061522",
+        "selection": "#1a414f",
+        "selection_text": "#f0fbff",
+        "field": "#0d1a2b",
+        "field_text": "#e7f4fb",
+        "tree": "#0b2032",
+        "disabled": "#688294",
+        "canvas_2d": "#0e2234",
+        "canvas_3d": "#080f1b",
+        "plot": "#0b2032",
+        "grid": "#2b4b61",
+        "design": "#65d9c6", "design_surface": "#183a3b",
+        "analyze": "#84b8ff", "analyze_surface": "#20384e",
+        "verify": "#efc467", "verify_surface": "#44371f",
+        "evidence": "#c5a8ff", "evidence_surface": "#392f4d",
+        "release": "#78d89a", "release_surface": "#213d2c",
     },
 }
 
@@ -82,6 +92,10 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         "TFrame",
         background=palette["background"],
     )
+    style.configure("Horizontal.TProgressbar", background=palette["accent"],
+                    troughcolor=palette["surface"], bordercolor=palette["border"],
+                    lightcolor=palette["accent"], darkcolor=palette["accent"])
+    style.configure("Horizontal.TScale", background=palette["surface"], troughcolor=palette["surface_alt"])
     style.configure(
         "TLabel",
         background=palette["background"],
@@ -105,9 +119,9 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         "TButton",
         background=palette["surface_alt"],
         foreground=palette["text"],
-        bordercolor=palette["border"],
-        lightcolor=palette["border"],
-        darkcolor=palette["border"],
+        bordercolor=palette["surface_alt"],
+        lightcolor=palette["surface_alt"],
+        darkcolor=palette["surface_alt"],
         padding=(8, 5),
     )
     style.map(
@@ -199,7 +213,9 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         background=palette["surface_alt"],
         foreground=palette["muted"],
         padding=(10, 6),
-        bordercolor=palette["border"],
+        bordercolor=palette["background"],
+        lightcolor=palette["background"],
+        darkcolor=palette["background"],
     )
     style.map(
         "TNotebook.Tab",
@@ -249,6 +265,8 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         background=palette["surface_alt"],
         foreground=palette["text"],
         bordercolor=palette["border"],
+        lightcolor=palette["border"],
+        darkcolor=palette["border"],
         arrowcolor=palette["text"],
         padding=(7, 4),
     )
@@ -275,6 +293,28 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         background=palette["background"],
         foreground=palette["text"],
         font=("TkDefaultFont", 10, "bold"),
+    )
+    style.configure(
+        "CX.StudioSection.TLabel", background=palette["background"],
+        foreground=palette["accent"], font=("TkDefaultFont", 10, "bold"),
+    )
+    style.layout("CX.Segmented.TRadiobutton", style.layout("TButton"))
+    style.configure(
+        "CX.Segmented.TRadiobutton", background=palette["surface"],
+        foreground=palette["muted"], padding=(10, 4),
+        bordercolor=palette["surface"], lightcolor=palette["surface"],
+        darkcolor=palette["surface"], font=("TkDefaultFont", 9),
+    )
+    style.map(
+        "CX.Segmented.TRadiobutton",
+        background=[("selected", palette["selection"]), ("active", palette["surface_alt"])],
+        foreground=[("selected", palette["accent"]), ("active", palette["text"])],
+        bordercolor=[("selected", palette["accent"]), ("active", palette["border"])],
+    )
+    style.configure(
+        "CX.Ghost.TButton", background=palette["background"],
+        bordercolor=palette["background"], lightcolor=palette["background"],
+        darkcolor=palette["background"], padding=(9, 5), foreground=palette["muted"],
     )
     style.configure(
         "CX.Navigator.Treeview",
@@ -309,6 +349,25 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         ],
     )
     style.configure(
+        "CX.StudioCard.TFrame",
+        background=palette["panel"],
+        bordercolor=palette["border"],
+        relief="flat",
+        borderwidth=0,
+    )
+    style.configure(
+        "CX.StudioCardTitle.TLabel",
+        background=palette["panel"],
+        foreground=palette["muted"],
+        font=("TkDefaultFont", 8),
+    )
+    style.configure(
+        "CX.StudioCardValue.TLabel",
+        background=palette["panel"],
+        foreground=palette["text"],
+        font=("TkDefaultFont", 18, "bold"),
+    )
+    style.configure(
         "CX.Toolbar.TFrame",
         background=palette["surface"],
         padding=(4, 3),
@@ -328,7 +387,9 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         "CX.Compact.TButton",
         background=palette["surface_alt"],
         foreground=palette["text"],
-        bordercolor=palette["border"],
+        bordercolor=palette["surface_alt"],
+        lightcolor=palette["surface_alt"],
+        darkcolor=palette["surface_alt"],
         padding=(6, 3),
     )
     style.map(

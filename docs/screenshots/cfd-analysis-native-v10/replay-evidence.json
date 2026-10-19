@@ -1,0 +1,101 @@
+{
+  "artifact_id": 12133700252,
+  "artifact_sha256": "90b6150d313ad550a519904ee5b709c84305574decf0f0f7cc6bcea0e81945b2",
+  "execution": "local_post_processing_of_existing_CI_outputs_no_solver_started",
+  "limitations": [
+    "Region label is not a verified room boundary",
+    "Native source-field bytes are represented by recorded hash metadata; synchronized VTK and receipts were rehashed",
+    "Grid-case log binding was refused on configuration-hash mismatch",
+    "This replay establishes selection/export integrity, not convergence, mesh independence or physical validity"
+  ],
+  "native_case_log_binding": {
+    "reason": "Selected native case inputs do not match the synchronized run; optional logs were not joined",
+    "status": "not_available"
+  },
+  "recorded_solver_times": [
+    "50",
+    "100",
+    "150"
+  ],
+  "region": {
+    "bounds_m": [
+      0.0,
+      1.5,
+      0.0,
+      2.0,
+      0.0,
+      2.0
+    ],
+    "label": "West half \u00b7 recorded Foundation v10",
+    "schema_version": "cleanroomx.cfd-cell-region.v1"
+  },
+  "schema_version": "cleanroomx.cfd-native-region-replay.v1",
+  "scientific_validation": "BLOCKED",
+  "screenshots": [
+    {
+      "height": 820,
+      "path": "actual-v10-region-3d.png",
+      "sha256": "61615f5c4d59a499903ef3c0356b01b1f2dd31cb4441a8249312c48950c83edb",
+      "width": 1180
+    },
+    {
+      "height": 820,
+      "path": "actual-v10-region-statistics.png",
+      "sha256": "25fa3eee45803c8e035da4bb8a3ba8fbe75ff832c0e6ee9fd3dec2378254264a",
+      "width": 1180
+    }
+  ],
+  "selection": {
+    "case_id": "configuration_1/coarse",
+    "cell_count": 108,
+    "cell_indices_sha256": "0aa7dc209f1b31e4156112904d0e51dd379e7393d0a1e0333c05329561a5d400",
+    "field": "U_z",
+    "mesh_cell_count": 216,
+    "mesh_volume_m3": 12.0,
+    "region": "West half \u00b7 recorded Foundation v10 (user box)",
+    "run_id": "grid-0752d04fc9b373e38783a23e",
+    "selection_rule": "cell center in [minimum, maximum) on each axis; full selected-cell volumes",
+    "statistics": {
+      "array_name": "U",
+      "dimensions": "[0 1 -1 0 0 0 0]",
+      "label": "Velocity z",
+      "maximum": 0.038921598345041275,
+      "mean": -0.02691447064199798,
+      "mean_weighting": "cell_volume",
+      "minimum": -0.22252799570560455,
+      "semantic": "native_u_z",
+      "units": "m/s"
+    },
+    "status": "computed_diagnostic",
+    "time_name": "150",
+    "volume_fraction_of_mesh": 0.5,
+    "volume_m3": 6.0,
+    "vtk_sha256": "9891175457c1a3e1a6a8771e5951b351374dc0714dd2c27235557c0d9834fb39"
+  },
+  "solver_release": "OpenFOAM Foundation v10",
+  "source_branch_head": "6ff519a1608edae61523fb1b8009dedf06562186",
+  "source_ci_run": "https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/runs/39118048747",
+  "sources": [
+    {
+      "case_id": "configuration_1/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/coarse/sync_manifest.json",
+      "role": "sync_manifest",
+      "sha256": "7a1826056fab0689aa049b979ef2ba35f109f4aa1fabe7c8c6d25305c4655870",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_1/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/coarse/results/time_150/receipt.json",
+      "role": "snapshot_receipt",
+      "sha256": "9ed5574ed72b9957f1032cf9df22d174101fe04e1c7f8c2f108c957212dc51b9",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_1/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/coarse/results/time_150/VTK/coarse_150.vtk",
+      "role": "volume_field",
+      "sha256": "9891175457c1a3e1a6a8771e5951b351374dc0714dd2c27235557c0d9834fb39",
+      "time_name": "150"
+    }
+  ]
+}

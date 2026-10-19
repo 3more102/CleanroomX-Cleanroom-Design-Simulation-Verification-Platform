@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import time
 import tkinter as tk
 
 import pytest
@@ -74,7 +75,13 @@ def test_analysis_picker_filters_canonical_workflows_without_mock_entries(app):
 
 
 def test_run_history_dialog_filters_retained_canonical_records_and_empty_state(app):
-    app.smoke_run_active()
+    # The smoke preview deliberately does not append canonical run history.
+    app.run_current()
+    deadline = time.monotonic() + 10
+    while app._running and time.monotonic() < deadline:
+        app.root.update()
+        time.sleep(.01)
+    assert not app._running, "Timed out waiting for a recorded backend analysis"
     app.root.update()
 
     dialog = RunHistoryDialog(app.root, app.project.metadata)

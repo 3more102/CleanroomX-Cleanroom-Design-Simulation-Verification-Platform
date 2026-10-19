@@ -1,0 +1,9 @@
+{
+  "schema_version": "cleanroomx.cfd-vtk-field-map.v1",
+  "fields": {
+    "T": {
+      "semantic": "normalized_tracer",
+      "units": "1"
+    }
+  }
+}

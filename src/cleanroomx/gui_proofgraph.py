@@ -385,6 +385,7 @@ def _search_projection(
     nodes = projection.get("nodes", [])
     edges = projection.get("edges", [])
     matched: set[str] = set()
+    metadata_matches: set[str] = set()
     for node in nodes:
         raw = node.get("raw")
         raw_text = ""
@@ -403,11 +404,18 @@ def _search_projection(
                 _text(node.get("label")),
                 _text(node.get("status")),
                 " ".join(str(flag) for flag in node.get("flags") or ()),
-                raw_text,
             )
         ).casefold()
         if needle in haystack:
             matched.add(node["key"])
+        elif needle in raw_text.casefold():
+            metadata_matches.add(node["key"])
+
+    # A calculation ID should anchor its immediate trace context. Matching the
+    # same ID again inside copied provenance would expand every neighbour of
+    # the evidence node as well. Search metadata when no visible field matches.
+    if not matched:
+        matched = metadata_matches
 
     expanded = set(matched)
     for edge in edges:
@@ -859,7 +867,9 @@ class ProofGraphViewer(ttk.Frame):
         if not selection:
             return
         key = self._tree_key_by_iid.get(selection[0])
-        if key:
+        # Rebuilding the tree restores its selection and queues another Tk
+        # event. Ignore that echo rather than rebuilding forever in update().
+        if key and key != self._selected_key:
             self._select_key(key)
 
     def _on_canvas_selected(self, _event=None) -> None:

@@ -1,5 +1,94 @@
 # Changelog
 
+## Unreleased Release 3 — Studio to real solver execution — 2026-10-19
+
+- Reconcile the polished Studio with native OpenFOAM execution, result synchronization and the verified analysis explorer in one application.
+- Prepare three isolated rectangular-room alternatives from selected-room geometry and declared or edited supply flow; retain project snapshots and each run's inputs separately.
+- Add native/WSL runtime connection settings, real stage/time/residual progress, process-group stopping and automatic result loading. WSL uses the host package source and a selectable Linux Python interpreter.
+- Bind measured boundary flux and whole-domain supply ACH to execution receipts, synchronized native `phi`, mesh boundaries, mesh/solver logs and verified VTK volumes. Keep missing/unmodeled fields unavailable.
+- Add a real desktop Run-button verification to Foundation v10 CI and extend Windows/Linux desktop coverage. These diagnostic runs do not establish convergence, physical validation or certification.
+
+## Unreleased Release 3 — native OpenFOAM grid analysis integration — 2026-10-18
+
+- Load complete nine-case Foundation v10 grid runs through the GUI, comparison picker and CLI, retaining configuration/resolution identities and missing-case findings.
+- Bind grid results to the runner's eight generated inputs per case, excluding subsequently generated polyMesh files from that configuration hash. Match optional execution receipts to synchronized manifests before attaching mesh/solver logs.
+- Add GUI original-field verification and CLI `--verify-native-fields`; rehash native time/field bytes against recorded hashes/sizes, preserve verification scope, and recheck originals before export.
+- Keep selected residual equations after drawing; use horizontal bars for comparisons with more than six entries so complete grid-case labels remain readable.
+- Exercise the complete adapter against fresh Foundation v10 CI outputs and export field, comparison and residual diagnostics. Scientific validation and convergence acceptance remain blocked.
+
+## Unreleased Release 3 — spatial selection and solver analysis workspace — 2026-10-18
+
+- Add explicit mesh-coordinate box selections for field histories, exact-time comparisons, slabs and 3D cell samples, with half-open bounds and selected-cell identity hashes.
+- Show selected cell count, full-cell volume, whole-mesh volume coverage, volume-weighted mean and range in a GUI summary and scrollable statistics table; add signed native velocity components U_x/U_y/U_z.
+- Filter case/field/time choices by run and use the selected run for spatial analysis. Retain actual mesh proportions, selected-box edges and full-selection color limits.
+- Add reproducible `selections.csv`, cell-volume columns and report tables; replay graph selections and recheck sources before export. Empty selections remain unavailable and never inherit whole-mesh values.
+- Clear plots, statistics and report selections before source refresh; failed verification removes stale sessions. Keep the compact graph readable when the window resizes.
+- Fix two baseline GUI blockers exposed by display-enabled regression: repeated ProofGraph tree-selection events now settle, and Fit selected returns an explicit success result while preserving geometry.
+- Region names are user labels; boxes do not verify room boundaries or provide doorway transfer/per-room ACH. Scientific validation remains blocked.
+
+## Unreleased Release 3 — bind two-room VTK outputs into evidence — 2026-10-17
+
+- Upgrades two-room run receipts to v2 and records SHA-256 digests for every regular file emitted under `VTK/`, with bounded file count, byte limits, stable-file checks, and symlink rejection.
+- Makes ProofGraph export re-hash the exact VTK asset set and reject modified, added, or removed visualization outputs; legacy v1 receipts remain self-hash auditable but require a rerun before ProofGraph export.
+- Adds regressions for VTK tampering and unreceipted files. Artifact integrity remains a local consistency check; convergence and scientific cleanroom validation remain blocked.
+
+## Unreleased Release 3 — canonical two-room case audit — 2026-10-17
+
+- Rebuild the generated OpenFOAM inputs and derived metadata from the declared case specification during audit, rejecting altered boundary conditions or metadata even when an unsigned manifest is rewritten with matching hashes.
+- Require the exact two-room manifest schema, Foundation v10 release label, and blocked scientific-validation status; solver and physical validation remain separate and blocked.
+
+## Unreleased Release 3 — OpenFOAM ProofGraph export — 2026-10-17
+
+- Adds standalone ProofGraph export from synchronized OpenFOAM result manifests through the GUI.
+- Re-hashes manifests, immutable receipts, and referenced result assets; mismatches stop export and missing configurations remain explicitly not checked.
+- Limits PASS to local hash-link consistency, without claiming signatures, authenticity, or re-hashed source-field bytes. Solver convergence and independent physical validation remain not checked and BLOCKED.
+
+## Unreleased Release 3 — responsive OpenFOAM console — 2026-10-17
+
+- Bounds the live OpenFOAM console view to the latest 4,000 lines or 500,000 characters while retaining the full session transcript in a temporary spool that spills to disk after 1 MB.
+- Adds an atomic **Save full log…** action, reports when the displayed tail is truncated or full-log capture fails, and closes the temporary spool with the workspace.
+- Processes queued solver output in bounded batches so sustained output does not monopolize the Tk event loop; the compact workspace is covered by the real-Tk Xvfb gate. Solver and scientific-validation semantics are unchanged.
+
+## Unreleased Release 3 — refined industrial GUI theme — 2026-10-16
+
+- Refines the light and dark workstation palettes around slate surfaces and a teal primary action, with distinct Design, Analyze, Verify, Evidence, and Release accents.
+- Gives the guided workflow clearer stage colors, a more legible active tab, calmer panel chrome, roomier table controls, and a compact status strip.
+- Changes presentation only; project data, solver execution, verification rules, and results are unchanged.
+
+## Unreleased Release 3 — OpenFOAM case-input GUI preflight — 2026-10-16
+
+- Adds a read-only desktop action that checks all 24 generated case-input hashes against the local unsigned manifest and recomputes the three boundary-geometry/inlet-flow consistency audits before a solver run.
+- Runs the preflight off the Tk event loop, bounds manifest and input sizes, rejects symbolic-link inputs, and reports the local-manifest trust boundary explicitly.
+- Keeps solver execution, convergence, grid independence, and physical cleanroom validation outside this preflight; scientific validation remains blocked.
+
+## Unreleased Release 3 — strict OpenFOAM block vertex indices — 2026-10-16
+
+- Parses all eight `blockMeshDict` hex vertex references as signed integer tokens and rejects negative or out-of-range references before deriving exterior-face topology.
+- Adds a regression for a negative index that would otherwise lose its sign during digit extraction; OpenFOAM cases and scientific-validation status are unchanged.
+
+## Unreleased Release 3 — bounded OpenFOAM residual-trend diagnostics — 2026-10-15
+
+- Adds bounded first-window versus tail-window median initial-residual summaries to the read-only single-log and nine-case triage commands. Short logs use disjoint reduced windows; trend ratios remain descriptive and never satisfy convergence or validation criteria.
+- Records reproducible 36-field diagnostics of the archived synthetic Foundation v10 runs 67 and 68, preserving the failed terminal residual screens and blocked scientific-validation status.
+- Does not alter OpenFOAM cases, solver settings, tolerances, acceptance criteria, or engineering verdicts.
+
+## Unreleased Release 3 — checkMesh/polyMesh volume cross-check — 2026-10-15
+
+- Reconstructs every cell volume from Foundation v10 ASCII `polyMesh` data and compares cell counts, min/max/total volumes, bounding-box volume, and manifest-derived room volume against the hash-bound `checkMesh` receipt.
+- Records all five mesh-file hashes and representation-based tolerances in the uploaded audit artifact; this is synthetic mesh-data integrity evidence only and does not change the blocked scientific-validation status.
+
+## Unreleased Release 3 — Foundation v10 surface-flux VTK audit — 2026-10-15
+
+- Extends the opt-in nine-case Foundation v10 workflow to export native `phi` surface fluxes through pinned `foamToVTK -surfaceFields` support and independently recheck the resulting face-normal vectors against native face geometry and values.
+- Adds bounded parsing for native surface-scalar fields and polyMesh face geometry, with explicit face-centre ordering, float32/ASCII serialization bounds, file hashes, synthetic regressions, and diagnostic-only evidence; no flow-balance threshold, convergence verdict, or scientific-acceptance status changes.
+
+## Unreleased Release 3 — hash-bound OpenFOAM checkMesh diagnostics — 2026-10-15
+
+- Adds a strict Foundation v10 parser for mesh counts, cell types, bounding box, face areas, cell volumes, and reported geometric checks; each receipt binds the parsed values to the raw log SHA-256.
+- Records incomplete, ambiguous, non-finite, and tool-reported failure states explicitly, and stops before `simpleFoam` when `checkMesh` evidence is incomplete or reports failed checks.
+- Labels the summary diagnostic-only and leaves project acceptance unevaluated because no project-specific mesh criteria or verified physical geometry are available.
+- Adds a regression fixture copied from archived run 66 evidence; it does not create a real-case result or change the CFD scientific-validation status.
+
 ## Unreleased Release 3 — external dependency fingerprint runtime boundaries — 2026-10-04
 
 - Narrows every application-layer stable dependency fingerprint boundary so only expected I/O/validation failures are converted into fail-closed dependency-state or private-snapshot errors.

@@ -215,7 +215,12 @@ def test_proofgraph_search_and_evidence_readiness_update_live(app):
     assert "calculation:pressure_solver" in keys
     assert "evidence:EVID-GUI-PRESSURE" in keys
     assert "verdict:VERDICT-GUI-PRESSURE" not in keys
-    assert app.proofgraph_viewer.summary_var.get().startswith("View: 2/")
+    # An exact visible calculation match anchors its immediate trace context;
+    # copied metadata references must not expand the search to unrelated nodes.
+    assert keys == {
+        "calculation:pressure_solver", "evidence:EVID-GUI-PRESSURE",
+    }
+    assert app.proofgraph_viewer.summary_var.get() == "View: 2/10 nodes · 1 links"
 
     app.proofgraph_viewer._clear_search_and_filter()
     app.root.update()

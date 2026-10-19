@@ -517,8 +517,44 @@ def _device(workspace, device, floor_z, section, project):
             bx, by = project(x, y, floor_z)
             canvas.create_rectangle(bx - 2, by - 2, bx + 2, by + 2,
                                     fill=p["muted"], outline="", tags=tags)
-        selected = workspace.selected is not None and workspace.selected.item_id == device["id"]
-        canvas.create_rectangle(px - 4, py - 4, px + 4, py + 4,
-                                fill=p["panel"], outline=p["accent"] if selected else "#a7dbdf",
-                                width=2 if selected else 1, tags=tags)
-        canvas.create_line(px - 2, py, px + 2, py, fill=p["muted"], tags=tags)
+        selected = (
+            workspace.selected is not None
+            and workspace.selected.kind == "device"
+            and workspace.selected.item_id == device["id"]
+        )
+        kind = str(device.get("type") or "").strip().lower()
+        glyph = tags + (f"studio-device-glyph:{kind or 'other'}",)
+        color = p["accent"] if kind in {"ffu", "supply"} else (
+            "#e7bc78" if kind in {"return", "exhaust"} else "#b49af7"
+        )
+        if selected:
+            canvas.create_oval(px - 12, py - 12, px + 12, py + 12,
+                               fill="", outline=p["accent"], width=2,
+                               tags=tags + ("studio-device-selected",))
+        if kind == "ffu":
+            canvas.create_oval(px - 8, py - 8, px + 8, py + 8,
+                               fill=p["panel"], outline=color, width=2, tags=glyph)
+            for angle_deg in (0, 120, 240):
+                angle = math.radians(angle_deg)
+                canvas.create_line(
+                    px, py,
+                    px + 6 * math.cos(angle), py + 6 * math.sin(angle),
+                    fill=color, width=2, tags=glyph,
+                )
+            canvas.create_oval(px - 2, py - 2, px + 2, py + 2,
+                               fill=color, outline="", tags=glyph)
+        elif kind == "supply":
+            canvas.create_rectangle(px - 7, py - 7, px + 7, py + 7,
+                                    fill=p["panel"], outline=color, width=2, tags=glyph)
+            canvas.create_line(px, py - 5, px, py + 4,
+                               fill=color, width=2, arrow="last", tags=glyph)
+        elif kind in {"return", "exhaust"}:
+            canvas.create_rectangle(px - 7, py - 7, px + 7, py + 7,
+                                    fill=p["panel"], outline=color, width=2, tags=glyph)
+            canvas.create_line(px, py + 5, px, py - 4,
+                               fill=color, width=2, arrow="last", tags=glyph)
+        else:
+            canvas.create_polygon(px, py - 8, px + 8, py, px, py + 8, px - 8, py,
+                                  fill=p["panel"], outline=color, width=2, tags=glyph)
+            canvas.create_line(px - 3, py, px + 3, py,
+                               fill=color, width=2, tags=glyph)

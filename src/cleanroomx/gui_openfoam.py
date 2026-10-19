@@ -1039,7 +1039,11 @@ class OpenFOAMWorkspace(ttk.Frame):
             if latest["residual"]:
                 field, initial, final = latest["residual"]
                 text += f" · {field} residual {initial} → {final}"
-            if latest["fatal_error"]:
+            if progress["issues"]:
+                first = progress["issues"][0]
+                text += (f" · solver/numerical issue in case {first['case']} "
+                         f"{first['program']} ({len(progress['issues'])} affected log(s)); inspect logs")
+            elif latest["fatal_error"]:
                 text += " · solver error (see log)"
             self.progress_var.set(text)
             self._status_setter(text)
@@ -1440,8 +1444,13 @@ class OpenFOAMWorkspace(ttk.Frame):
                     self._status_setter(f"OpenFOAM command failed with status {value}")
                     self.progress_var.set(f"Failed (exit {value}) · inspect console and solver logs")
                     if self._progress_directory:
-                        latest = read_solver_progress(self._progress_directory)["latest"]
-                        if latest:
+                        diagnostic = read_solver_progress(self._progress_directory)
+                        if diagnostic["issues"]:
+                            first = diagnostic["issues"][0]
+                            self._append(f"\nSolver issue: {first['reason']}\n"
+                                         f"Log: {first['log']}\n{first['tail']}\n")
+                        elif diagnostic["latest"]:
+                            latest = diagnostic["latest"]
                             self._append(f"\nLast solver log: {latest['log']}\n{latest['tail']}\n")
             elif kind == "case_verification_finished":
                 self._set_busy(False)

@@ -11,7 +11,7 @@ import math
 from typing import TYPE_CHECKING
 
 from .spatial_transforms import fit_3d_view
-from .studio_summary import dashboard_snapshot, navigator_rectangles
+from .studio_summary import dashboard_snapshot, navigator_device_markers, navigator_rectangles
 from .studio_widgets import blend, draw_icon, draw_metrics, fit_text, rounded_rect
 
 if TYPE_CHECKING:
@@ -72,6 +72,7 @@ def draw_navigator(workspace: SpatialDesignWorkspace) -> None:
     canvas, palette = workspace.navigator_canvas, workspace._theme_palette
     canvas.delete("all")
     workspace._navigator_item_to_room.clear()
+    workspace._navigator_item_to_device.clear()
     width = int(float(canvas.cget("width")))
     height = int(float(canvas.cget("height")))
     canvas.configure(background=palette["canvas_3d"], highlightthickness=0)
@@ -105,6 +106,45 @@ def draw_navigator(workspace: SpatialDesignWorkspace) -> None:
         )]
         for item in items:
             workspace._navigator_item_to_room[item] = room["id"]
+    # Native Canvas markers use actual x/y locations from the spatial model.
+    # Markers are created after room outlines so direct clicks select devices.
+    for marker in navigator_device_markers(
+        workspace.layout, width_px=width, height_px=128,
+        padding_px=20, header_px=48,
+    ):
+        px, py = marker["point"]
+        tags = (f'navigator-device:{marker["id"]}', "navigator-device")
+        selected_device = (
+            workspace.selected is not None
+            and workspace.selected.kind == "device"
+            and workspace.selected.item_id == marker["id"]
+        )
+        color = {
+            "air": palette["accent"], "opening": "#e7bc78", "other": "#b49af7",
+        }[marker["category"]]
+        items = []
+        if selected_device:
+            items.append(canvas.create_oval(
+                px - 8, py - 8, px + 8, py + 8,
+                fill=palette["panel"], outline=palette["text"], width=2, tags=tags,
+            ))
+        if marker["category"] == "opening":
+            items.append(canvas.create_polygon(
+                px, py - 5, px + 5, py, px, py + 5, px - 5, py,
+                fill=color, outline=palette["panel"], width=1, tags=tags,
+            ))
+        elif marker["category"] == "other":
+            items.append(canvas.create_rectangle(
+                px - 4, py - 4, px + 4, py + 4,
+                fill=color, outline=palette["panel"], width=1, tags=tags,
+            ))
+        else:
+            items.append(canvas.create_oval(
+                px - 5, py - 5, px + 5, py + 5,
+                fill=color, outline=palette["panel"], width=1, tags=tags,
+            ))
+        for item in items:
+            workspace._navigator_item_to_device[item] = marker["id"]
     row_height = 27
     visible_rows = max(1, (height - 167) // row_height)
     start = min(workspace._navigator_scroll, max(0, len(rooms) - visible_rows))
@@ -128,7 +168,7 @@ def draw_navigator(workspace: SpatialDesignWorkspace) -> None:
         for item in items:
             workspace._navigator_item_to_room[item] = room["id"]
     canvas.create_text(17, height - 17,
-                       text="↑ ↓  Switch room     ·     Click to select", anchor="w",
+                       text="● Air   ◆ Opening   ■ Other   ↑↓ Rooms", anchor="w",
                        fill=palette["muted"], font=("TkDefaultFont", 7))
 
 

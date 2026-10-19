@@ -472,6 +472,51 @@ def test_studio_minimap_device_selection_and_room_keyboard_context(gui):
     assert ws.selected.item_id == room_id
 
 
+def test_device_layer_category_has_stable_model_type_mapping():
+    from cleanroomx.studio_summary import device_layer_category
+    assert device_layer_category({"type": "FFU"}) == "air"
+    assert device_layer_category({"type": "Exhaust"}) == "air"
+    assert device_layer_category({"type": "window"}) == "opening"
+    assert device_layer_category({"type": "TRANSFER"}) == "opening"
+    assert device_layer_category({"type": "sensor"}) == "other"
+    assert device_layer_category({}) == "other"
+
+
+def test_studio_device_layers_filter_3d_and_navigator_only(gui):
+    gui.open_design_studio()
+    gui.root.update()
+    ws = gui.spatial_workspace
+    original = copy.deepcopy((ws.layout["rooms"], ws.layout["devices"]))
+    assert ws.canvas_3d.find_withtag("device:supply-process")
+    assert ws.navigator_canvas.find_withtag("navigator-device:supply-process")
+    assert ws.canvas_3d.find_withtag("studio-opening")
+    assert ws.select_item("device", "supply-process", notify=True)
+
+    # Display layer visibility is view-local. It must not discard equipment,
+    # modify source metadata or invalidate an existing inspector selection.
+    ws._studio_device_layers["air"].set(False)
+    ws._on_studio_device_layers_changed()
+    assert not ws.canvas_3d.find_withtag("device:supply-process")
+    assert not ws.navigator_canvas.find_withtag("navigator-device:supply-process")
+    assert ws.canvas_3d.find_withtag("device:door-process")
+    assert ws.navigator_canvas.find_withtag("navigator-device:door-process")
+    assert ws.selected.kind == "device" and ws.selected.item_id == "supply-process"
+    assert (ws.layout["rooms"], ws.layout["devices"]) == original
+
+    ws._studio_device_layers["opening"].set(False)
+    ws._on_studio_device_layers_changed()
+    assert not ws.canvas_3d.find_withtag("studio-opening")
+    assert not ws.navigator_canvas.find_withtag("navigator-device:door-process")
+    assert ws.canvas_3d.find_withtag("room:process")
+
+    ws._studio_device_layers["air"].set(True)
+    ws._studio_device_layers["opening"].set(True)
+    ws._on_studio_device_layers_changed()
+    assert ws.canvas_3d.find_withtag("device:supply-process")
+    assert ws.navigator_canvas.find_withtag("navigator-device:door-process")
+    assert (ws.layout["rooms"], ws.layout["devices"]) == original
+
+
 def test_selected_device_model_snapshot_is_live_and_read_only():
     layout = demo_layout()
     unchanged = copy.deepcopy(layout)

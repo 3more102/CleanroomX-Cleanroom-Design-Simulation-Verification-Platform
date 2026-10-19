@@ -115,6 +115,37 @@ def navigator_rectangles(
         )
     return result
 
+
+def device_snapshot(layout: dict, device_id: str | None) -> dict[str, Any] | None:
+    """Read-only selected-device facts for design inspection, never CFD output.
+
+    Device x/y positions use the global plan coordinate system; device z_m is
+    the configured relative floor offset from the spatial editor.
+    """
+    if device_id is None:
+        return None
+    device = next(
+        (item for item in layout.get("devices", []) if item.get("id") == device_id),
+        None,
+    )
+    if device is None:
+        return None
+    room_id = device.get("room_id")
+    room = next(
+        (item for item in layout.get("rooms", []) if item.get("id") == room_id),
+        None,
+    )
+    return {
+        "id": device["id"],
+        "name": str(device.get("name") or device["id"]),
+        "type": str(device.get("type") or "Unspecified"),
+        "room_id": room_id,
+        "room_name": str(room["name"]) if room else "Unassigned",
+        "x_m": float(device["x_m"]),
+        "y_m": float(device["y_m"]),
+        "z_above_floor_m": float(device["z_m"]),
+    }
+
 def navigator_device_markers(
     layout: dict,
     *,

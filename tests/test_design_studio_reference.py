@@ -603,3 +603,25 @@ def test_studio_3d_uses_real_device_type_glyphs(gui):
     assert canvas.find_withtag("studio-device-selected")
     assert canvas.find_withtag("studio-device-glyph:ffu")
     assert canvas.find_withtag("studio-floor")
+
+
+def test_studio_3d_layer_chips_toggle_graphics_not_model(gui):
+    gui.open_design_studio()
+    gui.root.update()
+    ws = gui.spatial_workspace
+    canvas = ws.canvas_3d
+    before = copy.deepcopy((ws.layout["rooms"], ws.layout["devices"]))
+    assert canvas.find_withtag("studio-action:layer-air")
+    assert canvas.find_withtag("studio-action:layer-opening")
+    assert canvas.find_withtag("studio-action:layer-other")
+    assert ws._studio_device_layers["air"].get()
+    click_tag(canvas, "studio-action:layer-air")
+    assert not ws._studio_device_layers["air"].get()
+    assert not canvas.find_withtag("device:supply-process")
+    assert canvas.find_withtag("device:door-process")
+    assert ws.navigator_canvas.find_withtag("navigator-device:door-process")
+    assert (ws.layout["rooms"], ws.layout["devices"]) == before
+    click_tag(canvas, "studio-action:layer-air")
+    assert ws._studio_device_layers["air"].get()
+    assert canvas.find_withtag("device:supply-process")
+    assert (ws.layout["rooms"], ws.layout["devices"]) == before

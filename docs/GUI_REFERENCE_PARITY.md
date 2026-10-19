@@ -149,3 +149,7 @@ Selected Device also has a **Focus** camera action. It fits the actual selected 
 ## View-only equipment layers
 
 Open **Display** in Design Studio to toggle **3D + navigator: Air devices**, **Openings** or **Other equipment** independently. The actual 3D and mini-map device glyphs are shown or hidden together. The room solids, navigation list, editable project/device objects and configured simulation inputs are not changed or deleted. Existing selection is preserved when its visual layer is hidden; toggling it back on restores its glyph. The footer lists enabled device layers, and the selected-device Inspector still shows canonical design facts even when the layer is off. Layer visibility is intentionally per-session UI state rather than an engineering input or a claim about solver visibility.
+
+## Type-specific 3D equipment symbols
+
+The 3D scene now distinguishes model device types with native Tk vectors: an FFU has a three-blade fan icon, supply has a downward arrow in a square, return/exhaust an upward arrow in a square, and other equipment a diamond icon. A selected device has a visible circular halo. These glyphs retain actual model selection hit tags and do not alter coordinates, volume, physical airflow, or simulated results.

@@ -514,3 +514,25 @@ def test_studio_device_inspection_card_uses_shared_selection(gui):
     assert ws._property_vars["name"].get() == (
         next(d["name"] for d in ws.layout["devices"] if d["id"] == "supply-process")
     )
+
+
+def test_studio_navigator_device_and_room_hover_reveals_real_names(gui):
+    gui.open_design_studio()
+    gui.root.update()
+    ws = gui.spatial_workspace
+    canvas = ws.navigator_canvas
+    device_id = "supply-process"
+    items = canvas.find_withtag(f"navigator-device:{device_id}")
+    assert items
+    x0, y0, x1, y1 = canvas.bbox(items[-1])
+    canvas.event_generate("<Motion>", x=round((x0 + x1) / 2), y=round((y0 + y1) / 2))
+    gui.root.update()
+    hint = canvas.find_withtag("navigator-hint")
+    assert hint
+    assert "Process Supply" in canvas.itemcget(hint[0], "text")
+    assert canvas.cget("cursor") == "hand2"
+    assert ws.selected.kind == "room", "Hover alone must not select equipment"
+    canvas.event_generate("<Leave>")
+    gui.root.update()
+    assert "Air" in canvas.itemcget(canvas.find_withtag("navigator-hint")[0], "text")
+    assert canvas.cget("cursor") == ""

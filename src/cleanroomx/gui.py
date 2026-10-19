@@ -3156,6 +3156,7 @@ class CleanroomXApp:
         """Enter the dark reference workspace using the currently loaded model."""
         self.set_theme("dark", persist=False)
         self.notebook.select(self.spatial_workspace)
+        self.workspace_status_var.set("Workspace: Design")
         self.root.update_idletasks()
         self.root.update()
         self.spatial_workspace.studio_view()

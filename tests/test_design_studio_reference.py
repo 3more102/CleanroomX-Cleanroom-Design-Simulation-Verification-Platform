@@ -197,6 +197,7 @@ def test_studio_entry_opens_reference_chrome_and_true_cutaway_geometry(gui):
     gui.root.update()
     ws = gui.spatial_workspace
     assert gui.theme_var.get() == "dark"
+    assert gui.workspace_status_var.get() == "Workspace: Design"
     assert ws._studio_active
     assert len(ws.canvas_3d.find_withtag("studio-wall")) == 6
     assert len(ws.canvas_3d.find_withtag("studio-floor")) == 3

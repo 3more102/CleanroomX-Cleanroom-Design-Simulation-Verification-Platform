@@ -32,7 +32,10 @@ and the process exit status remain authoritative for success.
    simpleFoam log endings and checks any recorded fatal or non-finite residual
    diagnostics. Missing or erroneous stage evidence blocks automatic results
    opening and is shown as an unverified run. The backend's evidence receipts
-   and field hashes still require independent verification.
+   and field hashes still require independent verification. The final audit
+   streams the entire native stage logs on a worker thread; the 32 KiB tail
+   used for responsive live updates is not treated as authoritative. This
+   prevents errors early in a long log from being hidden by subsequent output.
 7. The result explorer opens automatically only after stage-log screening and
    successful synchronization.
    Select field history, residuals, boundary flow balance, whole-domain supply ACH,

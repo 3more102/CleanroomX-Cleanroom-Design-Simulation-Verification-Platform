@@ -311,6 +311,8 @@ def _room_panel_contents(workspace, width, card_width):
                                font=("TkDefaultFont", 7), tags=("studio-ui",))
     else:
         text(y + 13, "SELECTED DEVICE", font=("TkDefaultFont", 7, "bold"))
+        _action(workspace, (x + card_width - 148, y + 8, x + card_width - 82, y + 31),
+                "Focus", "focus-device")
         _action(workspace, (x + card_width - 79, y + 8, x + card_width - 12, y + 31),
                 "Inspect", "inspect-device")
         text(y + 31, fit_text(canvas, selected_device["name"], card_width - 30,

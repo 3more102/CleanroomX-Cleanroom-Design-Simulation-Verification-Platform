@@ -17,7 +17,10 @@ pressure, velocity and flux values come from their output files.
    Missing or conflicting verification flow stays empty and requires a value.
 5. Press **Run room study**. The top Run button also starts this workflow while
    the OpenFOAM tab is active. Live progress reads the actual stage logs and
-   displays recorded solver time and residuals; it is not convergence percentage.
+   displays recorded solver time and residuals; it is not convergence percentage. Fatal log diagnostics and invalid/non-finite
+residual values are surfaced across all cases, even if subsequent logs exist;
+affected stages are not counted as finished by the indicator. Verified receipts
+and the process exit status remain authoritative for success.
 6. The result explorer opens automatically after successful synchronization.
    Select field history, residuals, boundary flow balance, whole-domain supply ACH,
    spatial cell samples or region statistics. **Export report + data…** retains

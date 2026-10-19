@@ -272,7 +272,9 @@ class DeviceScheduleWindow(tk.Toplevel):
                         self.table.see(iid)
                         break
                 else:
-                    self.table.selection_remove(*self.table.selection())
+                    existing_selection = self.table.selection()
+                    if existing_selection:
+                        self.table.selection_remove(*existing_selection)
                 self._last_scene_device_id = scene_device_id
             return
         self._last_rows_signature = signature

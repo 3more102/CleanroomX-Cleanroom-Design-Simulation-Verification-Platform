@@ -145,6 +145,11 @@ def draw_navigator(workspace: SpatialDesignWorkspace) -> None:
             ))
         for item in items:
             workspace._navigator_item_to_device[item] = marker["id"]
+    room_device_counts = {room["id"]: 0 for room in rooms}
+    for device in workspace.layout["devices"]:
+        room_id = device.get("room_id")
+        if room_id in room_device_counts:
+            room_device_counts[room_id] += 1
     row_height = 27
     visible_rows = max(1, (height - 167) // row_height)
     start = min(workspace._navigator_scroll, max(0, len(rooms) - visible_rows))
@@ -163,8 +168,9 @@ def draw_navigator(workspace: SpatialDesignWorkspace) -> None:
                                ("TkDefaultFont", 8, "bold" if selected else "normal")), anchor="w",
                                fill=palette["text"], font=("TkDefaultFont", 8, "bold" if selected else "normal")),
             canvas.create_text(width - 22, y,
-                               text=f'{room["length_m"] * room["width_m"]:g} m²',
-                               anchor="e", fill=palette["muted"], font=("TkDefaultFont", 7))]
+                               text=f'{room_device_counts[room["id"]]} dev · {room["length_m"] * room["width_m"]:g} m²',
+                               anchor="e", fill=palette["muted"], font=("TkDefaultFont", 7),
+                               tags=(f'navigator-room-data:{room["id"]}',))]
         for item in items:
             workspace._navigator_item_to_room[item] = room["id"]
     canvas.create_text(17, height - 17,

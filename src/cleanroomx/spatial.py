@@ -1656,6 +1656,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._studio_devices_var = tk.StringVar(value="No devices")
         self._studio_search_var = tk.StringVar()
         self._navigator_item_to_room: dict[int, str] = {}
+        self._navigator_item_to_device: dict[int, str] = {}
         self._navigator_scroll = 0
         self._studio_active = False
         self._studio_hover_action = None
@@ -2877,6 +2878,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         canvas = self.navigator_canvas
         canvas.delete("all")
         self._navigator_item_to_room.clear()
+        self._navigator_item_to_device.clear()
         p = self._theme_palette
         canvas.configure(
             background=p["panel"],
@@ -2916,10 +2918,14 @@ class SpatialDesignWorkspace(ttk.Frame):
     def _on_navigator_room_click(self, event: tk.Event) -> None:
         self.navigator_canvas.focus_set()
         for item in reversed(self.navigator_canvas.find_overlapping(event.x, event.y, event.x, event.y)):
+            device_id = self._navigator_item_to_device.get(item)
+            if device_id:
+                self.select_item("device", device_id, notify=True)
+                return
             room_id = self._navigator_item_to_room.get(item)
             if room_id:
                 self.select_item("room", room_id, notify=True)
-                break
+                return
 
     def _scroll_room_navigator(self, delta: int) -> str:
         self._navigator_scroll = max(0, self._navigator_scroll + delta)
@@ -2929,8 +2935,9 @@ class SpatialDesignWorkspace(ttk.Frame):
     def _navigate_studio_room(self, delta: int) -> str:
         rooms = self.layout["rooms"]
         if rooms:
+            selected_room_id = studio_canvas._selected_room_id(self)
             current = next((i for i, r in enumerate(rooms)
-                            if self.selected and r["id"] == self.selected.item_id), -1)
+                            if r["id"] == selected_room_id), -1)
             index = (current + delta) % len(rooms)
             visible = max(1, (int(float(self.navigator_canvas.cget("height"))) - 157) // 27)
             if index < self._navigator_scroll:

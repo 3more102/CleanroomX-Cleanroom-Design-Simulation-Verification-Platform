@@ -137,3 +137,7 @@ solver execution or merge itself into the default branch.
 The floating Room Navigator now draws **real equipment and opening coordinates** over the fitted miniature floor plan. Circular markers represent air devices, diamonds represent openings and squares represent other devices. Selecting a marker uses the existing shared device-selection path, so the 3D scene and selected-room context respond together. A selected device receives a ring, and Up/Down navigation advances relative to its assigned room. Off-plan markers are omitted from the tiny navigator to avoid obscuring the room list; these items remain accessible from the actual 2D/3D views and Find. All markers are derived from stored design geometry, **not** solver-computed fields.
 
 Navigator rows also show live per-room device totals alongside the geometric floor area, so edits and reassignments can be checked without opening the Inspector.
+
+## Selected-device inspector
+
+Selecting an FFU, supply/return device, door, transfer opening, or other placed device now changes the right-hand lower Studio card from an aggregate count into a **Selected Device** readout: stored device name, type, room assignment, global X/Y position and Z above the design floor. Its **Inspect** action opens the actual editable Inspector and preserves the device selection. The original Selected Room panel and its Focus/Isolate controls continue to resolve the device's associated room. All values are geometry and configured inputs, not CFD outputs; empty/unknown selections are handled without inventing values.

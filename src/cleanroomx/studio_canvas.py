@@ -11,7 +11,7 @@ import math
 from typing import TYPE_CHECKING
 
 from .spatial_transforms import fit_3d_view
-from .studio_summary import dashboard_snapshot, navigator_rectangles
+from .studio_summary import dashboard_snapshot, device_layer_category, device_snapshot, navigator_device_markers, navigator_rectangles
 from .studio_widgets import blend, draw_icon, draw_metrics, fit_text, rounded_rect
 
 if TYPE_CHECKING:
@@ -72,6 +72,7 @@ def draw_navigator(workspace: SpatialDesignWorkspace) -> None:
     canvas, palette = workspace.navigator_canvas, workspace._theme_palette
     canvas.delete("all")
     workspace._navigator_item_to_room.clear()
+    workspace._navigator_item_to_device.clear()
     width = int(float(canvas.cget("width")))
     height = int(float(canvas.cget("height")))
     canvas.configure(background=palette["canvas_3d"], highlightthickness=0)
@@ -105,6 +106,53 @@ def draw_navigator(workspace: SpatialDesignWorkspace) -> None:
         )]
         for item in items:
             workspace._navigator_item_to_room[item] = room["id"]
+    # Native Canvas markers use actual x/y locations from the spatial model.
+    # Markers are created after room outlines so direct clicks select devices.
+    all_markers = navigator_device_markers(
+        workspace.layout, width_px=width, height_px=128,
+        padding_px=20, header_px=48,
+    )
+    visible_markers = [m for m in all_markers
+                       if workspace._studio_device_layers[m["category"]].get()]
+    for marker in visible_markers:
+        px, py = marker["point"]
+        tags = (f'navigator-device:{marker["id"]}', "navigator-device")
+        selected_device = (
+            workspace.selected is not None
+            and workspace.selected.kind == "device"
+            and workspace.selected.item_id == marker["id"]
+        )
+        color = {
+            "air": palette["accent"], "opening": "#e7bc78", "other": "#b49af7",
+        }[marker["category"]]
+        items = []
+        if selected_device:
+            items.append(canvas.create_oval(
+                px - 8, py - 8, px + 8, py + 8,
+                fill=palette["panel"], outline=palette["text"], width=2, tags=tags,
+            ))
+        if marker["category"] == "opening":
+            items.append(canvas.create_polygon(
+                px, py - 5, px + 5, py, px, py + 5, px - 5, py,
+                fill=color, outline=palette["panel"], width=1, tags=tags,
+            ))
+        elif marker["category"] == "other":
+            items.append(canvas.create_rectangle(
+                px - 4, py - 4, px + 4, py + 4,
+                fill=color, outline=palette["panel"], width=1, tags=tags,
+            ))
+        else:
+            items.append(canvas.create_oval(
+                px - 5, py - 5, px + 5, py + 5,
+                fill=color, outline=palette["panel"], width=1, tags=tags,
+            ))
+        for item in items:
+            workspace._navigator_item_to_device[item] = marker["id"]
+    room_device_counts = {room["id"]: 0 for room in rooms}
+    for device in workspace.layout["devices"]:
+        room_id = device.get("room_id")
+        if room_id in room_device_counts:
+            room_device_counts[room_id] += 1
     row_height = 27
     visible_rows = max(1, (height - 167) // row_height)
     start = min(workspace._navigator_scroll, max(0, len(rooms) - visible_rows))
@@ -123,13 +171,40 @@ def draw_navigator(workspace: SpatialDesignWorkspace) -> None:
                                ("TkDefaultFont", 8, "bold" if selected else "normal")), anchor="w",
                                fill=palette["text"], font=("TkDefaultFont", 8, "bold" if selected else "normal")),
             canvas.create_text(width - 22, y,
-                               text=f'{room["length_m"] * room["width_m"]:g} m²',
-                               anchor="e", fill=palette["muted"], font=("TkDefaultFont", 7))]
+                               text=f'{room_device_counts[room["id"]]} dev · {room["length_m"] * room["width_m"]:g} m²',
+                               anchor="e", fill=palette["muted"], font=("TkDefaultFont", 7),
+                               tags=(f'navigator-room-data:{room["id"]}',))]
         for item in items:
             workspace._navigator_item_to_room[item] = room["id"]
     canvas.create_text(17, height - 17,
-                       text="↑ ↓  Switch room     ·     Click to select", anchor="w",
-                       fill=palette["muted"], font=("TkDefaultFont", 7))
+                       text="", anchor="w", fill=palette["muted"],
+                       font=("TkDefaultFont", 7), tags=("navigator-hint",))
+    update_navigator_hint(workspace)
+
+
+def update_navigator_hint(workspace: SpatialDesignWorkspace) -> None:
+    """Make dense device/room markers discoverable without changing selection."""
+    target = getattr(workspace, "_navigator_hover_target", None)
+    active = [name for key, name in
+              (("air", "Air"), ("opening", "Open"), ("other", "Other"))
+              if workspace._studio_device_layers[key].get()]
+    label = ("Layers: " + ", ".join(active)) if active else "Layers: none · Display to restore"
+    if target is not None:
+        kind, item_id = target
+        collection = "devices" if kind == "device" else "rooms"
+        item = next((e for e in workspace.layout[collection]
+                     if e["id"] == item_id), None)
+        if item is not None:
+            name = str(item.get("name") or item["id"])
+            if kind == "device":
+                label = f'{name}  ·  {item.get("type") or "Device"}'
+            else:
+                label = f'{name}  ·  {item["length_m"] * item["width_m"]:g} m²'
+    canvas = workspace.navigator_canvas
+    canvas.itemconfigure("navigator-hint", text=fit_text(
+        canvas, label, int(float(canvas.cget("width"))) - 34,
+        ("TkDefaultFont", 7),
+    ))
 
 
 def _panel(workspace, x, y, width, height, *, selected=False):
@@ -187,11 +262,18 @@ def _room_panels(workspace, width, height, card_width):
 def _room_panel_contents(workspace, width, card_width):
     canvas, p = workspace.canvas_3d, workspace._theme_palette
     room = dashboard_snapshot(workspace.layout, _selected_room_id(workspace))["selected_room"]
+    selected_device = device_snapshot(
+        workspace.layout,
+        workspace.selected.item_id
+        if workspace.selected is not None and workspace.selected.kind == "device"
+        else None,
+    )
     x, y = width - card_width - 14, 12
     _panel(workspace, x, y, card_width, 180, selected=True)
     text = lambda yy, value, **kw: canvas.create_text(
         x + 12, yy, text=value, anchor="nw", fill=kw.pop("fill", p["muted"]),
-        font=kw.pop("font", ("TkDefaultFont", 9)), tags=("studio-ui",), **kw
+        font=kw.pop("font", ("TkDefaultFont", 9)),
+        tags=("studio-ui",) + tuple(kw.pop("tags", ())), **kw
     )
     text(y + 14, "SELECTED ROOM", fill=p["muted"], font=("TkDefaultFont", 7, "bold"))
     if room is None:
@@ -218,20 +300,39 @@ def _room_panel_contents(workspace, width, card_width):
                        fill=p["accent"], font=("TkDefaultFont", 10, "bold"), tags=("studio-ui",))
     y += 194
     _panel(workspace, x, y, card_width, 140)
-    text(y + 13, "PLACED IN THIS ROOM", font=("TkDefaultFont", 7, "bold"))
-    canvas.create_text(x + card_width - 16, y + 18, text=f'{room["device_count"]:02d} total',
-                       anchor="e", fill=p["muted"], font=("TkDefaultFont", 7), tags=("studio-ui",))
-    groups = room["device_groups"]
-    for column, key, label, yy in (
-        (0, "ffu", "FFU", 48), (1, "supply", "Supply", 48),
-        (0, "return_exhaust", "Return / exhaust", 76), (1, "other", "Other", 76),
-    ):
-        xx = x + 12 + column * ((card_width - 24) / 2)
-        draw_icon(canvas, key, xx + 8, y + yy, 12, p["accent"], ("studio-ui",))
-        canvas.create_text(xx + 24, y + yy, text=str(groups[key]), anchor="w", fill=p["text"],
-                           font=("TkDefaultFont", 12 if len(str(groups[key])) < 4 else 8, "bold"), tags=("studio-ui",))
-        canvas.create_text(xx + 50, y + yy, text=label, anchor="w", fill=p["muted"],
-                           font=("TkDefaultFont", 7), tags=("studio-ui",))
+    if selected_device is None:
+        text(y + 13, "PLACED IN THIS ROOM", font=("TkDefaultFont", 7, "bold"))
+        canvas.create_text(x + card_width - 16, y + 18, text=f'{room["device_count"]:02d} total',
+                           anchor="e", fill=p["muted"], font=("TkDefaultFont", 7), tags=("studio-ui",))
+        groups = room["device_groups"]
+        for column, key, label, yy in (
+            (0, "ffu", "FFU", 48), (1, "supply", "Supply", 48),
+            (0, "return_exhaust", "Return / exhaust", 76), (1, "other", "Other", 76),
+        ):
+            xx = x + 12 + column * ((card_width - 24) / 2)
+            draw_icon(canvas, key, xx + 8, y + yy, 12, p["accent"], ("studio-ui",))
+            canvas.create_text(xx + 24, y + yy, text=str(groups[key]), anchor="w", fill=p["text"],
+                               font=("TkDefaultFont", 12 if len(str(groups[key])) < 4 else 8, "bold"), tags=("studio-ui",))
+            canvas.create_text(xx + 50, y + yy, text=label, anchor="w", fill=p["muted"],
+                               font=("TkDefaultFont", 7), tags=("studio-ui",))
+    else:
+        text(y + 13, "SELECTED DEVICE", font=("TkDefaultFont", 7, "bold"))
+        _action(workspace, (x + card_width - 148, y + 8, x + card_width - 82, y + 31),
+                "Focus", "focus-device")
+        _action(workspace, (x + card_width - 79, y + 8, x + card_width - 12, y + 31),
+                "Inspect", "inspect-device")
+        text(y + 31, fit_text(canvas, selected_device["name"], card_width - 30,
+                              ("TkDefaultFont", 12, "bold")),
+             fill=p["text"], font=("TkDefaultFont", 12, "bold"),
+             tags=("studio-selected-device-name",))
+        text(y + 56, fit_text(canvas,
+                              f'{selected_device["type"]}  ·  {selected_device["room_name"]}',
+                              card_width - 30, ("TkDefaultFont", 8)),
+             font=("TkDefaultFont", 8))
+        text(y + 78, (f'X {selected_device["x_m"]:g} m   '
+                       f'Y {selected_device["y_m"]:g} m   '
+                       f'Z {selected_device["z_above_floor_m"]:+g} m'),
+             font=("TkDefaultFont", 8), tags=("studio-selected-device-position",))
     middle = x + card_width / 2
     _action(workspace, (x + 11, y + 104, middle - 3, y + 129), "Focus room", "focus", primary=True)
     _action(workspace, (middle + 3, y + 104, x + card_width - 11, y + 129),
@@ -260,6 +361,21 @@ def draw_scene(workspace: SpatialDesignWorkspace, overlay: dict) -> None:
         canvas.create_text(18, 48, text=("Interior" if workspace._interior_3d.get() else "Exterior")
                            + " view  ·  " + workspace._projection_mode.get(), anchor="w", fill=p["muted"],
                            font=("TkDefaultFont", 8), tags=("studio-ui",))
+        device_counts = {"air": 0, "opening": 0, "other": 0}
+        for device in layout["devices"]:
+            device_counts[device_layer_category(device)] += 1
+        for x0, x1, category, name in (
+            (18, 94, "air", "AIR"), (99, 182, "opening", "OPEN"),
+            (187, 275, "other", "OTHER"),
+        ):
+            _action(
+                workspace, (x0, 68, x1, 95),
+                f'{name} {device_counts[category]}', f"layer-{category}",
+                active=workspace._studio_device_layers[category].get(),
+            )
+        if height >= 480:
+            _action(workspace, (18, 103, 157, 132),
+                    "Device schedule", "schedule")
     if not layout["rooms"]:
         canvas.create_text(width / 2, height / 2, text="Add a room to begin designing",
                            fill=p["muted"], tags=("studio-ui",))
@@ -373,13 +489,17 @@ def _geometry(workspace, overlay):
             canvas.tag_lower(box, label)
         if workspace._show_devices.get():
             for device in layout["devices"]:
-                if device.get("room_id") == room["id"] and workspace._is_item_visible("device", device["id"]):
+                if (device.get("room_id") == room["id"]
+                        and workspace._is_item_visible("device", device["id"])
+                        and workspace._studio_device_layers[device_layer_category(device)].get()):
                     _device(workspace, device, z0, section, project)
     workspace._draw_relationships_3d(center_x_m=cx, center_y_m=cy, floor_z_m=floor_z)
     room_ids = {room["id"] for room in layout["rooms"]}
     if workspace._show_devices.get():
         for device in layout["devices"]:
-            if device.get("room_id") not in room_ids and workspace._is_item_visible("device", device["id"]):
+            if (device.get("room_id") not in room_ids
+                    and workspace._is_item_visible("device", device["id"])
+                    and workspace._studio_device_layers[device_layer_category(device)].get()):
                 _device(workspace, device, floor_z, section, project)
     if overlay["mode"] != "none":
         workspace._draw_engineering_legend(canvas, overlay)
@@ -412,8 +532,44 @@ def _device(workspace, device, floor_z, section, project):
             bx, by = project(x, y, floor_z)
             canvas.create_rectangle(bx - 2, by - 2, bx + 2, by + 2,
                                     fill=p["muted"], outline="", tags=tags)
-        selected = workspace.selected is not None and workspace.selected.item_id == device["id"]
-        canvas.create_rectangle(px - 4, py - 4, px + 4, py + 4,
-                                fill=p["panel"], outline=p["accent"] if selected else "#a7dbdf",
-                                width=2 if selected else 1, tags=tags)
-        canvas.create_line(px - 2, py, px + 2, py, fill=p["muted"], tags=tags)
+        selected = (
+            workspace.selected is not None
+            and workspace.selected.kind == "device"
+            and workspace.selected.item_id == device["id"]
+        )
+        kind = str(device.get("type") or "").strip().lower()
+        glyph = tags + (f"studio-device-glyph:{kind or 'other'}",)
+        color = p["accent"] if kind in {"ffu", "supply"} else (
+            "#e7bc78" if kind in {"return", "exhaust"} else "#b49af7"
+        )
+        if selected:
+            canvas.create_oval(px - 12, py - 12, px + 12, py + 12,
+                               fill="", outline=p["accent"], width=2,
+                               tags=tags + ("studio-device-selected",))
+        if kind == "ffu":
+            canvas.create_oval(px - 8, py - 8, px + 8, py + 8,
+                               fill=p["panel"], outline=color, width=2, tags=glyph)
+            for angle_deg in (0, 120, 240):
+                angle = math.radians(angle_deg)
+                canvas.create_line(
+                    px, py,
+                    px + 6 * math.cos(angle), py + 6 * math.sin(angle),
+                    fill=color, width=2, tags=glyph,
+                )
+            canvas.create_oval(px - 2, py - 2, px + 2, py + 2,
+                               fill=color, outline="", tags=glyph)
+        elif kind == "supply":
+            canvas.create_rectangle(px - 7, py - 7, px + 7, py + 7,
+                                    fill=p["panel"], outline=color, width=2, tags=glyph)
+            canvas.create_line(px, py - 5, px, py + 4,
+                               fill=color, width=2, arrow="last", tags=glyph)
+        elif kind in {"return", "exhaust"}:
+            canvas.create_rectangle(px - 7, py - 7, px + 7, py + 7,
+                                    fill=p["panel"], outline=color, width=2, tags=glyph)
+            canvas.create_line(px, py + 5, px, py - 4,
+                               fill=color, width=2, arrow="last", tags=glyph)
+        else:
+            canvas.create_polygon(px, py - 8, px + 8, py, px, py + 8, px - 8, py,
+                                  fill=p["panel"], outline=color, width=2, tags=glyph)
+            canvas.create_line(px - 3, py, px + 3, py,
+                               fill=color, width=2, tags=glyph)

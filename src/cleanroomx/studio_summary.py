@@ -114,3 +114,89 @@ def navigator_rectangles(
             }
         )
     return result
+
+
+def device_snapshot(layout: dict, device_id: str | None) -> dict[str, Any] | None:
+    """Read-only selected-device facts for design inspection, never CFD output.
+
+    Device x/y positions use the global plan coordinate system; device z_m is
+    the configured relative floor offset from the spatial editor.
+    """
+    if device_id is None:
+        return None
+    device = next(
+        (item for item in layout.get("devices", []) if item.get("id") == device_id),
+        None,
+    )
+    if device is None:
+        return None
+    room_id = device.get("room_id")
+    room = next(
+        (item for item in layout.get("rooms", []) if item.get("id") == room_id),
+        None,
+    )
+    return {
+        "id": device["id"],
+        "name": str(device.get("name") or device["id"]),
+        "type": str(device.get("type") or "Unspecified"),
+        "room_id": room_id,
+        "room_name": str(room["name"]) if room else "Unassigned",
+        "x_m": float(device["x_m"]),
+        "y_m": float(device["y_m"]),
+        "z_above_floor_m": float(device["z_m"]),
+    }
+
+def device_layer_category(device: dict) -> str:
+    """Classify display-only equipment layers from canonical device types."""
+    kind = str(device.get("type") or "").strip().lower()
+    if kind in {"door", "window", "opening", "transfer"}:
+        return "opening"
+    if kind in {"ffu", "supply", "return", "exhaust"}:
+        return "air"
+    return "other"
+
+
+def navigator_device_markers(
+    layout: dict,
+    *,
+    width_px: int = 240,
+    height_px: int = 150,
+    padding_px: int = 12,
+    header_px: int = 26,
+) -> list[dict[str, Any]]:
+    """Locate real devices using exactly the room navigator's model-to-pixel fit.
+
+    This read-only transform deliberately derives its scale and origin from the
+    same room rectangles shown on screen. It never alters room/device geometry
+    or treats a device position as a CFD simulation result.
+    """
+    rectangles = navigator_rectangles(
+        layout, width_px=width_px, height_px=height_px,
+        padding_px=padding_px, header_px=header_px,
+    )
+    if not rectangles:
+        return []
+    room = layout["rooms"][0]
+    length, width = float(room["length_m"]), float(room["width_m"])
+    if length <= 0 or width <= 0:
+        return []
+    x0, y0, x1, y1 = rectangles[0]["rect"]
+    x_scale = (x1 - x0) / length
+    y_scale = (y1 - y0) / width
+    markers = []
+    for device in layout.get("devices", []):
+        px = x0 + (float(device["x_m"]) - float(room["x_m"])) * x_scale
+        py = y0 + (float(device["y_m"]) - float(room["y_m"])) * y_scale
+        # Do not paint markers beyond the fitted plan into the navigator header
+        # or room list. Such devices remain selectable from 2D/3D and search.
+        if not (padding_px <= px <= width_px - padding_px
+                and header_px <= py <= height_px - padding_px):
+            continue
+        kind = str(device.get("type") or "").strip().lower()
+        category = device_layer_category(device)
+        markers.append({
+            "id": device["id"], "name": device.get("name") or device["id"],
+            "room_id": device.get("room_id"),
+            "type": kind, "category": category, "point": (px, py),
+        })
+    return markers

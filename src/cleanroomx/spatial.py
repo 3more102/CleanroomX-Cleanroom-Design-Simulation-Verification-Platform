@@ -12,6 +12,7 @@ from tkinter import messagebox, simpledialog, ttk
 
 from .gui_theme import theme_palette
 from .studio_summary import dashboard_snapshot, navigator_rectangles
+from .studio_device_schedule import DeviceScheduleWindow
 from . import studio_canvas
 from .spatial_editing import duplicate_spatial_item, update_spatial_properties
 
@@ -1655,12 +1656,19 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._studio_room_var = tk.StringVar(value="Select a room")
         self._studio_devices_var = tk.StringVar(value="No devices")
         self._studio_search_var = tk.StringVar()
+        self._studio_device_layers = {
+            category: tk.BooleanVar(value=True)
+            for category in ("air", "opening", "other")
+        }
         self._navigator_item_to_room: dict[int, str] = {}
+        self._navigator_item_to_device: dict[int, str] = {}
+        self._navigator_hover_target: tuple[str, str] | None = None
         self._navigator_scroll = 0
         self._studio_active = False
         self._studio_hover_action = None
         self._studio_action_styles = {}
         self._studio_saved_menu = None
+        self._studio_schedule: DeviceScheduleWindow | None = None
         self._toolbar_layout_keys = {}
         self._studio_more_tools = tk.BooleanVar(value=False)
         self._interior_3d = tk.BooleanVar(value=True)
@@ -1751,6 +1759,11 @@ class SpatialDesignWorkspace(ttk.Frame):
             style="CX.Ghost.TButton",
         )
         self._studio_find_button.pack(side="right", padx=2)
+        self._studio_schedule_button = ttk.Button(
+            commandbar, text="Device schedule", command=self.open_device_schedule,
+            style="CX.Ghost.TButton",
+        )
+        self._studio_schedule_button.pack(side="right", padx=2)
 
         modebar = ttk.Frame(self, padding=(8, 0, 8, 4))
         modebar.pack(fill="x")
@@ -2017,6 +2030,14 @@ class SpatialDesignWorkspace(ttk.Frame):
                             ("Air changes", "ACH"), ("Airflow", "Airflow"), ("Status", "Status")):
             display_menu.add_command(label=label, command=lambda m=mode: self._set_overlay_mode(m))
         display_menu.add_checkbutton(label="X-Ray", variable=self._xray_3d, command=self._draw_3d)
+        display_menu.add_separator()
+        for label, category in (("Air devices", "air"), ("Openings", "opening"),
+                                ("Other equipment", "other")):
+            display_menu.add_checkbutton(
+                label=f"3D + navigator: {label}",
+                variable=self._studio_device_layers[category],
+                command=self._on_studio_device_layers_changed,
+            )
         self._studio_display_button.configure(menu=display_menu)
         for label, delta in (("↺", -15), ("↻", 15)):
             ttk.Button(
@@ -2048,6 +2069,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
         self.navigator_canvas.place(relx=0.015, rely=0.985, anchor="sw")
         self.navigator_canvas.bind("<Button-1>", self._on_navigator_room_click)
+        self.navigator_canvas.bind("<Motion>", self._on_navigator_motion)
+        self.navigator_canvas.bind("<Leave>", self._on_navigator_leave)
         self.navigator_canvas.bind("<Up>", lambda event: self._navigate_studio_room(-1))
         self.navigator_canvas.bind("<Down>", lambda event: self._navigate_studio_room(1))
         self.navigator_canvas.bind("<MouseWheel>", lambda event: self._scroll_room_navigator(-1 if event.delta > 0 else 1))
@@ -2795,6 +2818,17 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.update_idletasks()
         self.fit_views()
 
+    def open_device_schedule(self) -> DeviceScheduleWindow:
+        """Open the live placed-equipment schedule without changing geometry."""
+        window = self._studio_schedule
+        if window is not None and window.winfo_exists():
+            window.refresh_rows()
+            window.lift()
+            window.focus_set()
+            return window
+        self._studio_schedule = DeviceScheduleWindow(self)
+        return self._studio_schedule
+
     def balance_studio_view(self) -> None:
         self.show_all()
         self.layout["view"]["azimuth_deg"] = 35.0
@@ -2877,6 +2911,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         canvas = self.navigator_canvas
         canvas.delete("all")
         self._navigator_item_to_room.clear()
+        self._navigator_item_to_device.clear()
         p = self._theme_palette
         canvas.configure(
             background=p["panel"],
@@ -2913,13 +2948,55 @@ class SpatialDesignWorkspace(ttk.Frame):
             self._navigator_item_to_room[rect_id] = room["id"]
             self._navigator_item_to_room[label_id] = room["id"]
 
+    def toggle_studio_device_layer(self, category: str) -> None:
+        """Toggle one Studio display layer without editing the project."""
+        if category not in self._studio_device_layers:
+            raise ValueError(f"Unknown Studio device layer: {category}")
+        value = self._studio_device_layers[category]
+        value.set(not value.get())
+        self._on_studio_device_layers_changed()
+
+    def _on_studio_device_layers_changed(self) -> None:
+        """Redraw GUI layers only; model geometry and project data stay intact."""
+        self._navigator_hover_target = None
+        self._draw_3d()
+        self._draw_room_navigator()
+
+    def _on_navigator_motion(self, event: tk.Event) -> None:
+        canvas = self.navigator_canvas
+        target = None
+        for item in reversed(canvas.find_overlapping(event.x, event.y, event.x, event.y)):
+            device_id = self._navigator_item_to_device.get(item)
+            if device_id:
+                target = ("device", device_id)
+                break
+            room_id = self._navigator_item_to_room.get(item)
+            if room_id:
+                target = ("room", room_id)
+                break
+        canvas.configure(cursor="hand2" if target else "")
+        if target != self._navigator_hover_target:
+            self._navigator_hover_target = target
+            if self._studio_active:
+                studio_canvas.update_navigator_hint(self)
+
+    def _on_navigator_leave(self, _event: tk.Event | None = None) -> None:
+        self._navigator_hover_target = None
+        self.navigator_canvas.configure(cursor="")
+        if self._studio_active:
+            studio_canvas.update_navigator_hint(self)
+
     def _on_navigator_room_click(self, event: tk.Event) -> None:
         self.navigator_canvas.focus_set()
         for item in reversed(self.navigator_canvas.find_overlapping(event.x, event.y, event.x, event.y)):
+            device_id = self._navigator_item_to_device.get(item)
+            if device_id:
+                self.select_item("device", device_id, notify=True)
+                return
             room_id = self._navigator_item_to_room.get(item)
             if room_id:
                 self.select_item("room", room_id, notify=True)
-                break
+                return
 
     def _scroll_room_navigator(self, delta: int) -> str:
         self._navigator_scroll = max(0, self._navigator_scroll + delta)
@@ -2929,8 +3006,9 @@ class SpatialDesignWorkspace(ttk.Frame):
     def _navigate_studio_room(self, delta: int) -> str:
         rooms = self.layout["rooms"]
         if rooms:
+            selected_room_id = studio_canvas._selected_room_id(self)
             current = next((i for i, r in enumerate(rooms)
-                            if self.selected and r["id"] == self.selected.item_id), -1)
+                            if r["id"] == selected_room_id), -1)
             index = (current + delta) % len(rooms)
             visible = max(1, (int(float(self.navigator_canvas.cget("height"))) - 157) // 27)
             if index < self._navigator_scroll:
@@ -3690,6 +3768,9 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._draw_2d()
         self._draw_3d()
         self._draw_room_navigator()
+        schedule = self._studio_schedule
+        if schedule is not None and schedule.winfo_exists():
+            schedule.refresh_rows()
 
     def _pressure_relationships(
         self,
@@ -4948,6 +5029,11 @@ class SpatialDesignWorkspace(ttk.Frame):
             "focus": self.focus_room, "isolate": self.isolate_room,
             "restore": self.show_all, "fit": self.fit_3d,
             "properties": self.inspect_room,
+            "inspect-device": lambda: self._focus_property("name"),
+            "focus-device": self.fit_selected,
+            "schedule": self.open_device_schedule,
+            **{f"layer-{category}": lambda name=category: self.toggle_studio_device_layer(name)
+               for category in ("air", "opening", "other")},
             **{key: lambda p=key: self.set_3d_view_preset(p)
                for key in ("top", "front", "iso")},
         }

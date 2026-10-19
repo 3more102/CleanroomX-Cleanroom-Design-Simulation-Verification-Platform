@@ -131,3 +131,31 @@ solver execution or merge itself into the default branch.
 - Inline room cards scale to the available viewport height. The optional XYZ
   widget appears when it fits below them; shorter views keep the primary room
   actions visible. Screenshot capture waits for the final native repaint.
+
+## Interactive equipment mini-map
+
+The floating Room Navigator now draws **real equipment and opening coordinates** over the fitted miniature floor plan. Circular markers represent air devices, diamonds represent openings and squares represent other devices. Selecting a marker uses the existing shared device-selection path, so the 3D scene and selected-room context respond together. A selected device receives a ring, and Up/Down navigation advances relative to its assigned room. Off-plan markers are omitted from the tiny navigator to avoid obscuring the room list; these items remain accessible from the actual 2D/3D views and Find. All markers are derived from stored design geometry, **not** solver-computed fields.
+
+Navigator rows also show live per-room device totals alongside the geometric floor area, so edits and reassignments can be checked without opening the Inspector.
+
+## Selected-device inspector
+
+Selecting an FFU, supply/return device, door, transfer opening, or other placed device now changes the right-hand lower Studio card from an aggregate count into a **Selected Device** readout: stored device name, type, room assignment, global X/Y position and Z above the design floor. Its **Inspect** action opens the actual editable Inspector and preserves the device selection. The original Selected Room panel and its Focus/Isolate controls continue to resolve the device's associated room. All values are geometry and configured inputs, not CFD outputs; empty/unknown selections are handled without inventing values.
+
+The navigator footer is also a live hover hint: moving the pointer over a room or device shows its actual configured name and a geometry/type descriptor. Hover is presentation-only and does not modify the selected object or stored project. The pointer changes to a hand only over selectable geometry.
+
+Selected Device also has a **Focus** camera action. It fits the actual selected equipment geometry in the 3D viewport while preserving device selection, unlike the existing room-focused camera action. The adjacent Inspect action opens editable properties.
+
+## View-only equipment layers
+
+Open **Display** in Design Studio to toggle **3D + navigator: Air devices**, **Openings** or **Other equipment** independently. The actual 3D and mini-map device glyphs are shown or hidden together. The room solids, navigation list, editable project/device objects and configured simulation inputs are not changed or deleted. Existing selection is preserved when its visual layer is hidden; toggling it back on restores its glyph. The footer lists enabled device layers, and the selected-device Inspector still shows canonical design facts even when the layer is off. Layer visibility is intentionally per-session UI state rather than an engineering input or a claim about solver visibility.
+
+## Type-specific 3D equipment symbols
+
+The 3D scene now distinguishes model device types with native Tk vectors: an FFU has a three-blade fan icon, supply has a downward arrow in a square, return/exhaust an upward arrow in a square, and other equipment a diamond icon. A selected device has a visible circular halo. These glyphs retain actual model selection hit tags and do not alter coordinates, volume, physical airflow, or simulated results.
+
+The upper-left **Room Composition** header now includes one-click, dynamically counted AIR / OPEN / OTHER category chips. Clicking a chip toggles the matching Display-menu setting in both 3D and the mini-map; disabled chips visually deselect, and the room/device data remain unchanged. Controls hide on compact view heights rather than colliding with room geometry.
+
+## Live engineering device schedule
+
+The **Device schedule** button in the Design Studio toolbar and 3D header opens a real Tk equipment browser. It lists all canonical placed devices with name, type, assigned room, design X/Y and height above the floor, and stable device IDs. Search, room and category filters operate on the stored layout even when the 3D display layer is hidden. Select synchronizes shared spatial selection; Focus reveals a hidden category if needed and fits actual 3D equipment; Inspect opens the editable property panel. Device schedule updates after model redraws and shows current filtered versus total counts. **Export visible CSV** writes exactly the filtered rows and has spreadsheet-formula injection protections for imported textual names. No schedule field should be read as an OpenFOAM result or as measured airflow.

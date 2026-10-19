@@ -10,7 +10,7 @@ import tkinter as tk
 import pytest
 
 from cleanroomx.gui import CleanroomXApp, bundled_demo_project_path
-from cleanroomx.studio_summary import dashboard_snapshot, navigator_rectangles
+from cleanroomx.studio_summary import dashboard_snapshot, device_snapshot, navigator_device_markers, navigator_rectangles
 
 
 def demo_layout() -> dict:
@@ -72,6 +72,39 @@ def test_navigator_preserves_geometry_relative_positions_and_bounds():
     assert navigator_rectangles({"rooms": []}) == []
     assert layout == original
 
+
+
+def test_navigator_device_positions_follow_rooms_and_never_mutate_model():
+    layout = demo_layout()
+    original = copy.deepcopy(layout)
+    markers = navigator_device_markers(
+        layout, width_px=240, height_px=128, padding_px=20, header_px=48,
+    )
+    assert markers
+    by_id = {marker["id"]: marker for marker in markers}
+    assert len(by_id) == len(markers)
+    for marker in markers:
+        assert marker["id"] in {device["id"] for device in layout["devices"]}
+        x, y = marker["point"]
+        assert 20 <= x <= 220
+        assert 48 <= y <= 108
+    # Changing a room's position moves all attached devices only when their
+    # coordinates are changed too; markers are derived from world coordinates.
+    device = next(d for d in layout["devices"] if d["id"] in by_id)
+    original_point = by_id[device["id"]]["point"]
+    device["x_m"] += 0.1
+    moved = {marker["id"]: marker for marker in navigator_device_markers(
+        layout, width_px=240, height_px=128, padding_px=20, header_px=48,
+    )}
+    assert moved[device["id"]]["point"][0] > original_point[0]
+    assert layout["devices"][0]["id"] == original["devices"][0]["id"]
+    assert navigator_device_markers({"rooms": [], "devices": layout["devices"]}) == []
+
+
+def test_navigator_device_markers_reject_degenerate_room_geometry():
+    layout = demo_layout()
+    layout["rooms"][0]["length_m"] = 0
+    assert navigator_device_markers(layout) == []
 
 @pytest.fixture
 def gui(tmp_path):
@@ -190,7 +223,12 @@ def click_tag(canvas, tag):
     items = canvas.find_withtag(tag)
     assert items, f"Missing visible control: {tag}"
     x0, y0, x1, y1 = canvas.bbox(items[-1])
-    x, y = round((x0 + x1) / 2), round((y0 + y1) / 2)
+    # Room miniatures can contain legitimate equipment markers at their centers.
+    # Click an unobstructed room corner to exercise room-selection semantics.
+    if tag.startswith("navigator-room:"):
+        x, y = round(x0 + min(3, (x1 - x0) / 5)), round(y0 + min(3, (y1 - y0) / 5))
+    else:
+        x, y = round((x0 + x1) / 2), round((y0 + y1) / 2)
     canvas.event_generate("<Motion>", x=x, y=y)
     canvas.update()
     canvas.event_generate("<Button-1>", x=x, y=y)
@@ -400,3 +438,314 @@ def test_studio_edit_card_opens_the_actual_room_inspector(gui):
     assert ws.inspector_visible()
     assert ws._property_entries["name"].winfo_ismapped()
     assert ws._property_vars["name"].get() == "Process"
+
+
+def test_studio_minimap_device_selection_and_room_keyboard_context(gui):
+    gui.open_design_studio()
+    gui.root.update()
+    ws = gui.spatial_workspace
+    markers = ws.navigator_canvas.find_withtag("navigator-device")
+    assert markers, "Actual placed devices must appear in the navigator"
+    for room_id, count in (("process", 5), ("preparation", 3), ("ante", 2)):
+        items = ws.navigator_canvas.find_withtag(f"navigator-room-data:{room_id}")
+        assert items
+        assert ws.navigator_canvas.itemcget(items[0], "text").startswith(f"{count} dev")
+    first_device = next(
+        d for d in ws.layout["devices"]
+        if ws.navigator_canvas.find_withtag(f'navigator-device:{d["id"]}')
+        and d.get("room_id") in {room["id"] for room in ws.layout["rooms"]}
+    )
+    device_id, room_id = first_device["id"], first_device["room_id"]
+    click_tag(ws.navigator_canvas, f"navigator-device:{device_id}")
+    assert ws.selected.kind == "device"
+    assert ws.selected.item_id == device_id
+    assert room_id in {room["id"] for room in ws.layout["rooms"]}
+    assert ws.canvas_3d.find_withtag(f"device:{device_id}")
+    assert ws.canvas_3d.find_withtag("studio-room-panel")
+    active_id = next(room["id"] for room in ws.layout["rooms"] if room["id"] == room_id)
+    index = next(i for i, room in enumerate(ws.layout["rooms"]) if room["id"] == active_id)
+    ws._navigate_studio_room(1)
+    assert ws.selected.kind == "room"
+    assert ws.selected.item_id == ws.layout["rooms"][(index + 1) % len(ws.layout["rooms"])]["id"]
+    click_tag(ws.navigator_canvas, f"navigator-room:{room_id}")
+    assert ws.selected.kind == "room"
+    assert ws.selected.item_id == room_id
+
+
+def test_device_layer_category_has_stable_model_type_mapping():
+    from cleanroomx.studio_summary import device_layer_category
+    assert device_layer_category({"type": "FFU"}) == "air"
+    assert device_layer_category({"type": "Exhaust"}) == "air"
+    assert device_layer_category({"type": "window"}) == "opening"
+    assert device_layer_category({"type": "TRANSFER"}) == "opening"
+    assert device_layer_category({"type": "sensor"}) == "other"
+    assert device_layer_category({}) == "other"
+
+
+def test_studio_device_layers_filter_3d_and_navigator_only(gui):
+    gui.open_design_studio()
+    gui.root.update()
+    ws = gui.spatial_workspace
+    original = copy.deepcopy((ws.layout["rooms"], ws.layout["devices"]))
+    assert ws.canvas_3d.find_withtag("device:supply-process")
+    assert ws.navigator_canvas.find_withtag("navigator-device:supply-process")
+    assert ws.canvas_3d.find_withtag("studio-opening")
+    assert ws.select_item("device", "supply-process", notify=True)
+
+    # Display layer visibility is view-local. It must not discard equipment,
+    # modify source metadata or invalidate an existing inspector selection.
+    ws._studio_device_layers["air"].set(False)
+    ws._on_studio_device_layers_changed()
+    assert not ws.canvas_3d.find_withtag("device:supply-process")
+    assert not ws.navigator_canvas.find_withtag("navigator-device:supply-process")
+    assert ws.canvas_3d.find_withtag("device:door-process")
+    assert ws.navigator_canvas.find_withtag("navigator-device:door-process")
+    assert ws.selected.kind == "device" and ws.selected.item_id == "supply-process"
+    assert (ws.layout["rooms"], ws.layout["devices"]) == original
+
+    ws._studio_device_layers["opening"].set(False)
+    ws._on_studio_device_layers_changed()
+    assert not ws.canvas_3d.find_withtag("studio-opening")
+    assert not ws.navigator_canvas.find_withtag("navigator-device:door-process")
+    assert ws.canvas_3d.find_withtag("room:process")
+
+    ws._studio_device_layers["air"].set(True)
+    ws._studio_device_layers["opening"].set(True)
+    ws._on_studio_device_layers_changed()
+    assert ws.canvas_3d.find_withtag("device:supply-process")
+    assert ws.navigator_canvas.find_withtag("navigator-device:door-process")
+    assert (ws.layout["rooms"], ws.layout["devices"]) == original
+
+
+def test_selected_device_model_snapshot_is_live_and_read_only():
+    layout = demo_layout()
+    unchanged = copy.deepcopy(layout)
+    device = device_snapshot(layout, "supply-process")
+    assert device is not None
+    assert device["id"] == "supply-process"
+    assert device["type"] == "supply"
+    assert device["room_id"] == "process"
+    assert device["room_name"] == "Process"
+    assert device["x_m"] == pytest.approx(1.5)
+    assert device["y_m"] == pytest.approx(2.0)
+    assert layout == unchanged
+    assert device_snapshot(layout, "nonexistent-device") is None
+    assert device_snapshot(layout, None) is None
+    layout["devices"][1]["x_m"] += 1
+    assert device_snapshot(layout, "supply-process")["x_m"] == pytest.approx(2.5)
+
+
+def test_studio_device_inspection_card_uses_shared_selection(gui):
+    gui.open_design_studio()
+    gui.root.update()
+    ws = gui.spatial_workspace
+    assert ws.select_item("device", "supply-process", notify=True)
+    gui.root.update()
+    canvas = ws.canvas_3d
+    selected_name = canvas.find_withtag("studio-selected-device-name")
+    position = canvas.find_withtag("studio-selected-device-position")
+    assert selected_name and position
+    assert canvas.itemcget(selected_name[0], "text") == "supply-process" or (
+        "supply" in canvas.itemcget(selected_name[0], "text").lower()
+    )
+    assert "X 1.5 m" in canvas.itemcget(position[0], "text")
+    assert "Y 2 m" in canvas.itemcget(position[0], "text")
+    before_zoom = ws.layout["view"]["zoom_3d"]
+    click_tag(canvas, "studio-action:focus-device")
+    assert ws.selected.kind == "device"
+    assert ws.selected.item_id == "supply-process"
+    assert ws.layout["view"]["zoom_3d"] > before_zoom
+    click_tag(canvas, "studio-action:inspect-device")
+    gui.root.update()
+    assert ws.selected.kind == "device"
+    assert ws.selected.item_id == "supply-process"
+    assert ws.inspector_visible()
+    assert ws._property_entries["name"].winfo_ismapped()
+    assert ws._property_vars["name"].get() == (
+        next(d["name"] for d in ws.layout["devices"] if d["id"] == "supply-process")
+    )
+
+
+def test_studio_navigator_device_and_room_hover_reveals_real_names(gui):
+    gui.open_design_studio()
+    gui.root.update()
+    ws = gui.spatial_workspace
+    canvas = ws.navigator_canvas
+    device_id = "supply-process"
+    items = canvas.find_withtag(f"navigator-device:{device_id}")
+    assert items
+    x0, y0, x1, y1 = canvas.bbox(items[-1])
+    canvas.event_generate("<Motion>", x=round((x0 + x1) / 2), y=round((y0 + y1) / 2))
+    gui.root.update()
+    hint = canvas.find_withtag("navigator-hint")
+    assert hint
+    assert "Process Supply" in canvas.itemcget(hint[0], "text")
+    assert canvas.cget("cursor") == "hand2"
+    assert ws.selected.kind == "room", "Hover alone must not select equipment"
+    canvas.event_generate("<Leave>")
+    gui.root.update()
+    assert "Air" in canvas.itemcget(canvas.find_withtag("navigator-hint")[0], "text")
+    assert canvas.cget("cursor") == ""
+
+
+def test_studio_3d_uses_real_device_type_glyphs(gui):
+    gui.open_design_studio()
+    gui.root.update()
+    ws = gui.spatial_workspace
+    canvas = ws.canvas_3d
+    for kind, device_id in (("ffu", "ffu-process"),
+                            ("supply", "supply-process"),
+                            ("return", "return-process"),
+                            ("equipment", "equipment-process")):
+        assert canvas.find_withtag(f"studio-device-glyph:{kind}")
+        assert canvas.find_withtag(f"device:{device_id}")
+    assert ws.select_item("device", "ffu-process", notify=True)
+    assert canvas.find_withtag("studio-device-selected")
+    assert canvas.find_withtag("studio-device-glyph:ffu")
+    assert canvas.find_withtag("studio-floor")
+
+
+def test_studio_3d_layer_chips_toggle_graphics_not_model(gui):
+    gui.open_design_studio()
+    gui.root.update()
+    ws = gui.spatial_workspace
+    canvas = ws.canvas_3d
+    before = copy.deepcopy((ws.layout["rooms"], ws.layout["devices"]))
+    assert canvas.find_withtag("studio-action:layer-air")
+    assert canvas.find_withtag("studio-action:layer-opening")
+    assert canvas.find_withtag("studio-action:layer-other")
+    assert ws._studio_device_layers["air"].get()
+    click_tag(canvas, "studio-action:layer-air")
+    assert not ws._studio_device_layers["air"].get()
+    assert not canvas.find_withtag("device:supply-process")
+    assert canvas.find_withtag("device:door-process")
+    assert ws.navigator_canvas.find_withtag("navigator-device:door-process")
+    assert (ws.layout["rooms"], ws.layout["devices"]) == before
+    click_tag(canvas, "studio-action:layer-air")
+    assert ws._studio_device_layers["air"].get()
+    assert canvas.find_withtag("device:supply-process")
+    assert (ws.layout["rooms"], ws.layout["devices"]) == before
+
+
+
+def test_device_schedule_search_filter_and_geometry_are_read_only():
+    from cleanroomx.studio_device_schedule import equipment_schedule_rows
+    layout = demo_layout()
+    unchanged = copy.deepcopy(layout)
+    all_rows = equipment_schedule_rows(layout)
+    assert len(all_rows) == 10
+    assert len({r["id"] for r in all_rows}) == 10
+    assert len(equipment_schedule_rows(layout, category="air")) == 5
+    assert len(equipment_schedule_rows(layout, category="opening")) == 4
+    assert len(equipment_schedule_rows(layout, category="other")) == 1
+    assert len(equipment_schedule_rows(layout, room_id="process")) == 5
+    filtered = equipment_schedule_rows(layout, query="supply", room_id="process")
+    assert [r["id"] for r in filtered] == ["supply-process"]
+    assert filtered[0]["x_m"] == pytest.approx(1.5)
+    assert filtered[0]["y_m"] == pytest.approx(2.0)
+    assert filtered[0]["z_offset_m"] == pytest.approx(3.0)
+    assert equipment_schedule_rows(layout, query="unknown-room-id") == []
+    with pytest.raises(ValueError, match="Unsupported device category"):
+        equipment_schedule_rows(layout, category="fake")
+    assert layout == unchanged
+
+
+def test_equipment_schedule_csv_exports_only_filtered_source_and_escapes_formulas(tmp_path):
+    import csv
+    from cleanroomx.studio_device_schedule import (
+        equipment_schedule_rows, export_equipment_schedule,
+    )
+    layout = demo_layout()
+    layout["devices"][1]["name"] = "=HYPERLINK(\"http://unsafe.test\")"
+    rows = equipment_schedule_rows(layout, category="air", room_id="process")
+    output = tmp_path / "visible_equipment.csv"
+    export_equipment_schedule(output, rows)
+    with output.open(newline="", encoding="utf-8-sig") as handle:
+        result = list(csv.reader(handle))
+    assert len(result) == 4  # One header, three air devices in Process
+    assert result[0][0:3] == ["Device ID", "Name", "Type"]
+    exported_name = next(item[1] for item in result[1:] if item[0] == "supply-process")
+    assert exported_name.startswith("'=HYPERLINK")
+    assert all(item[4] == "Process" for item in result[1:])
+    assert layout["devices"][1]["name"].startswith("=")
+
+
+def test_live_device_schedule_select_focus_export_and_reveal(gui, tmp_path, monkeypatch):
+    from cleanroomx.studio_device_schedule import export_equipment_schedule
+    gui.open_design_studio()
+    gui.root.update()
+    ws = gui.spatial_workspace
+    schedule = ws.open_device_schedule()
+    gui.root.update()
+    assert schedule.winfo_exists()
+    assert ws.open_device_schedule() is schedule
+    assert len(schedule.table.get_children()) == 10
+
+    schedule._query_var.set("supply")
+    schedule.refresh_rows()
+    assert len(schedule.table.get_children()) == 2
+    schedule._query_var.set("this-device-does-not-exist")
+    schedule.refresh_rows()
+    assert schedule.table.get_children() == ()
+    assert "0 of 10" in schedule._status_var.get()
+    schedule._query_var.set("")
+    schedule._category_var.set("Air devices")
+    schedule.refresh_rows()
+    assert len(schedule.table.get_children()) == 5
+    schedule._category_var.set("All equipment")
+    schedule.refresh_rows()
+    schedule.sort_by("x")
+    numeric_x = [float(schedule.table.set(iid, "x")) for iid in schedule.table.get_children()]
+    assert numeric_x == sorted(numeric_x)
+    schedule.sort_by("x")
+    reverse_x = [float(schedule.table.set(iid, "x")) for iid in schedule.table.get_children()]
+    assert reverse_x == sorted(reverse_x, reverse=True)
+    schedule.sort_by("room")
+
+    row_id = next(
+        iid for iid in schedule.table.get_children()
+        if schedule._row_ids[iid] == "supply-process"
+    )
+    schedule.table.selection_set(row_id)
+    assert schedule.select_current()
+    assert ws.selected.kind == "device"
+    assert ws.selected.item_id == "supply-process"
+    assert "Device schedule" in schedule.title()
+
+    # CSV output is explicitly user-directed and covers the displayed rows.
+    output = tmp_path / "schedule.csv"
+    monkeypatch.setattr(
+        "cleanroomx.studio_device_schedule.filedialog.asksaveasfilename",
+        lambda **_kwargs: str(output),
+    )
+    schedule.export_current()
+    assert output.read_text(encoding="utf-8-sig").count("supply-process") == 1
+
+    ws._studio_device_layers["air"].set(False)
+    ws._on_studio_device_layers_changed()
+    assert not ws.canvas_3d.find_withtag("device:supply-process")
+    before_zoom = ws.layout["view"]["zoom_3d"]
+    assert schedule.focus_current()
+    assert ws._studio_device_layers["air"].get()
+    assert ws.canvas_3d.find_withtag("device:supply-process")
+    assert ws.layout["view"]["zoom_3d"] >= before_zoom
+    assert not schedule.winfo_exists()
+    assert ws.selected.item_id == "supply-process"
+
+    again = ws.open_device_schedule()
+    assert again.winfo_exists()
+    assert len(again.table.get_children()) == 10
+    again.destroy()
+
+
+def test_device_schedule_auto_refreshes_on_model_redraw(gui):
+    gui.open_design_studio()
+    gui.root.update()
+    ws = gui.spatial_workspace
+    schedule = ws.open_device_schedule()
+    assert len(schedule.table.get_children()) == 10
+    ws.layout["devices"].pop()
+    ws.redraw()
+    assert len(schedule.table.get_children()) == 9
+    assert "9 of 9" in schedule._status_var.get()
+    schedule.destroy()

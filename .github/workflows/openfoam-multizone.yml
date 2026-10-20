@@ -6,6 +6,7 @@ on:
       - "src/cleanroomx/cfd_*.py"
       - "src/cleanroomx/gui.py"
       - "tests/test_cfd_multizone*.py"
+      - "scripts/with_openfoam10.sh"
       - ".github/workflows/openfoam-multizone.yml"
   workflow_dispatch:
 
@@ -37,6 +38,5 @@ jobs:
           CLEANROOMX_REQUIRE_OPENFOAM: "1"
           CLEANROOMX_CFD_EVIDENCE_DIR: ${{ runner.temp }}/cleanroomx-multizone-evidence
         run: |
-          source /opt/openfoam10/etc/bashrc
-          xvfb-run -a python -m pytest -q tests/test_cfd_multizone_execution.py -ra
-          cleanroomx-cfd-pipeline multizone-analyze "$CLEANROOMX_CFD_EVIDENCE_DIR/case" --density-kg-m3 1.2 --reference-room-id corridor --report-directory "$CLEANROOMX_CFD_EVIDENCE_DIR/report"
+          bash scripts/with_openfoam10.sh xvfb-run -a python -m pytest -q tests/test_cfd_multizone_execution.py -ra
+          bash scripts/with_openfoam10.sh cleanroomx-cfd-pipeline multizone-analyze "$CLEANROOMX_CFD_EVIDENCE_DIR/case" --density-kg-m3 1.2 --reference-room-id corridor --report-directory "$CLEANROOMX_CFD_EVIDENCE_DIR/report"

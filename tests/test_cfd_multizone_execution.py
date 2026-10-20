@@ -275,6 +275,7 @@ def test_real_solver_computed_fields_feed_true_vtk_3d(computed_report):
     from cleanroomx.cfd_multizone_vtk import (
         computed_field_polydata, sampled_velocity_glyph_actor,
         build_multizone_vtk_renderer, select_recorded_cells,
+        seed_streamline_from_displayed_point,
     )
     actual=computed_report
     points=computed_field_polydata(actual)
@@ -308,3 +309,11 @@ def test_real_solver_computed_fields_feed_true_vtk_3d(computed_report):
     arrows=sampled_velocity_glyph_actor(actual,max_arrows=60)
     arrows.GetMapper().Update()
     assert arrows.GetMapper().GetInput().GetNumberOfPoints()>0
+    # The real 3D selection can seed only a recorded cell, preserving source receipt.
+    picked=seed_streamline_from_displayed_point(
+        actual,[],0,room_id=seed["room_id"],plane_axis="z",
+        plane_position_m=axis_position,max_integration_s=1.)
+    assert picked["points"][0]["xyz_m"]==selected[0]["center_m"]
+    assert picked["source_iteration"]==actual["time_name"]
+    assert picked["source_run_receipt_sha256"]==actual["provenance"]["run_receipt_sha256"]
+    assert not picked["validated_particle_tracking"]

@@ -26,6 +26,11 @@ from cleanroomx.cfd_multizone_stability import (
 )
 from cleanroomx.cfd_streamlines import ComputedVelocityGrid, trace_computed_streamline
 from cleanroomx.gui import bundled_demo_project_path
+from cleanroomx.cfd_closed_door_comparison import (
+    compare_closed_network_with_open_cfd,write_closed_door_scenario_template,
+    load_closed_door_network_scenario,export_closed_door_comparison,
+)
+
 
 
 def _require_runtime():
@@ -431,3 +436,66 @@ def test_true_openfoam_fields_produce_noncertifying_design_pressure_review(compu
         assert door["computed_reverse_m3_s"]==pytest.approx(source["computed_reverse_m3_s"])
     assert all(door["target_delta_pa"]==5. for door in review["doors"])
     assert "OPEN_DOOR_SCENARIO" in {item["code"] for item in review["reasons"]}
+
+
+def _explicit_hypothetical_closed_door_network(computed_report):
+    """Unit contract only, NOT sourced project leakage or an OpenFOAM execution."""
+    from cleanroomx.pressure_network import (
+        PressureNode,PressurePath,PressureTarget,RoomPressureNetwork,
+    )
+    report=computed_report
+    reference=report["pressure_reference"]["room_id"]
+    nodes=tuple(PressureNode(
+        name=rid,supply_m3_h=0.,return_m3_h=0.,exhaust_m3_h=0.,
+        fixed_pressure_pa=0. if rid==reference else None
+    ) for rid in sorted(report["rooms"]))
+    paths=tuple(PressurePath(
+        name=name,start_node=door["from_room"],end_node=door["to_room"],
+        kind="door",model="power_law",coefficient_m3_s_pa_n=.01,exponent=.65
+    ) for name,door in sorted(report["doors"].items()))
+    targets=tuple(PressureTarget(
+        name="Nominal "+name,high_node=door["from_room"],
+        low_node=door["to_room"],
+        minimum_delta_pa=door["design_delta_pressure_target_pa"]
+    ) for name,door in sorted(report["doors"].items()))
+    evidence={name:{"basis":"engineering_assumption",
+                    "reference":"SYNTHETIC contract test coefficient only, not measured"}
+              for name in report["doors"]}
+    return RoomPressureNetwork(
+        name="Synthetic closed-door data mapping test",nodes=nodes,
+        paths=paths,targets=targets),evidence
+
+
+def test_real_openfoam_room_inventory_maps_to_explicit_closed_leakage_network(
+    computed_report,tmp_path
+):
+    """Real OpenFOAM cell/door identities vs deliberately SYNTHETIC network.
+
+    The zeros and coefficients used here are test-only values, not real
+    project leakage evidence; model does NOT certify any 5 Pa performance.
+    """
+    source=computed_report
+    template=tmp_path/"closed-input-template.json"
+    write_closed_door_scenario_template(source,template)
+    payload=json.loads(template.read_text())
+    assert {node["name"] for node in payload["network"]["nodes"]}==set(source["rooms"])
+    assert {path["name"] for path in payload["network"]["paths"]}==set(source["doors"])
+    assert all(p["coefficient_m3_s_pa_n"] is None for p in payload["network"]["paths"])
+    with pytest.raises(ValueError,match="Fill every room"):
+        load_closed_door_network_scenario(template)
+    model,evidence=_explicit_hypothetical_closed_door_network(source)
+    comparison=compare_closed_network_with_open_cfd(source,model,evidence)
+    assert comparison["engineering_release"]=="HOLD"
+    assert not comparison["closed_door_5pa_cfd_demonstrated"]
+    assert len(comparison["door_comparison"])==len(source["doors"])==3
+    assert comparison["open_cfd_provenance"]["run_receipt_sha256"]==(
+        source["provenance"]["run_receipt_sha256"])
+    for door in comparison["door_comparison"]:
+        assert door["open_door_cfd_delta_pa"]==pytest.approx(
+            source["doors"][door["door"]]["computed_delta_pressure_pa"])
+        assert door["closed_door_network_delta_pa"]==pytest.approx(0)
+    out=export_closed_door_comparison(
+        comparison,tmp_path/"two-model-review.json")
+    assert json.loads(out.read_text())["engineering_release"]=="HOLD"
+
+

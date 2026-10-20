@@ -20,6 +20,10 @@ from cleanroomx.cfd_multizone import generate_multizone_open_door_case, run_mult
 from cleanroomx.cfd_multizone_gui import MultizoneCFDWindow, slice_samples
 from cleanroomx.cfd_multizone_results import analyze_multizone_case, export_multizone_report, read_ascii_field
 from cleanroomx.cfd_multizone_review import review_recorded_multizone
+from cleanroomx.cfd_multizone_stability import (
+    analyze_recorded_iteration_history, compare_recorded_iterations,
+    export_recorded_iteration_history,
+)
 from cleanroomx.cfd_streamlines import ComputedVelocityGrid, trace_computed_streamline
 from cleanroomx.gui import bundled_demo_project_path
 
@@ -72,6 +76,31 @@ def test_actual_mesh_solver_outputs_and_provenance(executed_case,computed_report
     for cell in report["cells"]:
         assert len(cell["velocity_m_s"])==3
         assert all(math.isfinite(v) for v in cell["velocity_m_s"])
+
+
+def test_true_openfoam_saved_iteration_history_uses_p_u_and_phi_snapshots(
+    executed_case, computed_report, tmp_path,
+):
+    """Four genuine recorded SIMPLE outputs, never artificial physical times."""
+    history=analyze_recorded_iteration_history(
+        executed_case,density_kg_m3=1.2,reference_room_id="corridor")
+    assert [entry["iteration"] for entry in history["snapshots"]]==["25","50","75","100"]
+    assert history["source_run_receipt_sha256"]==computed_report["provenance"]["run_receipt_sha256"]
+    assert history["source_manifest_sha256"]==computed_report["provenance"]["manifest_sha256"]
+    assert not history["closed_door_5pa_demonstrated"]
+    assert history["engineering_release"]=="HOLD"
+    assert history["latest_solver_reported_convergence"] is computed_report["solver_reported_convergence"]
+    for name,door in computed_report["doors"].items():
+        assert history["snapshots"][-1]["doors"][name]["delta_pa"]==pytest.approx(
+            door["computed_delta_pressure_pa"])
+        assert history["snapshots"][-1]["doors"][name]["net_m3_s"]==pytest.approx(
+            door["computed_net_transfer_m3_s"])
+    assert history["snapshots"][-1]["sum_absolute_cell_imbalance_m3_s"]==pytest.approx(
+        computed_report["flow_balance"]["sum_absolute_cell_imbalance_m3_s"])
+    assert history["snapshots"][-1]["change_from_previous_recorded_iteration"] is not None
+    report_path=export_recorded_iteration_history(history,tmp_path/"iteration-review")
+    assert report_path.is_file()
+    assert "latest_solver_reported_convergence" in report_path.read_text()
 
 
 def test_actual_fluxes_units_reference_and_door_pressure(computed_report,executed_case):
@@ -182,7 +211,7 @@ def test_timeout_injection_records_failure_without_success_evidence(tmp_path,mon
     assert receipt["outputs"]=={}
 
 
-def test_actual_gui_displays_recorded_fields_vectors_and_residuals(computed_report):
+def test_actual_gui_displays_recorded_fields_vectors_and_residuals(computed_report,executed_case):
     try:
         root=tk.Tk()
     except tk.TclError as exc:
@@ -202,6 +231,18 @@ def test_actual_gui_displays_recorded_fields_vectors_and_residuals(computed_repo
         assert len(window.engineering_table.get_children())==3
         assert "5 Pa CLOSED-DOOR PERFORMANCE NOT DEMONSTRATED" in window.engineering_verdict.get()
         assert "OPEN_DOOR_SCENARIO" in window.engineering_text.get("1.0","end")
+        earlier=analyze_multizone_case(
+            executed_case,density_kg_m3=1.2,reference_room_id="corridor",
+            time_name="25")
+        history=compare_recorded_iterations([earlier,computed_report])
+        window.load_iteration_history(history)
+        root.update()
+        assert len(window.history_table.get_children())==2
+        assert len(window.history_pressure_canvas.find_withtag("computed-iteration-point"))==6
+        assert len(window.history_balance_canvas.find_withtag("computed-iteration-point"))==2
+        assert len(window.history_pressure_canvas.find_withtag("snapshot-visual-guide"))==3
+        assert "ENGINEERING HOLD" in window.history_status.get()
+        assert "NOT physical time" in history["interpretation"]
         assert len(window.pressure_canvas.find_withtag("computed-pressure"))==4
         window.tabs.select(1)
         root.update()

@@ -188,7 +188,7 @@ def test_3d_point_seed_comes_from_displayed_recorded_cell_only():
             report,[],2,plane_axis="x",plane_position_m=1.5)
     with pytest.raises(ValueError,match="integer"):
         seed_streamline_from_displayed_point(report,[],True)
-    with pytest.raises(ValueError,match="at most 20"):
+    with pytest.raises(ValueError,match="At most 20"):
         seed_streamline_from_displayed_point(report,[trace]*20,0)
     tampered=copy.deepcopy(trace)
     tampered["source_iteration"]="stale"

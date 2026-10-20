@@ -17,6 +17,9 @@ from .cfd_closed_door_comparison import (
     load_closed_door_network_scenario, compare_closed_network_with_open_cfd,
     export_closed_door_comparison, write_closed_door_scenario_template,
 )
+from .cfd_closed_door_sensitivity import (
+    sweep_closed_door_leakage, export_closed_door_sensitivity,
+)
 from .cfd_multizone_stability import (
     SCHEMA as HISTORY_SCHEMA, analyze_recorded_iteration_history,
     export_recorded_iteration_history,
@@ -45,6 +48,10 @@ class MultizoneCFDWindow(tk.Toplevel):
         self.engineering_review = None
         self.iteration_history = None
         self.closed_door_comparison = None
+        self.closed_door_model = None
+        self.closed_door_evidence = None
+        self.closed_door_scenario_sha = None
+        self.closed_door_sensitivity = None
         self.running = False
         self.events = queue.Queue()
         self.case_path = tk.StringVar(value=str(directory or ""))
@@ -183,6 +190,10 @@ class MultizoneCFDWindow(tk.Toplevel):
                    command=self.create_closed_door_input_template).pack(side="right",padx=5)
         ttk.Button(closed_head,text="Export comparison JSON",
                    command=self.export_closed_door_comparison_file).pack(side="right",padx=5)
+        ttk.Button(closed_head,text="Illustrative leakage sweep",
+                   command=self.run_closed_leakage_sensitivity).pack(side="right",padx=5)
+        ttk.Button(closed_head,text="Export sweep JSON",
+                   command=self.export_closed_leakage_sensitivity_file).pack(side="right",padx=5)
         ttk.Label(closed_tab,text="This comparison uses the existing room-pressure network solver, NOT a second CFD run. Enter measured/manufacturer/explicit engineering-assumption leakage coefficients and independent supply/return values in JSON. It never certifies 5 Pa.",wraplength=1100).pack(anchor="w",pady=8)
         self.closed_door_table=ttk.Treeview(
             closed_tab,columns=("door","target","open_p","network_p","difference",
@@ -197,6 +208,18 @@ class MultizoneCFDWindow(tk.Toplevel):
             self.closed_door_table.heading(key,text=label)
             self.closed_door_table.column(key,width=145,minwidth=75)
         self.closed_door_table.pack(fill="x",pady=8)
+        ttk.Label(closed_tab,text="Illustrative sensitivity only: simultaneous 0.5× / 1× / 2× leakage coefficients; NOT a confidence interval.",
+                  wraplength=1080).pack(anchor="w")
+        self.closed_sweep_table=ttk.Treeview(
+            closed_tab,columns=("factor","door","delta","nominal"),
+            show="headings",height=4)
+        for key,label in (
+            ("factor","Hypothetical scale"),("door","Door"),
+            ("delta","Network Δp (Pa)"),("nominal","Nominal target"),
+        ):
+            self.closed_sweep_table.heading(key,text=label)
+            self.closed_sweep_table.column(key,width=180,minwidth=95)
+        self.closed_sweep_table.pack(fill="x",pady=(4,8))
         self.closed_door_details=tk.Text(
             closed_tab,wrap="word",font=("TkFixedFont",10),height=14)
         self.closed_door_details.pack(fill="both",expand=True)
@@ -355,6 +378,11 @@ class MultizoneCFDWindow(tk.Toplevel):
         self.engineering_review = None
         self.iteration_history = None
         self.closed_door_comparison = None
+        self.closed_door_model = None
+        self.closed_door_evidence = None
+        self.closed_door_scenario_sha = None
+        self.closed_door_sensitivity = None
+        self.closed_sweep_table.delete(*self.closed_sweep_table.get_children())
         self.closed_door_status.set("Engineering HOLD | Closed leakage scenario not loaded")
         self.closed_door_table.delete(*self.closed_door_table.get_children())
         self.closed_door_details.delete("1.0","end")
@@ -613,6 +641,9 @@ class MultizoneCFDWindow(tk.Toplevel):
             comparison=compare_closed_network_with_open_cfd(
                 self.report,model,evidence,scenario_sha256=sha)
             self.load_closed_door_comparison(comparison)
+            self.closed_door_model=model
+            self.closed_door_evidence=evidence
+            self.closed_door_scenario_sha=sha
         except (ValueError,RuntimeError,OSError) as exc:
             self.closed_door_status.set(f"Closed-door comparison rejected: {exc}")
             messagebox.showerror("Closed-door leakage scenario rejected",str(exc),parent=self)
@@ -625,6 +656,8 @@ class MultizoneCFDWindow(tk.Toplevel):
              self.report["provenance"]["run_receipt_sha256"])):
             raise ValueError("Closed-door comparison is invalid or from another CFD run")
         self.closed_door_comparison=comparison
+        self.closed_door_sensitivity=None
+        self.closed_sweep_table.delete(*self.closed_sweep_table.get_children())
         self.closed_door_table.delete(*self.closed_door_table.get_children())
         for d in comparison["door_comparison"]:
             self.closed_door_table.insert("","end",values=(
@@ -664,6 +697,50 @@ class MultizoneCFDWindow(tk.Toplevel):
             "ENGINEERING HOLD | compared recorded OPEN-door CFD with independently "
             "specified CLOSED-door leakage NETWORK; NOT closed-door CFD")
         self.tabs.select(self.tabs.index("end")-1)
+
+    def run_closed_leakage_sensitivity(self):
+        """Parametric NETWORK-only scenario, never a statistical uncertainty bound."""
+        if (not self.report or not self.closed_door_model or
+            not self.closed_door_evidence or self.running):
+            self.closed_door_status.set(
+                "Load a complete independently sourced closed-door leakage scenario first.")
+            return
+        try:
+            sweep=sweep_closed_door_leakage(
+                self.report,self.closed_door_model,self.closed_door_evidence,
+                factors=(0.5,1.,2.),scenario_sha256=self.closed_door_scenario_sha)
+        except (ValueError,RuntimeError) as exc:
+            self.closed_door_sensitivity=None
+            self.closed_door_status.set(f"Leakage sweep rejected: {exc}")
+            return
+        self.closed_door_sensitivity=sweep
+        self.closed_sweep_table.delete(*self.closed_sweep_table.get_children())
+        for scenario in sweep["factor_results"]:
+            for door in scenario["door_results"]:
+                self.closed_sweep_table.insert("","end",values=(
+                    f"{scenario['leakage_multiplier']:g}×",
+                    door["door"],
+                    f"{door['computed_closed_network_delta_pa']:.5g}",
+                    "model yes" if door["nominal_target_met"] else "model no"))
+        self.closed_door_status.set(
+            "ENGINEERING HOLD | Hypothetical leakage sensitivity 0.5×/1×/2×. "
+            "Not measured uncertainty, CFD or proof of 5 Pa.")
+
+    def export_closed_leakage_sensitivity_file(self):
+        if self.closed_door_sensitivity is None or self.running:
+            self.closed_door_status.set("Run illustrative sensitivity before export.")
+            return
+        path=filedialog.asksaveasfilename(
+            parent=self,title="Export hypothetical closed-door leakage sensitivity",
+            defaultextension=".json",filetypes=(("JSON","*.json"),))
+        if not path:
+            return
+        try:
+            saved=export_closed_door_sensitivity(self.closed_door_sensitivity,path)
+        except (ValueError,OSError) as exc:
+            self.closed_door_status.set(f"Sensitivity export rejected: {exc}")
+            return
+        self.closed_door_status.set(f"ENGINEERING HOLD | Hypothetical scenarios saved: {saved}")
 
     def export_closed_door_comparison_file(self):
         if not self.closed_door_comparison or self.running:

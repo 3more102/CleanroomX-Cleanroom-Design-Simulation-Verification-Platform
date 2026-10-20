@@ -16,6 +16,7 @@ import re
 import shutil
 
 from .cfd_multizone import MAX_BLOCKS, verify_multizone_inputs
+from .cfd_multizone_review import review_recorded_multizone
 
 NUMBER = r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?"
 MAX_BYTES = 32 * 1024 * 1024
@@ -437,10 +438,14 @@ def export_multizone_report(report: dict, directory: str | Path) -> Path:
     """Export traceable summary, full cell/residual CSV and an HTML dashboard."""
     if report.get("schema") != SCHEMA:
         raise ValueError("Expected computed multizone report")
+    engineering_review=review_recorded_multizone(report)
     root = Path(directory)
     root.mkdir(parents=True,exist_ok=False)
     try:
         summary = {key:value for key,value in report.items() if key not in ("cells","residual_history")}
+        (root/"engineering-review.json").write_text(
+            json.dumps(engineering_review,indent=2,sort_keys=True,allow_nan=False)+"\n",
+            encoding="utf-8")
         (root/"report.json").write_text(json.dumps(summary,indent=2,sort_keys=True,allow_nan=False)+"\n",encoding="utf-8")
         with (root/"cells.csv").open("w",newline="",encoding="utf-8") as stream:
             writer=csv.writer(stream)
@@ -464,6 +469,20 @@ def export_multizone_report(report: dict, directory: str | Path) -> Path:
                      f"<td>{r['return_outflow_m3_s']:.6g}</td><td>{r['net_outward_imbalance_m3_s']:.4g}</td></tr>"
                      for r in report["rooms"].values())
         notes="".join(f"<li>{html.escape(item)}</li>" for item in report["limitations"])
+        door_rows=""
+        for item in engineering_review["door_review_by_absolute_mismatch"]:
+            name=html.escape(item["door"])
+            target=item["target_delta_pa"]
+            error=item["delta_minus_target_pa"]
+            target_text="missing" if target is None else f"{target:.6g}"
+            gap_text="not available" if error is None else f"{error:+.6g}"
+            door_rows += (f"<tr><td>{name}</td><td>{target_text}</td>"
+                          f"<td>{item['observed_delta_pa']:.6g}</td><td>{gap_text}</td>"
+                          f"<td>{item['computed_forward_m3_s']*3600:.6g}</td>"
+                          f"<td>{item['computed_reverse_m3_s']*3600:.6g}</td></tr>")
+        review_reasons="".join(
+            f"<li>{html.escape(reason['message'])}</li>"
+            for reason in engineering_review["reasons"])
         numerics=report["numerics"]
         residual_rows=""
         for name,field in numerics["fields"].items():
@@ -483,7 +502,15 @@ def export_multizone_report(report: dict, directory: str | Path) -> Path:
             f'<p>Density: {report["density_kg_m3"]} kg/m³. Pressure relative to computed mean in '
             f'{html.escape(report["pressure_reference"]["room_id"])}.</p>'
             '<table><tr><th>Room</th><th>Pressure (Pa)</th><th>Mean speed (m/s)</th><th>Supply (m³/s)</th><th>Return (m³/s)</th><th>Net imbalance (m³/s)</th></tr>'
-            +rows+'</table><h2>Selected iteration numerical review</h2>'
+            +rows+'</table>'
+            +'<h2>Engineering decision: HOLD — 5 Pa closed-door cascade NOT demonstrated</h2>'
+            +'<p>Per-door pressure differences below describe the selected OPEN-DOOR solver fields; '
+             'no commissioning tolerance or compliance criterion is inferred.</p>'
+            +'<table><tr><th>Door</th><th>Design Δp (Pa)</th><th>Computed Δp (Pa)</th>'
+             '<th>Computed − design (Pa)</th><th>Forward phi (m³/h)</th>'
+             '<th>Reverse phi (m³/h)</th></tr>'
+            +door_rows+'</table><ul>'+review_reasons+'</ul>'
+            +'<h2>Selected iteration numerical review</h2>'
             +f'<p>Full run {run_verdict}. The convergence flag above applies only to the selected field iteration.</p>'
             +'<table><tr><th>Field</th><th>First initial residual</th><th>Last linear final residual</th><th>Configured initial limit</th></tr>'
             +residual_rows+'</table><p>Linear final residuals are distinct from the SIMPLE initial residual criteria.</p>'
@@ -492,7 +519,9 @@ def export_multizone_report(report: dict, directory: str | Path) -> Path:
             +'No flow-balance acceptance tolerance is assumed.</p>'
             +'<h2>Scope and limitations</h2><ul>'+notes+'</ul>'
             +'<p>Input manifest SHA-256: <code>'+html.escape(report['provenance']['manifest_sha256'])+'</code></p>'
-            +'<p>Full provenance and numerical diagnostics: report.json. Computed fields: cells.csv. Full run residuals: residuals.csv. Room face-flux conservation: room-balances.csv.</p></html>',
+            +'<p>Full provenance and numerical diagnostics: report.json. Engineering HOLD evidence: '
+             'engineering-review.json. Computed fields: cells.csv. Full run residuals: residuals.csv. '
+             'Room face-flux conservation: room-balances.csv.</p></html>',
             encoding="utf-8")
     except BaseException:
         shutil.rmtree(root)

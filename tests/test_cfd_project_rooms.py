@@ -116,7 +116,7 @@ def test_mesh_boundary_partition_is_complete_and_pressure_not_prescribed():
 @pytest.mark.parametrize("modifier,pattern", [
     (lambda layout: layout["devices"][0].update(x_m=5.8), "off-wall"),
     (lambda layout: layout["devices"][3].update(z_m=2.0), "ceiling"),
-    (lambda layout: layout["devices"][14].update(wall_side="north"), "west wall"),
+    (lambda layout: next(d for d in layout["devices"] if d["id"] == "return-process").update(wall_side="north"), "west wall"),
 ])
 def test_invalid_geometry_is_rejected_during_case_preparation(modifier, pattern):
     layout = _layout()

@@ -116,7 +116,7 @@ def test_mesh_boundary_partition_is_complete_and_pressure_not_prescribed():
 @pytest.mark.parametrize("modifier,pattern", [
     (lambda layout: layout["devices"][0].update(x_m=5.8), "off-wall"),
     (lambda layout: layout["devices"][3].update(z_m=2.0), "ceiling"),
-    (lambda layout: next(d for d in layout["devices"] if d["id"] == "return-process").update(wall_side="north"), "west wall"),
+    (lambda layout: next(d for d in layout["devices"] if d["id"] == "return-process").update(wall_side="north"), "designated north wall"),
 ])
 def test_invalid_geometry_is_rejected_during_case_preparation(modifier, pattern):
     layout = _layout()
@@ -124,6 +124,15 @@ def test_invalid_geometry_is_rejected_during_case_preparation(modifier, pattern)
     modifier(layout)
     with pytest.raises(ValueError, match=pattern):
         _face_layout(room, layout["devices"], layout["rooms"], (24, 24, 12))
+
+
+def test_low_wall_return_cannot_overlap_a_closed_door_even_if_outlet_faces_remain():
+    layout = _layout()
+    prep = next(r for r in layout["rooms"] if r["id"] == "preparation")
+    grille = next(d for d in layout["devices"] if d["id"] == "return-preparation")
+    grille.update(wall_side="west", x_m=prep["x_m"], y_m=2.0)
+    with pytest.raises(ValueError, match="overlaps closed door panel"):
+        _face_layout(prep, layout["devices"], layout["rooms"], (24, 24, 12))
 
 
 def test_explicit_cfd_parameters_cannot_silently_default_physical_inputs(tmp_path):

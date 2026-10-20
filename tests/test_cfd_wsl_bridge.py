@@ -6,6 +6,7 @@ it does not pretend that OpenFOAM executed in WSL.
 from __future__ import annotations
 
 from pathlib import Path
+import os
 import shutil
 import subprocess
 from types import SimpleNamespace
@@ -141,6 +142,8 @@ def test_rejects_nonwindows(repository):
 
 
 def test_bash_entrypoint_syntax_when_bash_is_installed():
+    if os.name=="nt":
+        pytest.skip("Windows bash.exe can be an unconfigured WSL stub; Bash syntax is tested on Linux CI")
     if not shutil.which("bash"):
         pytest.skip("Bash not installed")
     result=subprocess.run(

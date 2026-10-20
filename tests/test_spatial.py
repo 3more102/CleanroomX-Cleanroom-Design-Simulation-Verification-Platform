@@ -704,16 +704,19 @@ def test_packaged_gui_demo_contains_explicit_spatial_design():
     project = project_from_dict(payload)
     layout = project.metadata[SPATIAL_METADATA_KEY]
 
-    assert project.active_analysis_id == "verification"
+    assert project.active_analysis_id == "demo-5pa-pressure-network"
     assert layout["floor"]["name"] == "Main Cleanroom Floor"
-    assert [room["analysis_room_name"] for room in layout["rooms"]] == [
+    assert [room.get("analysis_room_name") for room in layout["rooms"]] == [
         "Process",
         "Preparation",
         "Ante",
+        None,  # Reference corridor is not included in cleanroom verification.
     ]
-    assert [room["pressure_pa"] for room in layout["rooms"]] == [30.0, 16.0, 8.0]
+    assert [room["pressure_pa"] for room in layout["rooms"]] == [15.0, 10.0, 5.0, 0.0]
     device_types = {device["type"] for device in layout["devices"]}
-    assert {"door", "supply", "return", "ffu", "equipment", "transfer"} <= device_types
+    assert {"door", "return", "ffu", "equipment"} <= device_types
+    assert sum(d["type"] == "door" for d in layout["devices"]) == 3
+    assert sum(d["type"] == "ffu" for d in layout["devices"]) == 12
 
 
 
@@ -1190,8 +1193,8 @@ def test_pressure_relationship_status_uses_only_supplied_pressure_and_explicit_c
 
     relationships = workspace._pressure_relationships()
     assert [(item[2], item[3], item[4]) for item in relationships] == [
-        (10.0, 14.0, "pass"),
-        (5.0, 8.0, "pass"),
+        (5.0, 5.0, "pass"),
+        (5.0, 5.0, "pass"),
     ]
 
     workspace.layout["rooms"][1]["pressure_pa"] = 25.0

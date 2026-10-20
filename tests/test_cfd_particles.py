@@ -137,3 +137,19 @@ def test_particle_json_provenance_and_no_overwrite(tmp_path):
     stale["source_iteration"]="different"
     with pytest.raises(ValueError,match="share a recorded"):
         export_screening_particles([t,stale],tmp_path/"bad.json")
+
+
+def test_curved_inertial_trajectory_cannot_exit_cell_then_reenter_unseen():
+    # Near the wall, the particle initially moves right but gas moves left.
+    # Both endpoints of a long step may remain in cell 0 even though the
+    # exact-in-time trajectory first crosses the wall. Testing only the
+    # endpoint chord would silently allow false wall penetration.
+    report=_report(air=(-5.,0,0),positions=[0])
+    path=trace_screening_particle(
+        report,(.999,.5,.5),diameter_um=20.,
+        initial_velocity_m_s=(5,0,0),gravity_m_s2=(0,0,0),
+        max_time_s=.01,max_step_s=.05)
+    assert path["termination"]=="fluid_boundary_contact_unresolved"
+    assert len(path["points"])>=1
+    assert all(ComputedVelocityGrid(report).cell_at(p["xyz_m"])
+               is not None for p in path["points"])

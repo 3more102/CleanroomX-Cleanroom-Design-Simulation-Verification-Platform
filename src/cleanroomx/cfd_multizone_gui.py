@@ -15,7 +15,7 @@ from .cfd_streamlines import trace_computed_streamline, export_computed_streamli
 from .cfd_multizone_review import review_recorded_multizone, export_engineering_review
 from .cfd_closed_door_comparison import (
     load_closed_door_network_scenario, compare_closed_network_with_open_cfd,
-    export_closed_door_comparison,
+    export_closed_door_comparison, write_closed_door_scenario_template,
 )
 from .cfd_multizone_stability import (
     SCHEMA as HISTORY_SCHEMA, analyze_recorded_iteration_history,
@@ -179,6 +179,8 @@ class MultizoneCFDWindow(tk.Toplevel):
                   wraplength=760).pack(side="left",fill="x",expand=True)
         ttk.Button(closed_head,text="Load leakage scenario JSON",
                    command=self.import_closed_door_network).pack(side="right",padx=5)
+        ttk.Button(closed_head,text="Create missing-input template",
+                   command=self.create_closed_door_input_template).pack(side="right",padx=5)
         ttk.Button(closed_head,text="Export comparison JSON",
                    command=self.export_closed_door_comparison_file).pack(side="right",padx=5)
         ttk.Label(closed_tab,text="This comparison uses the existing room-pressure network solver, NOT a second CFD run. Enter measured/manufacturer/explicit engineering-assumption leakage coefficients and independent supply/return values in JSON. It never certifies 5 Pa.",wraplength=1100).pack(anchor="w",pady=8)
@@ -576,6 +578,25 @@ class MultizoneCFDWindow(tk.Toplevel):
             c.create_text(12,y,anchor="w",fill="#d9e7f7",text=r["name"])
             c.create_rectangle(min(center,end),y-9,max(center+1,end),y+9,fill="#22c5d6",outline="",tags="computed-pressure")
             c.create_text(width-20,y,anchor="e",fill="#d9e7f7",text=f"{value:.6g} Pa")
+
+    def create_closed_door_input_template(self):
+        """Produce explicit model layout while retaining unknown leakage data."""
+        if not self.report or self.running:
+            self.closed_door_status.set("Import actual open-door CFD fields before creating a template.")
+            return
+        path=filedialog.asksaveasfilename(
+            parent=self,title="Save INCOMPLETE closed-door network input template",
+            defaultextension=".json",filetypes=(("JSON","*.json"),))
+        if not path:
+            return
+        try:
+            saved=write_closed_door_scenario_template(self.report,path)
+        except (OSError,ValueError) as exc:
+            self.closed_door_status.set(f"Closed-door input template rejected: {exc}")
+            return
+        self.closed_door_status.set(
+            f"ENGINEERING HOLD | Incomplete source-linked room/door template: {saved} | "
+            "Fill ALL mechanical flows, leakage coefficients and evidence references.")
 
     def import_closed_door_network(self):
         """Read explicit leakage source JSON; never infer closed leakage from open CFD."""

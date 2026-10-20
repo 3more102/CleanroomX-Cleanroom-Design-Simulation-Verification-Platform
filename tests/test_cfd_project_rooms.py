@@ -70,6 +70,11 @@ def test_all_three_clean_rooms_have_solver_input_receipts_and_opaque_closed_door
             root / f"room_{room_id}/system/controlDict"
         ).read_text()
         assert case["validation"].startswith("NOT EXECUTED")
+        assert boundary["closed_door_mesh_area_m2"] > 0
+        assert all(area > 0 for area in boundary["closed_door_per_leaf_mesh_area_m2"].values())
+        assert all(area > 0 for area in boundary["per_ffu_mesh_area_m2"].values())
+        assert all(area > 0 for area in boundary["per_return_mesh_area_m2"].values())
+        assert "stair-step approximations" in boundary["area_reporting_note"]
     for relative, sha in manifest["files"].items():
         assert hashlib.sha256((root / relative).read_bytes()).hexdigest() == sha
     assert json.loads((root / "manifest.json").read_text()) == manifest

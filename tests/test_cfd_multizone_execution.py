@@ -19,6 +19,7 @@ import pytest
 from cleanroomx.cfd_multizone import generate_multizone_open_door_case, run_multizone_open_door_case
 from cleanroomx.cfd_multizone_gui import MultizoneCFDWindow, slice_samples
 from cleanroomx.cfd_multizone_results import analyze_multizone_case, export_multizone_report, read_ascii_field
+from cleanroomx.cfd_streamlines import ComputedVelocityGrid, trace_computed_streamline
 from cleanroomx.gui import bundled_demo_project_path
 
 
@@ -243,3 +244,22 @@ def test_actual_low_flow_convergence_applies_only_to_its_final_fields(tmp_path):
     assert not earlier["solver_reported_convergence"]
     assert earlier["numerics"]["selected_iteration"]==float(first)
     assert earlier["flow_balance"]["sum_absolute_cell_imbalance_m3_s"]>final["flow_balance"]["sum_absolute_cell_imbalance_m3_s"]
+
+
+def test_real_openfoam_cell_velocity_drives_bounded_3d_streamline(computed_report):
+    """Actual solver fields, not synthetic air velocities or time animation."""
+    report = computed_report
+    seed = report["cells"][len(report["cells"])//2]["center_m"]
+    trace = trace_computed_streamline(report,seed,max_integration_s=2)
+    assert trace["source_manifest_sha256"] == report["provenance"]["manifest_sha256"]
+    assert trace["source_run_receipt_sha256"] == report["provenance"]["run_receipt_sha256"]
+    assert trace["source_iteration"] == report["time_name"]
+    assert not trace["validated_particle_tracking"]
+    assert 1 <= len(trace["points"]) <= 801
+    grid = ComputedVelocityGrid(report)
+    for point in trace["points"]:
+        sample = grid.cell_at(point["xyz_m"])
+        assert sample is not None  # Every retained trace point is in solved fluid.
+        assert point["speed_m_s"] == pytest.approx(math.dist((0,0,0),sample[0]))
+    if len(trace["points"]) > 1:
+        assert trace["points"][-1]["integration_parameter_s"] > 0

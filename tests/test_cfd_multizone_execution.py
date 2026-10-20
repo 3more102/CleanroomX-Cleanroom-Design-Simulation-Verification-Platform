@@ -462,6 +462,17 @@ def test_real_openfoam_drives_one_way_particle_screening(computed_report):
     assert diagnostic["tracks"][0]["start_room_id"]==fluid["room_id"]
     assert diagnostic["tracks"][0]["sample_count"]==len(track["points"])
     assert diagnostic["aggregate"]["sum_polygonal_path_length_m"]>=0
+    from cleanroomx.cfd_particle_ensemble import inject_recorded_particle_ensemble
+    chosen=inject_recorded_particle_ensemble(
+        report,[],count=2,room_id=fluid["room_id"],max_time_s=.03,
+    )
+    assert chosen["engineering_release"]=="HOLD"
+    assert chosen["sampling"]["nonstatistical_geometry_sampling"]
+    assert len(chosen["new_tracks"])==2
+    assert all(p["source_run_receipt_sha256"]==
+               report["provenance"]["run_receipt_sha256"]
+               for p in chosen["new_tracks"])
+    assert chosen["noncertifying_diagnostics"]["number_of_screening_tracks"]==2
 
 
 def test_true_openfoam_fields_produce_noncertifying_design_pressure_review(computed_report):

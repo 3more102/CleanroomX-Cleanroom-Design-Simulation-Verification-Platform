@@ -9,6 +9,10 @@ import pytest
 from cleanroomx.pressure_network import (
     PressureNode, PressurePath, PressureTarget, RoomPressureNetwork,
 )
+from cleanroomx.cfd_closed_door_sensitivity import (
+    SCHEMA as SENSITIVITY_SCHEMA, sweep_closed_door_leakage,
+    export_closed_door_sensitivity,
+)
 from cleanroomx.cfd_closed_door_comparison import (
     RESULT_SCHEMA, SCENARIO_SCHEMA, compare_closed_network_with_open_cfd,
     load_closed_door_network_scenario, export_closed_door_comparison,
@@ -204,3 +208,43 @@ def test_open_cfd_phi_and_network_mechanical_flows_are_independent():
     source["rooms"]["A"]["supply_inflow_m3_s"]=float("nan")
     with pytest.raises(ValueError,match="finite"):
         compare_closed_network_with_open_cfd(source,_network(),_evidence())
+
+
+def test_explicit_leakage_sensitivity_is_numerical_network_only_not_confidence_interval(tmp_path):
+    network=_network(supply=180.)
+    original=asdict(network)
+    sweep=sweep_closed_door_leakage(
+        _open_report(),network,_evidence(),factors=(.5,1.,2.))
+    assert sweep["schema"]==SENSITIVITY_SCHEMA
+    assert sweep["engineering_release"]=="HOLD"
+    assert not sweep["closed_door_cfd_demonstrated"]
+    assert sweep["hypothesis_not_uncertainty_interval"]
+    assert asdict(network)==original  # never mutate base model
+    results=sweep["factor_results"]
+    assert [row["leakage_multiplier"] for row in results]==[.5,1.,2.]
+    assert [row["door_results"][0]["computed_closed_network_delta_pa"]
+            for row in results]==pytest.approx([10.,5.,2.5],abs=1e-6)
+    assert [row["network_nominal_targets_met"] for row in results]==[True,True,False]
+    saved=export_closed_door_sensitivity(sweep,tmp_path/"leakage-sweep.json")
+    assert json.loads(saved.read_text())["source_open_cfd_provenance"]["manifest_sha256"]=="a"*64
+    with pytest.raises(FileExistsError):
+        export_closed_door_sensitivity(sweep,saved)
+    falsified=copy.deepcopy(sweep)
+    falsified["engineering_release"]="PASS"
+    with pytest.raises(ValueError,match="noncertifying"):
+        export_closed_door_sensitivity(falsified,tmp_path/"bad.json")
+
+
+@pytest.mark.parametrize("factors,expected",[
+    ((1.,),"2 to 8"),
+    ((.5,.5,1.),"increase strictly"),
+    ((.5,2.),"baseline"),
+    ((.2,1.,2.),"in [0.25,4.0]"),
+    ((1.,float("nan")),"finite numerical"),
+    ((False,1.),"finite numerical"),
+    ((1.,2.,3.,4.,5.,6.,7.,8.,9.),"2 to 8"),
+])
+def test_closed_leakage_sensitivity_rejects_unsupported_factor_sets(factors,expected):
+    with pytest.raises(ValueError,match=expected.replace("[","\\[").replace("]","\\]")):
+        sweep_closed_door_leakage(
+            _open_report(),_network(),_evidence(),factors=factors)

@@ -42,6 +42,11 @@ def compare_recorded_iterations(reports):
         raise ValueError("The computed room and door inventory is required")
     room_names=tuple(sorted(rooms))
     door_names=tuple(sorted(doors))
+    door_contract={
+        name:(doors[name].get("from_room"),doors[name].get("to_room"),
+              doors[name].get("design_delta_pressure_target_pa"))
+        for name in door_names
+    }
     last_iteration=-math.inf
     snapshots=[]
     for report in reports:
@@ -85,6 +90,9 @@ def compare_recorded_iterations(reports):
         doorway={}
         for name in door_names:
             d=report["doors"][name]
+            if (d.get("from_room"),d.get("to_room"),
+                d.get("design_delta_pressure_target_pa"))!=door_contract[name]:
+                raise ValueError("Door direction or design target changed between saved iterations")
             pressure=_number(d.get("computed_delta_pressure_pa"),"Door Δp")
             net=_number(d.get("computed_net_transfer_m3_s"),"Door phi")
             forward=_number(d.get("computed_forward_m3_s"),"Forward door phi")
@@ -96,6 +104,7 @@ def compare_recorded_iterations(reports):
                                 values[d["to_room"]]["mean_pressure_pa"],rel_tol=1e-8,abs_tol=1e-7)):
                 raise ValueError("Door Δp is inconsistent with recorded room pressures")
             doorway[name]={
+                "target_delta_pa":door_contract[name][2],
                 "delta_pa":pressure,"net_m3_s":net,
                 "forward_m3_s":forward,"reverse_m3_s":reverse,
             }
@@ -105,6 +114,11 @@ def compare_recorded_iterations(reports):
         if min(cell_sum,cell_max)<0:
             raise ValueError("Absolute cell imbalance cannot be negative")
         global_imbalance=_number(report.get("global_net_outward_imbalance_m3_s"),"Global phi imbalance")
+        global_in=_number(flux.get("boundary_inflow_m3_s"),"Computed boundary inflow")
+        global_out=_number(flux.get("boundary_outflow_m3_s"),"Computed boundary outflow")
+        if (min(global_in,global_out)<0 or
+            not math.isclose(global_out-global_in,global_imbalance,rel_tol=1e-8,abs_tol=1e-7)):
+            raise ValueError("Snapshot signed boundary flux is inconsistent with computed global balance")
         snap={
             "iteration":iteration,"solver_reported_convergence":report["solver_reported_convergence"],
             "rooms":values,"doors":doorway,
@@ -130,6 +144,9 @@ def compare_recorded_iterations(reports):
                     for k in door_names),
                 "sum_absolute_cell_imbalance_change_m3_s":
                     cell_sum-before["sum_absolute_cell_imbalance_m3_s"],
+                "doors_with_sign_reversal_since_previous_snapshot":[
+                    name for name in door_names
+                    if (doorway[name]["delta_pa"]*before["doors"][name]["delta_pa"]<0)],
             }
             snap["change_from_previous_recorded_iteration"]=change
         else:
@@ -145,6 +162,11 @@ def compare_recorded_iterations(reports):
         "snapshots":snapshots,"latest_iteration":latest["iteration"],
         "latest_solver_reported_convergence":latest["solver_reported_convergence"],
         "last_saved_snapshot_change":latest["change_from_previous_recorded_iteration"],
+        "door_pressure_direction_changes":[
+            {"iteration":snap["iteration"],"door":name}
+            for snap in snapshots[1:]
+            for name in snap["change_from_previous_recorded_iteration"][
+                "doors_with_sign_reversal_since_previous_snapshot"]],
         "engineering_release":"HOLD",
         "closed_door_5pa_demonstrated":False,
         "interpretation":(

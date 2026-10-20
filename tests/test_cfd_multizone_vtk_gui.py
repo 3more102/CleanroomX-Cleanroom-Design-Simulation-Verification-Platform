@@ -116,6 +116,26 @@ def test_real_tk_vtk_window_opens_and_updates_selected_field_and_glyphs(tmp_path
         assert diagnostics["validated_particle_transport"] is False
         assert len(diagnostic_window._cleanroomx_particle_diagnostics_table.get_children())==1
         assert diagnostics["tracks"][0]["sample_count"]==len(recorded)
+        # Three exact replay runs are computed off the Tk event thread.
+        assert diagnostic_window._cleanroomx_start_refinement()
+        deadline=time.monotonic()+12
+        while (diagnostic_window._cleanroomx_refinement_state["busy"]
+               and time.monotonic()<deadline):
+            root.update()
+            time.sleep(.02)
+        root.update()
+        assert not diagnostic_window._cleanroomx_refinement_state["busy"]
+        refinement=diagnostic_window._cleanroomx_refinement_state["last"]
+        assert refinement["engineering_release"]=="HOLD"
+        assert not refinement["validated_particle_transport"]
+        assert len(refinement["runs"])==3
+        assert any(
+            getattr(child,"_cleanroomx_refinement",None) is refinement
+            for child in diagnostic_window.winfo_children()
+        )
+        diagnostic_window._cleanroomx_refinement_tolerance.set("nan")
+        assert diagnostic_window._cleanroomx_start_refinement() is False
+        assert "Refinement rejected" in diagnostic_window._cleanroomx_refinement_status.get()
         diagnostic_window.destroy()
         window._cleanroomx_particles.clear()
         assert window._cleanroomx_analyze_particle_paths() is None

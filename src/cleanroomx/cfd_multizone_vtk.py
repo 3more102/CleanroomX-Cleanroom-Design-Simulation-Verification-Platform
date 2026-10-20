@@ -498,6 +498,11 @@ def open_multizone_vtk_window(parent, report, traces):
     field_var = tk.StringVar(value="speed")
     arrows_var = tk.BooleanVar(value=True)
     click_seed_var = tk.BooleanVar(value=False)
+    particle_mode_var = tk.BooleanVar(value=False)
+    particle_diameter_var = tk.StringVar(value="5")
+    particle_density_var = tk.StringVar(value="1000")
+    particle_time_var = tk.StringVar(value="2")
+    particles = []
     displayed_selection = {"room_id":"all","plane_axis":"all","plane_position_m":None}
     room_var = tk.StringVar(value="all")
     plane_var = tk.StringVar(value="all")
@@ -544,7 +549,24 @@ def open_multizone_vtk_window(parent, report, traces):
         ttk.Label(selection,text="Coordinate (m):").pack(side="left")
         ttk.Entry(selection,textvariable=plane_position_var,width=12).pack(
             side="left",padx=4)
-        ttk.Label(selection,textvariable=view_status).pack(side="right")
+        particle_controls=ttk.Frame(window,padding=(8,0,8,8))
+        particle_controls.pack(fill="x")
+        ttk.Checkbutton(
+            particle_controls,text="One-way particle screening",variable=particle_mode_var
+        ).pack(side="left",padx=3)
+        ttk.Label(particle_controls,text="Diameter (um):").pack(side="left")
+        ttk.Entry(particle_controls,textvariable=particle_diameter_var,width=6).pack(
+            side="left",padx=4)
+        ttk.Label(particle_controls,text="Particle density (kg/m3):").pack(side="left")
+        ttk.Entry(particle_controls,textvariable=particle_density_var,width=7).pack(
+            side="left",padx=4)
+        ttk.Label(particle_controls,text="Elapsed (s):").pack(side="left")
+        ttk.Entry(particle_controls,textvariable=particle_time_var,width=6).pack(
+            side="left",padx=4)
+        ttk.Label(particle_controls,
+            text="Gold: air streamlines | Green: inertial particle screening").pack(
+            side="right",padx=3)
+        ttk.Label(window,textvariable=view_status).pack(fill="x",padx=8)
         holder=ttk.Frame(window)
         holder.pack(fill="both",expand=True)
 
@@ -565,8 +587,8 @@ def open_multizone_vtk_window(parent, report, traces):
         else:
             mode="native"
             holder.destroy()
-            window.geometry("1050x225")
-            window.minsize(760,200)
+            window.geometry("1090x255")
+            window.minsize(760,235)
             ttk.Label(window,padding=8,
                 text="3D scene opens in a separate native VTK window. Controls remain here.").pack(fill="x")
             render_window.SetSize(1100,760)
@@ -592,7 +614,8 @@ def open_multizone_vtk_window(parent, report, traces):
                 pos=None if axis=="all" else float(plane_position_var.get())
                 new=build_multizone_vtk_renderer(
                     report,traces,field=field_var.get(),vectors=arrows_var.get(),
-                    room_id=room_var.get(),plane_axis=axis,plane_position_m=pos)
+                    room_id=room_var.get(),plane_axis=axis,plane_position_m=pos,
+                    particles=particles)
             except (ValueError,OverflowError) as exc:
                 view_status.set(f"Selection rejected: {exc}")
                 return
@@ -643,23 +666,65 @@ def open_multizone_vtk_window(parent, report, traces):
         ttk.Button(selection,text="Export 3D traces",command=choose_export).pack(
             side="left",padx=5)
 
+        def export_particles(destination):
+            try:
+                saved=export_screening_particles(particles,destination)
+            except (ValueError,OSError) as exc:
+                view_status.set(f"Particle export rejected: {exc}")
+                return False
+            view_status.set(f"Saved {len(particles)} screening particle paths: {saved}")
+            return True
+
+        def choose_particle_export():
+            from tkinter import filedialog
+            destination=filedialog.asksaveasfilename(
+                parent=window,title="Export frozen-field particle screening",
+                defaultextension=".json",filetypes=(("JSON","*.json"),))
+            if destination:
+                export_particles(destination)
+
+        ttk.Button(
+            particle_controls,text="Clear particles",
+            command=lambda: (particles.clear(),refresh_scene())
+        ).pack(side="left",padx=7)
+        ttk.Button(
+            particle_controls,text="Export particle paths",
+            command=choose_particle_export
+        ).pack(side="left",padx=4)
+
         def seed_display_point(x,y):
-            if len(traces)>=MAX_3D_TRACES:
-                view_status.set("Maximum 20 traces; clear 3D traces before adding more")
+            is_particle=particle_mode_var.get()
+            if len(particles if is_particle else traces)>=20:
+                view_status.set("Maximum 20 paths per type; clear before adding more")
                 return False
             try:
                 point_id=pick_recorded_solver_point(
                     window._cleanroomx_vtk_renderer,x,y)
-                trace=seed_streamline_from_displayed_point(
-                    report,traces,point_id,**displayed_selection)
-                traces.append(trace)
+                if is_particle:
+                    particle=seed_particle_from_displayed_point(
+                        report,particles,point_id,**displayed_selection,
+                        diameter_um=float(particle_diameter_var.get()),
+                        particle_density_kg_m3=float(particle_density_var.get()),
+                        max_time_s=float(particle_time_var.get()))
+                    particles.append(particle)
+                else:
+                    trace=seed_streamline_from_displayed_point(
+                        report,traces,point_id,**displayed_selection)
+                    traces.append(trace)
                 refresh_scene()
             except (ValueError,OverflowError) as exc:
                 view_status.set(f"3D seed rejected: {exc}")
                 return False
-            view_status.set(
-                f"Trace {len(traces)}: {len(trace['points'])} computed points, "
-                f"{trace['termination']}; steady streamline, NOT particle tracking")
+            if is_particle:
+                warning=(" | Stokes drag regime warning" if
+                         particle["stokes_regime_warning"] else "")
+                view_status.set(
+                    f"Particle {len(particles)}: {len(particle['points'])} positions, "
+                    f"{particle['termination']}{warning}; FROZEN steady U, NOT certified")
+            else:
+                view_status.set(
+                    f"Air trace {len(traces)}: {len(trace['points'])} computed points, "
+                    f"{trace['termination']}; steady streamline, NOT particle tracking")
             return True
 
         def on_vtk_click(_caller,_event):
@@ -680,6 +745,12 @@ def open_multizone_vtk_window(parent, report, traces):
         window._cleanroomx_plane_position_var=plane_position_var
         window._cleanroomx_view_status=view_status
         window._cleanroomx_click_seed_var=click_seed_var
+        window._cleanroomx_particle_mode_var=particle_mode_var
+        window._cleanroomx_particle_diameter_var=particle_diameter_var
+        window._cleanroomx_particle_density_var=particle_density_var
+        window._cleanroomx_particle_time_var=particle_time_var
+        window._cleanroomx_particles=particles
+        window._cleanroomx_export_particles_to_path=export_particles
         window._cleanroomx_traces=traces
         window._cleanroomx_seed_display_point=seed_display_point
         window._cleanroomx_export_traces_to_path=export_paths

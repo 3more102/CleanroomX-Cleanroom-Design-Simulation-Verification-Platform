@@ -258,3 +258,26 @@ it does **not** reconstruct a continuous volume field between cell centers.
 No certification, cleanroom pressure cascade, particle tracking or convergence
 is inferred from successful display. VTK field / geometry smoke tests are
 included in the dedicated `CFD VTK Regression` workflow.
+
+
+## Actual-cell 3D room and plane selection (20 October 2026)
+
+The native/embedded VTK control panel now offers `Room` (`all` or a room ID
+that exists in the *recorded CFD cells*), `Plane` (`all`, `x`, `y`, `z`),
+`Coordinate (m)` and **Apply room/plane**. Combined selections show exactly
+the solved cell centres belonging to the selected room and layer. At most one
+recorded lattice layer is selected at each plane coordinate, using a strict
+half-voxel criterion; no gaps, inferred intermediate values or interpolation
+are added. The matching velocity-vector glyphs use the same selection.
+The input room outline remains a *design* wireframe. Previously imported 3D
+steady streamline geometry remains visible across a plane selection to show
+its full spatial route, and is not claimed to lie within the plane.
+
+An out-of-range/nonfinite plane, unmodeled room or zero-cell intersection is
+rejected before replacing the existing scene; the operator receives a status
+message rather than a fabricated blank/filled plane. Camera position is retained
+on valid scene changes. Displayed numerical convergence status is taken from the
+recorded selected iteration (not from the VTK renderer). These capabilities
+do not create CFD calculations, pressure control, particle transport or
+validated physical results. Unit tests use expressly artificial sample values,
+and GUI tests exercise the native VTK window under a real Xvfb display.

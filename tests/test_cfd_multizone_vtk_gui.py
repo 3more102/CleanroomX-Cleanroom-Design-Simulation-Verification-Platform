@@ -26,6 +26,8 @@ def test_real_tk_vtk_window_opens_and_updates_selected_field_and_glyphs():
         window = open_multizone_vtk_window(root,report,[trace])
         root.update()
         assert isinstance(window,tk.Toplevel)
+        assert window._cleanroomx_vtk_mode in ("embedded","native")
+        assert window._cleanroomx_vtk_render_window is not None
         assert window._cleanroomx_vtk_renderer.GetActors().GetNumberOfItems() >= 4
         assert window._cleanroomx_field_var.get() == "speed"
         window._cleanroomx_field_var.set("pressure")

@@ -227,3 +227,30 @@ speed, and integration parameter. Stops are explicitly labelled
 unit fixtures in `test_cfd_streamlines.py` test numerical boundary behavior
 only; the separate `test_cfd_multizone_execution.py` checks tracing on
 actual OpenFOAM fields when Foundation v10 is available.
+
+
+## Native interactive VTK 3D review (20 October 2026)
+
+The **Open real VTK 3D** control in the *Computed sections* tab opens
+an interactive window after a successful import of recorded CFD fields.
+Install optional dependencies (`python -m pip install -e ".[cfd]"`) and
+launch the CleanroomX desktop in the graphical Linux environment in which
+the recorded OpenFOAM Foundation v10 case is accessible. Mouse drag rotates,
+scroll zooms, and Shift-drag pans. The 3D window supports:
+- **speed / pressure** live switching. Colored 3D points map actual cell
+  centers and actual recorded `U` magnitude or density-converted pressure
+  relative to the explicitly selected reporting reference.
+- **Display sampled U direction arrows** toggles 3D glyphs derived from
+  solver velocity vectors. Glyph lengths are scaled for readability and are
+  **not** travel distances.
+- **Gold lines** show bounded 3D steady streamlines already seeded from
+  computed cells in the 2D tab. Switching from the 2D projection does not
+  create particle transport or transient timesteps.
+- **Room wireframes** represent input design bounds and are not extracted
+  pressure isosurfaces, approved CAD partitions or certified flow geometry.
+
+The VTK view is a spatial visualization of the recorded solved-cell samples;
+it does **not** reconstruct a continuous volume field between cell centers.
+No certification, cleanroom pressure cascade, particle tracking or convergence
+is inferred from successful display. VTK field / geometry smoke tests are
+included in the dedicated `CFD VTK Regression` workflow.

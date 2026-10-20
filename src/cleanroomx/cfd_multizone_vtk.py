@@ -342,6 +342,9 @@ def open_multizone_vtk_window(parent, report, traces):
         arrows_control.configure(command=refresh_scene)
         window._cleanroomx_vtk_widget = widget
         window._cleanroomx_vtk_renderer = renderer
+        window._cleanroomx_field_var = field_var
+        window._cleanroomx_arrows_var = arrows_var
+        window._cleanroomx_refresh_scene = refresh_scene
     except BaseException:
         window.destroy()
         raise

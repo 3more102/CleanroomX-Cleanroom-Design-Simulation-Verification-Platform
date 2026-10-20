@@ -274,7 +274,7 @@ def test_real_solver_computed_fields_feed_true_vtk_3d(computed_report):
     pytest.importorskip("vtk")
     from cleanroomx.cfd_multizone_vtk import (
         computed_field_polydata, sampled_velocity_glyph_actor,
-        build_multizone_vtk_renderer,
+        build_multizone_vtk_renderer, select_recorded_cells,
     )
     actual=computed_report
     points=computed_field_polydata(actual)
@@ -288,6 +288,23 @@ def test_real_solver_computed_fields_feed_true_vtk_3d(computed_report):
             cell["pressure_pa_relative_to_reference"])
     scene=build_multizone_vtk_renderer(actual,[],field="pressure",vectors=False)
     assert scene.GetActors().GetNumberOfItems()>=6
+    # A genuine OpenFOAM layer imports its existing field values verbatim.
+    seed=actual["cells"][0]
+    axis_position=seed["center_m"][2]
+    selected=select_recorded_cells(
+        actual,room_id=seed["room_id"],plane_axis="z",
+        plane_position_m=axis_position)
+    assert selected
+    assert all(cell["room_id"]==seed["room_id"] for cell in selected)
+    assert all(cell["center_m"][2]==pytest.approx(axis_position) for cell in selected)
+    selected_vtk=computed_field_polydata(
+        actual,room_id=seed["room_id"],plane_axis="z",
+        plane_position_m=axis_position)
+    assert selected_vtk.GetNumberOfPoints()==len(selected)
+    for i in (0,len(selected)//2,len(selected)-1):
+        assert selected_vtk.GetPoint(i)==pytest.approx(selected[i]["center_m"])
+        assert selected_vtk.GetPointData().GetArray(
+            "Computed U (m/s)").GetTuple3(i)==pytest.approx(selected[i]["velocity_m_s"])
     arrows=sampled_velocity_glyph_actor(actual,max_arrows=60)
     arrows.GetMapper().Update()
     assert arrows.GetMapper().GetInput().GetNumberOfPoints()>0

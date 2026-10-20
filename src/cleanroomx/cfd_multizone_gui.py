@@ -11,6 +11,7 @@ from tkinter import filedialog, messagebox, ttk
 
 from .cfd_multizone import run_multizone_open_door_case, verify_multizone_inputs
 from .cfd_multizone_results import analyze_multizone_case, export_multizone_report
+from .cfd_streamlines import trace_computed_streamline
 
 
 def slice_samples(report: dict, axis: str, position_m: float, room: str = "all") -> list:
@@ -43,6 +44,10 @@ class MultizoneCFDWindow(tk.Toplevel):
         self.position = tk.StringVar(value="1.35")
         self.room = tk.StringVar(value="all")
         self.vectors = tk.BooleanVar(value=True)
+        self.trace_paths = []
+        self._section_samples = []
+        self._section_to_pixel = None
+        self.trace_status = tk.StringVar(value="Click a computed fluid cell to trace its steady 3D streamline.")
         self.status = tk.StringVar(value="Select a generated connected case. Enter the actual air density before importing fields.")
         self.active_log = None
         self.log_offset = 0
@@ -113,10 +118,15 @@ class MultizoneCFDWindow(tk.Toplevel):
         ttk.Entry(controls,textvariable=self.position,width=8).pack(side="left",padx=4)
         ttk.Checkbutton(controls,text="Velocity vectors",variable=self.vectors,command=self.draw_section).pack(side="left",padx=4)
         ttk.Button(controls,text="Apply section",command=self.draw_section).pack(side="left",padx=6)
+        traces=ttk.Frame(fields)
+        traces.pack(fill="x",pady=(0,5))
+        ttk.Label(traces,textvariable=self.trace_status,wraplength=750).pack(side="left",fill="x",expand=True)
+        ttk.Button(traces,text="Clear traces",command=self.clear_traces).pack(side="right",padx=4)
         self.section_canvas=tk.Canvas(fields,background="#101b2b",highlightthickness=0)
         self.section_canvas.pack(fill="both",expand=True)
         self.section_canvas.bind("<Configure>",lambda e:self.draw_section())
-        ttk.Label(fields,text="Actual cell values at the selected layer. Arrows show projected computed velocity; no manufactured streamlines or filled gaps.").pack(anchor="w",pady=5)
+        self.section_canvas.bind("<Button-1>",self.seed_streamline_at_click)
+        ttk.Label(fields,text="Cells and arrows: computed layer. Gold paths: projection of 3D steady streamlines, NOT confined to this plane, NOT particle trajectories. Missing fluid voxels stop tracing.",wraplength=1100).pack(anchor="w",pady=5)
         self.numerical_status=tk.StringVar()
         ttk.Label(residuals,textvariable=self.numerical_status,wraplength=1100).pack(anchor="w",pady=(0,6))
         self.residual_table=ttk.Treeview(residuals,columns=("field","initial","final","limit","below"),show="headings",height=4)
@@ -229,6 +239,10 @@ class MultizoneCFDWindow(tk.Toplevel):
                 self.log_text.see("end")
 
     def _clear_results(self):
+        self.trace_paths.clear()
+        self._section_samples = []
+        self._section_to_pixel = None
+        self.trace_status.set("Click a computed fluid cell to trace its steady 3D streamline.")
         for table in (self.room_table,self.door_table,self.residual_table):
             table.delete(*table.get_children())
         self.numerical_status.set("")
@@ -300,9 +314,41 @@ class MultizoneCFDWindow(tk.Toplevel):
             c.create_rectangle(min(center,end),y-9,max(center+1,end),y+9,fill="#22c5d6",outline="",tags="computed-pressure")
             c.create_text(width-20,y,anchor="e",fill="#d9e7f7",text=f"{value:.6g} Pa")
 
+    def clear_traces(self):
+        self.trace_paths.clear()
+        self.trace_status.set("Traces cleared. Click a computed fluid cell to seed another.")
+        self.draw_section()
+
+    def seed_streamline_at_click(self, event):
+        if self.report is None or self._section_to_pixel is None or self.running:
+            return
+        if len(self.trace_paths) >= 20:
+            self.trace_status.set("Maximum 20 displayed traces; clear traces to seed again.")
+            return
+        a,b = self._section_plane_axes
+        ha,hb = self._section_half_size
+        for sample in self._section_samples:
+            px,py = self._section_to_pixel(sample["center_m"][a], sample["center_m"][b])
+            if abs(event.x-px) <= ha*self._section_scale and abs(event.y-py) <= hb*self._section_scale:
+                try:
+                    trace = trace_computed_streamline(self.report,sample["center_m"])
+                except ValueError as exc:
+                    self.trace_status.set(f"Trace rejected: {exc}")
+                    return
+                self.trace_paths.append(trace)
+                self.trace_status.set(
+                    f"3D streamline from {sample['room_id']} at {sample['center_m']} m: "
+                    f"{len(trace['points'])} computed-field points; stop: {trace['termination']}. "
+                    "Projection only; not transient particle motion.")
+                self.draw_section()
+                return
+        self.trace_status.set("Click inside a colored recorded fluid cell to select a valid seed.")
+
     def draw_section(self):
         c=self.section_canvas
         c.delete("all")
+        self._section_samples = []
+        self._section_to_pixel = None
         if not self.report:
             return
         try:
@@ -321,6 +367,11 @@ class MultizoneCFDWindow(tk.Toplevel):
         scale=min((width-100)/(hi[0]-lo[0]),(height-95)/(hi[1]-lo[1]))
         def point(x,y):
             return 45+(x-lo[0])*scale,height-45-(y-lo[1])*scale
+        self._section_samples = samples
+        self._section_plane_axes = (a,b)
+        self._section_half_size = (ha,hb)
+        self._section_scale = scale
+        self._section_to_pixel = point
         values=[s["pressure_pa_relative_to_reference"] if self.field.get().startswith("Pressure") else math.sqrt(sum(v*v for v in s["velocity_m_s"])) for s in samples]
         low,high=min(values),max(values)
         for s,value in zip(samples,values):
@@ -335,6 +386,15 @@ class MultizoneCFDWindow(tk.Toplevel):
                 x,y=point(s["center_m"][a],s["center_m"][b])
                 u,v=s["velocity_m_s"][a],s["velocity_m_s"][b]
                 c.create_line(x,y,x+u*vector_scale,y-v*vector_scale,fill="#102030",arrow="last",tags="computed-vector")
+        for trace in self.trace_paths:
+            xy = []
+            for item in trace["points"]:
+                xy.extend(point(item["xyz_m"][a],item["xyz_m"][b]))
+            if len(xy) >= 4:
+                c.create_line(*xy,fill="#ffe59a",width=2,tags="computed-3d-streamline-projection")
+            elif len(xy) == 2:
+                c.create_oval(xy[0]-3,xy[1]-3,xy[0]+3,xy[1]+3,
+                              fill="#ffe59a",outline="",tags="computed-3d-streamline-projection")
         c.create_text(12,16,anchor="w",fill="white",text=f"{self.field.get()} • {low:.5g} to {high:.5g} • axes {'xyz'[a]}/{'xyz'[b]} (m) • {len(samples)} actual cells")
         c.create_text(12,36,anchor="w",fill="#b6cddd",text="" if self.report["solver_reported_convergence"] else "NOT CONVERGED • provisional numerical fields")
 

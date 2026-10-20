@@ -91,7 +91,9 @@ do not expect the runtime/path-dependent log hashes to repeat.
   streamline*. The gold line is an **XY/XZ/YZ projection of the 3D trace** and
   is NOT restricted to the selected section plane. Switch planes to inspect
   alternative projections. Up to 20 traces can be displayed; **Clear traces**
-  resets them. Seed points always come from actual recorded cell centres.
+  resets them. **Export 3D traces** writes an exclusive-create JSON file with
+  the selected iteration, recorded run/manifest hashes, units and 3D paths.
+  Seed points always come from actual recorded cell centres.
 - Trace integration uses the recorded cell-centred `U` velocity for the
   selected SIMPLE iteration, represented piecewise constantly, and limited-step
   second-order midpoint marching. Each segment checks occupied fluid voxels;

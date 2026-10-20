@@ -6,6 +6,7 @@ from .cfd_openfoam import export_openfoam_cases, run_openfoam_cases
 from .cfd_project_rooms import generate_project_room_cases, run_project_room_cases
 from .cfd_project_audit import audit_project_room_cases
 from .cfd_multizone import generate_multizone_open_door_case, run_multizone_open_door_case
+from .cfd_multizone_results import analyze_multizone_case, export_multizone_report
 from .cfd_vtk import populate_study_from_vtk
 from .cfd_visualization import render_cfd_cross_section
 from .cfd_scalar import prepare_scalar_case, run_scalar_case
@@ -73,6 +74,13 @@ def build_parser():
     multi_run=sub.add_parser("multizone-run",help="Opt-in blockMesh/checkMesh/simpleFoam for the connected case")
     multi_run.add_argument("directory")
     multi_run.add_argument("--timeout-seconds", type=int, default=3600)
+    multi_results=sub.add_parser("multizone-analyze",help="Read recorded p/U/phi and export measured room/door diagnostics")
+    multi_results.add_argument("directory")
+    multi_results.add_argument("--density-kg-m3",required=True,type=float)
+    multi_results.add_argument("--reference-room-id",required=True)
+    multi_results.add_argument("--vertical-tolerance-m-s",type=float,default=.01)
+    multi_results.add_argument("--time",dest="time_name")
+    multi_results.add_argument("--report-directory",help="New report folder containing JSON, cell/residual CSV and HTML")
     importer=sub.add_parser("import-vtk",help="Import real VTK cell data to existing study")
     for cfg in (1,2,3):
         importer.add_argument(f"--case-{cfg}",required=True)
@@ -153,6 +161,16 @@ def main():
         result=run_multizone_open_door_case(args.directory,timeout_seconds=args.timeout_seconds)
         print(dumps_strict_json(result))
         return 0 if result["status"]=="executed_requires_convergence_review" else 2
+    if args.command=="multizone-analyze":
+        result=analyze_multizone_case(
+            args.directory,density_kg_m3=args.density_kg_m3,
+            reference_room_id=args.reference_room_id,
+            vertical_tolerance_m_s=args.vertical_tolerance_m_s,time_name=args.time_name,
+        )
+        if args.report_directory:
+            export_multizone_report(result,args.report_directory)
+        print(dumps_strict_json({k:v for k,v in result.items() if k not in ("cells","residual_history")}))
+        return 0
     if args.command=="project-rooms-audit":
         result=audit_project_room_cases(
             args.directory, fields=args.fields,

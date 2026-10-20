@@ -41,6 +41,8 @@ def _collect_door_regions(room: dict, rooms: list[dict], doors: list[dict]) -> l
     regions = []
     by_id = {r["id"]: r for r in rooms}
     for door in doors:
+        if door.get("door_state", "closed") != "closed":
+            raise ValueError("Independent-room CFD requires closed doors; use the connected open-door exporter")
         owner = by_id.get(door.get("room_id"))
         if owner is None:
             raise ValueError(f"Orphan door: {door.get('id')}")

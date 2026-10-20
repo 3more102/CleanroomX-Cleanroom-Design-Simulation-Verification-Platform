@@ -250,6 +250,9 @@ def validate_spatial_layout_document(value: Any) -> None:
                 )
         if device.get("swing") is not None:
             _require_non_empty_string(device.get("swing"), f"{prefix}.swing")
+        if device.get("door_state") is not None:
+            if device.get("type") != "door" or device["door_state"] not in ("open", "closed"):
+                raise SpatialLayoutFormatError(f"{prefix}.door_state must be open or closed on a door")
 
     _validate_engineering_sync(value.get("engineering_sync"), room_ids)
     _validate_view(value.get("view"))

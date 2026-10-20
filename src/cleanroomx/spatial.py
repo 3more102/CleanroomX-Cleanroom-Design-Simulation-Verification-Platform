@@ -10,7 +10,7 @@ from typing import Any, Callable
 import tkinter as tk
 from tkinter import messagebox, ttk
 
-from .door_geometry import door_aperture, opening_corners, solid_wall_panels, wall_point
+from .door_geometry import door_aperture, door_leaf_corners, opening_corners, solid_wall_panels, wall_point
 from .gui_theme import theme_palette
 from .spatial_editing import duplicate_spatial_item, update_spatial_properties
 
@@ -266,6 +266,8 @@ def normalize_layout(value: Any) -> dict:
             swing = str(raw.get("swing") or "").strip()
             if swing:
                 device["swing"] = swing
+            if device_type == "door":
+                device["door_state"] = "open" if raw.get("door_state") == "open" else "closed"
             devices.append(device)
     result["devices"] = devices
 
@@ -1637,6 +1639,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._show_pressure = tk.BooleanVar(value=True)
         self._show_labels = tk.BooleanVar(value=True)
         self._show_devices = tk.BooleanVar(value=True)
+        self._show_ffu = tk.BooleanVar(value=True)
+        self._show_returns = tk.BooleanVar(value=True)
         self._show_relationships = tk.BooleanVar(value=True)
         self._overlay_mode = tk.StringVar(value="Pressure")
         self._overlay_summary_var = tk.StringVar(value="Overlay: Pressure")
@@ -1775,6 +1779,9 @@ class SpatialDesignWorkspace(ttk.Frame):
                 command=lambda k=key, v=variable: self._set_view_flag(k, v.get()),
             ).pack(side="left", padx=2)
         ttk.Label(viewbar, textvariable=self._zoom_var).pack(side="left", padx=(10, 2))
+        for label, variable in (("FFUs", self._show_ffu), ("Returns", self._show_returns)):
+            ttk.Checkbutton(viewbar, text=label, variable=variable, command=self.redraw).pack(side="left", padx=2)
+        ttk.Button(viewbar, text="Toggle door", command=self.toggle_selected_door).pack(side="left", padx=4)
         ttk.Button(viewbar, text="Validate", command=self.report_validation).pack(
             side="left", padx=(10, 2)
         )
@@ -2012,6 +2019,7 @@ class SpatialDesignWorkspace(ttk.Frame):
                     ("orientation_deg", "Orientation", "deg"),
                     ("wall_side", "Wall side", ""),
                     ("swing", "Swing", ""),
+                    ("door_state", "Door state", "open / closed"),
                 ),
             ),
         )
@@ -2172,6 +2180,10 @@ class SpatialDesignWorkspace(ttk.Frame):
                 (item for item in self.layout["devices"] if item["id"] == item_id),
                 None,
             )
+            if device:
+                variable = getattr(self, "_show_ffu" if device["type"] == "ffu" else "_show_returns" if device["type"] == "return" else "_show_devices", None)
+                if variable is not None and not variable.get():
+                    return False
             room_id = str(device.get("room_id") or "") if device else ""
             if room_id and self._hit_key("room", room_id) in hidden_item_ids:
                 return False
@@ -2764,6 +2776,8 @@ class SpatialDesignWorkspace(ttk.Frame):
             "wall_side",
             "swing",
         }
+        if item.get("type") == "door":
+            device_fields.add("door_state")
         visible_fields = (
             room_fields
             if self.selected and self.selected.kind == "room"
@@ -2804,6 +2818,15 @@ class SpatialDesignWorkspace(ttk.Frame):
             history_before=history_before,
             selection_before=selection_before,
         )
+
+    def toggle_selected_door(self) -> None:
+        item = self._selected_object()
+        if not item or item.get("type") != "door":
+            self._status_setter("Select a door to open or close its design leaf")
+            return
+        self._property_vars["door_state"].set("closed" if item.get("door_state", "closed") == "open" else "open")
+        self.apply_properties()
+        self._status_setter("Door design state changed; regenerate CFD for the intended scenario")
 
     def duplicate_selected(self) -> None:
         if self._selected_object() is None:
@@ -2973,11 +2996,11 @@ class SpatialDesignWorkspace(ttk.Frame):
             pan_y_px=self.layout["view"]["pan_y"],
         )
 
-    def fit_selected(self) -> None:
+    def fit_selected(self) -> bool:
         item = self._selected_object()
         if item is None or self.selected is None:
             self._status_setter("Select a room or device to fit")
-            return
+            return False
 
         if self.selected.kind == "room":
             min_x = item["x_m"]
@@ -3057,6 +3080,7 @@ class SpatialDesignWorkspace(ttk.Frame):
 
         self._status_setter("View fitted to selected object")
         self.redraw()
+        return True
 
     def _visible_3d_points(self) -> list[tuple[float, float, float]]:
         min_x, min_y, max_x, max_y = self._bounds()
@@ -3529,12 +3553,6 @@ class SpatialDesignWorkspace(ttk.Frame):
                             fill=self._theme_palette["surface_alt"], width=10,
                             tags=(tag, "device", "door-gap-2d"),
                         )
-                        # Closed door leaf at the jambs, with a thin swing arc
-                        # to indicate the potential opening direction.
-                        canvas.create_line(
-                            *p0, *p1, fill=device_outline, width=3,
-                            tags=(tag, "device", "door-leaf-2d"),
-                        )
                         hinge_u = (
                             aperture["u0"] if device.get("swing") != "right"
                             else aperture["u1"]
@@ -3556,6 +3574,15 @@ class SpatialDesignWorkspace(ttk.Frame):
                             "north": (0.0, 1.0), "south": (0.0, -1.0),
                         }[side]
                         swing_radius = device["width_m"]
+                        leaf_start = self._world_to_canvas(hinge[0], hinge[1])
+                        leaf_end = self._world_to_canvas(
+                            hinge[0]-outward[0]*swing_radius,
+                            hinge[1]-outward[1]*swing_radius,
+                        ) if device.get("door_state", "closed") == "open" else self._world_to_canvas(free[0], free[1])
+                        canvas.create_line(
+                            *leaf_start, *leaf_end, fill=device_outline, width=3,
+                            tags=(tag, "device", "door-leaf-2d"),
+                        )
                         points = []
                         for step in range(9):
                             angle = (math.pi / 2) * step / 8
@@ -4021,10 +4048,12 @@ class SpatialDesignWorkspace(ttk.Frame):
                         self._project_3d(px - cx, py - cy, pz)
                         for px, py, pz in corners
                     ]
-                    # The door is CLOSED for the design's leakage model.
-                    # A translucent-stipple leaf makes the frame distinguishable.
+                    leaf_pixels = [
+                        self._project_3d(px-cx, py-cy, pz)
+                        for px,py,pz in door_leaf_corners(room, device, aperture)
+                    ]
                     canvas.create_polygon(
-                        *sum(pixels, ()),
+                        *sum(leaf_pixels, ()),
                         fill="#0f766e", outline=device_outline, width=2,
                         stipple="gray50",
                         tags=(tag, "device3d", "door-leaf-3d"),

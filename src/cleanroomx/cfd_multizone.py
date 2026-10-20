@@ -7,6 +7,7 @@ leakage-network design target is intentionally NOT imposed on the CFD fields.
 from __future__ import annotations
 
 from collections import deque
+from datetime import datetime, timezone
 import hashlib
 import json
 import math
@@ -14,12 +15,13 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import time
 
 from .cfd_openfoam import _field, _header
 from .door_geometry import adjoining_room, door_aperture
 from .project import load_project_document
 
-SCHEMA = "cleanroomx.multizone-open-door.v1"
+SCHEMA = "cleanroomx.multizone-open-door.v2"
 MAX_GRID_CELLS = 20000
 MAX_BLOCKS = 18000
 ROOM_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
@@ -107,6 +109,7 @@ def _geometry(project, step: tuple[float, float, float]) -> tuple[dict, dict]:
     if not doors:
         raise ValueError("No door openings in the multizone project")
     connected_doors = {}
+    door_pairs = set()
     by_id = {r["id"]: r for r in rooms}
     for door in doors:
         owner = by_id.get(door.get("room_id"))
@@ -118,6 +121,10 @@ def _geometry(project, step: tuple[float, float, float]) -> tuple[dict, dict]:
         neighbor = adjoining_room(owner, door, rooms)
         if neighbor is None:
             raise ValueError(f"No unique adjoining room: {door['id']}")
+        pair = frozenset((owner["id"], neighbor["id"]))
+        if pair in door_pairs:
+            raise ValueError("Multiple doors on one room pair are not supported by this bounded exporter")
+        door_pairs.add(pair)
         side = ap["side"]
         # Both jambs and door head must lie on voxel faces. Otherwise the
         # exported passage could misrepresent the requested clear dimensions.
@@ -184,6 +191,12 @@ def _geometry(project, step: tuple[float, float, float]) -> tuple[dict, dict]:
             raise ValueError(f"No through-connection at door {door['id']}")
     if not occupancy or len(occupancy) > MAX_BLOCKS:
         raise ValueError("Invalid or too large multizone hexahedral block count")
+    # A shared wall with no modeled door must never silently become fluid.
+    for cell, rid in occupancy.items():
+        for offset in ((1,0,0),(0,1,0),(0,0,1)):
+            other = occupancy.get(tuple(a+b for a,b in zip(cell,offset)))
+            if other is not None and other != rid and frozenset((rid,other)) not in door_pairs:
+                raise ValueError("Unconfigured shared room partition would create an unintended fluid connection")
     # Assert one connected fluid volume by conservative face-connected BFS.
     first = next(iter(occupancy))
     visited = {first}
@@ -271,7 +284,7 @@ def _build_case(project, *, pitch: tuple[float, float, float],
                 if abs(center[2] + dz/2 -
                        (float(room["floor_elevation_m"])+float(room["height_m"]))) < 1e-7:
                     match = [d for d in devices if d["type"] == "ffu" and d["room_id"] == rid
-                             and abs(float(d["z_m"])-(center[2]+dz/2)) < 1e-7
+                             and abs(float(room["floor_elevation_m"])+float(d["z_m"])-(center[2]+dz/2)) < 1e-7
                              and abs(center[0]-float(d["x_m"])) < float(d["width_m"])/2+1e-7
                              and abs(center[1]-float(d["y_m"])) < float(d["height_m"])/2+1e-7]
                     if len(match) > 1:
@@ -294,7 +307,8 @@ def _build_case(project, *, pitch: tuple[float, float, float],
                         coord = center[0] - dx/2 if side == "west" else center[0]+dx/2
                     if abs(coord - wall_pos) > 1e-7 or abs(float(d["x_m"] if side in ("west","east") else d["y_m"]) - wall_pos) > 1e-7:
                         continue
-                    if abs(along) <= float(d["width_m"])/2 + 1e-7 and float(d["z_m"]) < center[2] < float(d["z_m"])+float(d["height_m"]):
+                    z0 = float(room["floor_elevation_m"])+float(d["z_m"])
+                    if abs(along) <= float(d["width_m"])/2 + 1e-7 and z0 < center[2] < z0+float(d["height_m"]):
                         candidates.append(d)
                 if len(candidates) > 1:
                     raise ValueError("Two return devices claim one outlet face")
@@ -369,7 +383,8 @@ def _build_case(project, *, pitch: tuple[float, float, float],
     )
     schemes = ("ddtSchemes { default steadyState; }\n"
         "gradSchemes { default Gauss linear; }\n"
-        "divSchemes { default none; div(phi,U) bounded Gauss upwind; }\n"
+        "divSchemes { default none; div(phi,U) bounded Gauss upwind; "
+        "div((nuEff*dev2(T(grad(U))))) Gauss linear; }\n"
         "laplacianSchemes { default Gauss linear corrected; }\n"
         "interpolationSchemes { default linear; }\n"
         "snGradSchemes { default corrected; }\n"
@@ -387,8 +402,8 @@ def _build_case(project, *, pitch: tuple[float, float, float],
         "constant/transportProperties": _header(
             "dictionary","transportProperties",
             f"transportModel Newtonian;\nnu [0 2 -1 0 0 0 0] {viscosity_m2_s:.12g};","constant"),
-        "constant/turbulenceProperties": _header(
-            "dictionary","turbulenceProperties","simulationType laminar;","constant"),
+        "constant/momentumTransport": _header(
+            "dictionary","momentumTransport","simulationType laminar;","constant"),
         "0/U": _field("U","[0 1 -1 0 0 0 0]","(0 0 0)",u_bc,vector=True),
         "0/p": _field("p","[0 2 -2 0 0 0 0]","0",p_bc),
     }
@@ -396,14 +411,18 @@ def _build_case(project, *, pitch: tuple[float, float, float],
         "model": "hypothetical interconnected OPEN-door isothermal laminar CFD geometry",
         "door_mode": "open",
         "voxel_pitch_m": list(pitch),
+        "origin_m": list(geom["origin"]),
         "grid_extent_cells": list(geom["dimensions"]),
         "fluid_block_count": len(ordered),
         "connected_component_count": 1,
         "open_doors": geom["doors"],
+        "source_design_door_states": {d["id"]: d.get("door_state", "closed")
+                                      for d in devices if d["type"] == "door"},
         "room_boundary_flows": flow_receipts,
         "boundary_faces": {name:len(faces) for name,faces in face_sets.items()},
         "ffu_mesh_faces": used_ffu,
         "return_mesh_faces": used_return,
+        "rooms": {r["id"]: dict(r) for r in rooms},
         "pressure_boundary": "zero kinematic pressure on each configured low return; no 5 Pa constraint",
         "limitations": [
             "Walls occupy one voxel layer on owner-room side, not an engineered architectural thickness",
@@ -442,14 +461,17 @@ def generate_multizone_open_door_case(
     output=Path(output_directory)
     if output.exists():
         raise FileExistsError(f"Refusing overwrite of {output}")
+    source_bytes = source.read_bytes()
     project=load_project_document(source)
     files,metadata=_build_case(
         project,pitch=pitch,viscosity_m2_s=viscosity,
         iterations=max_iterations,interval=output_interval
     )
+    if source.read_bytes() != source_bytes:
+        raise ValueError("Project changed during multizone generation")
     manifest={
         "schema_version":SCHEMA,
-        "project_source_sha256":hashlib.sha256(source.read_bytes()).hexdigest(),
+        "project_source_sha256":hashlib.sha256(source_bytes).hexdigest(),
         "input_mode":"hypothetical_all_doors_open",
         "solver":"OpenFOAM Foundation v10 simpleFoam",
         "case":metadata,
@@ -473,18 +495,19 @@ def generate_multizone_open_door_case(
     return manifest
 
 
-def run_multizone_open_door_case(directory: str | Path, *, timeout_seconds: int=3600) -> dict:
-    """Opt-in solver execution only; no unsupported numerical validation claims."""
-    if type(timeout_seconds) is not int or not 60 <= timeout_seconds <= 86400:
-        raise ValueError("timeout_seconds must be integer 60..86400")
+def verify_multizone_inputs(directory: str | Path) -> tuple[Path, dict]:
+    """Verify the exact generated input inventory before execution or ingestion."""
     root=Path(directory).resolve(strict=True)
-    manifest=json.loads((root/"manifest.json").read_text(encoding="utf-8"))
+    manifest_path=root/"manifest.json"
+    if manifest_path.is_symlink() or not manifest_path.is_file() or manifest_path.stat().st_size > 4*1024*1024:
+        raise ValueError("Manifest must be a bounded regular file")
+    manifest=json.loads(manifest_path.read_text(encoding="utf-8"))
     if manifest.get("schema_version") != SCHEMA or manifest.get("input_mode") != "hypothetical_all_doors_open":
         raise ValueError("Not an OpenFOAM multizone open-door case")
     files=manifest.get("files")
     if not isinstance(files,dict) or set(files)!={
         "system/blockMeshDict","system/controlDict","system/fvSchemes","system/fvSolution",
-        "constant/transportProperties","constant/turbulenceProperties","0/U","0/p"
+        "constant/transportProperties","constant/momentumTransport","0/U","0/p"
     }:
         raise ValueError("Multizone case manifest is incomplete")
     for name,expected in files.items():
@@ -494,20 +517,93 @@ def run_multizone_open_door_case(directory: str | Path, *, timeout_seconds: int=
         path=path.resolve(strict=True)
         if not path.is_relative_to(root) or hashlib.sha256(path.read_bytes()).hexdigest()!=expected:
             raise ValueError(f"Solver input changed: {name}")
-    for cmd in STEPS:
+    return root, manifest
+
+
+def run_multizone_open_door_case(directory: str | Path, *, timeout_seconds: int=3600,
+                                 on_progress=None) -> dict:
+    """Run Foundation v10, persist successes/failures and hash actual output fields.
+
+    on_progress receives stage/log events from the calling worker thread. A
+    zero process exit is never a convergence or physical-validation verdict.
+    """
+    if type(timeout_seconds) is not int or not 60 <= timeout_seconds <= 86400:
+        raise ValueError("timeout_seconds must be integer 60..86400")
+    root, manifest=verify_multizone_inputs(directory)
+    commands=STEPS+("postProcess",)
+    for cmd in commands:
         if shutil.which(cmd) is None:
             raise RuntimeError(f"{cmd} not found: install OpenFOAM Foundation v10 in Linux/WSL")
-    stages=[]
-    for cmd in STEPS:
+    version=subprocess.run(["simpleFoam","-help"],capture_output=True,text=True,
+                           check=False,timeout=30)
+    version_text=version.stdout+version.stderr
+    if version.returncode or not re.search(r"Using: OpenFOAM-10\s",version_text):
+        raise RuntimeError("This case requires OpenFOAM Foundation v10; source its environment first")
+    if (root/"run-receipt.json").exists() or any((root/(cmd+".log")).exists() for cmd in commands):
+        raise FileExistsError("Case already has execution receipts/logs; generate a new case for a reproducible run")
+    if any(p.is_dir() and re.fullmatch(r"[0-9]+(?:\.[0-9]+)?",p.name)
+           and float(p.name)>0 for p in root.iterdir()):
+        raise ValueError("Case already contains nonzero-time fields; generate a fresh case")
+    result={
+        "schema":"cleanroomx.multizone-run.v1", "status":"incomplete",
+        "started_utc":datetime.now(timezone.utc).isoformat(),
+        "manifest_sha256":hashlib.sha256((root/"manifest.json").read_bytes()).hexdigest(),
+        "runtime":{"version":version_text.strip(),
+                   "executables":{cmd:shutil.which(cmd) for cmd in commands}},
+        "stages":[], "outputs":{},
+        "warning":"Review residuals, flux balance, model validity and mesh sensitivity; execution is not validation.",
+    }
+    for cmd in commands:
+        arguments=[cmd] if cmd!="postProcess" else [cmd,"-func","writeCellCentres","-noZero"]
         logfile=root/(cmd+".log")
+        if on_progress:
+            on_progress({"stage":cmd,"event":"started","log":str(logfile)})
+        started=time.monotonic()
+        failure=None
         with logfile.open("x",encoding="utf-8") as output:
-            process=subprocess.run([cmd],cwd=root,stdout=output,
-                                   stderr=subprocess.STDOUT,check=False,
-                                   timeout=timeout_seconds)
-        stages.append({"command":cmd,"returncode":process.returncode,
-                       "log_sha256":hashlib.sha256(logfile.read_bytes()).hexdigest()})
-        if process.returncode:
-            return {"status":"incomplete","stages":stages,
-                    "warning":"OpenFOAM stage failed; no CFD validity implied"}
-    return {"status":"executed_requires_convergence_review","stages":stages,
-            "warning":"Conformal connected geometry is an input model only; review checkMesh, solver residuals, fluxes, Reynolds validity and mesh sensitivity."}
+            try:
+                process=subprocess.run(arguments,cwd=root,stdout=output,
+                                       stderr=subprocess.STDOUT,check=False,
+                                       timeout=timeout_seconds)
+                returncode=process.returncode
+            except subprocess.TimeoutExpired:
+                returncode=None
+                failure=f"Stage timed out after {timeout_seconds} seconds"
+            except OSError as exc:
+                returncode=None
+                failure=str(exc)
+        log_text=logfile.read_text(encoding="utf-8",errors="replace")
+        if returncode==0 and ("FOAM FATAL" in log_text or not re.search(r"(?m)^End\s*$",log_text)):
+            failure="Missing normal completion marker or fatal OpenFOAM diagnostic"
+        if cmd=="checkMesh" and returncode==0 and "Mesh OK." not in log_text:
+            failure="checkMesh did not report Mesh OK"
+        stage={"command":cmd,"arguments":arguments,"returncode":returncode,
+               "elapsed_seconds":time.monotonic()-started,"failure":failure,
+               "log_sha256":hashlib.sha256(logfile.read_bytes()).hexdigest()}
+        result["stages"].append(stage)
+        if on_progress:
+            on_progress({"stage":cmd,"event":"finished",**stage})
+        if returncode!=0 or failure:
+            break
+    else:
+        result["status"]="executed_requires_convergence_review"
+        # Hash fields and mesh topology now. Ingestion rejects any later edits.
+        for folder in (root/"constant/polyMesh",)+tuple(
+            p for p in root.iterdir() if p.is_dir() and
+            re.fullmatch(r"[0-9]+(?:\.[0-9]+)?",p.name) and float(p.name)>0
+        ):
+            for path in sorted(folder.iterdir()):
+                if path.is_file() and not path.is_symlink():
+                    result["outputs"][path.relative_to(root).as_posix()]=hashlib.sha256(path.read_bytes()).hexdigest()
+        try:
+            verify_multizone_inputs(root)
+            if hashlib.sha256((root/"manifest.json").read_bytes()).hexdigest()!=result["manifest_sha256"]:
+                raise ValueError("Manifest changed during execution")
+        except ValueError as exc:
+            result["status"]="incomplete"
+            result["failure"]=str(exc)
+    result["finished_utc"]=datetime.now(timezone.utc).isoformat()
+    with (root/"run-receipt.json").open("x",encoding="utf-8") as output:
+        json.dump(result,output,indent=2,sort_keys=True,allow_nan=False)
+        output.write("\n")
+    return result

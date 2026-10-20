@@ -170,3 +170,21 @@ def opening_corners(room: dict, aperture: dict) -> tuple[tuple[float, float, flo
             (aperture["u0"], aperture["z1"]),
         )
     )
+
+
+def door_leaf_corners(room: dict, door: dict, aperture: dict) -> tuple:
+    """Depict a closed panel or a 90-degree leaf hinged into its owner room."""
+    corners = list(opening_corners(room, aperture))
+    if door.get("door_state", "closed") == "closed":
+        return tuple(corners)
+    if door.get("door_state") != "open":
+        raise ValueError("Door state must be open or closed")
+    outward = {"east":(1,0),"west":(-1,0),"north":(0,1),"south":(0,-1)}[aperture["side"]]
+    hinge, free = (1,0) if door.get("swing")=="right" else (0,1)
+    width = aperture["u1"]-aperture["u0"]
+    for base, top in ((hinge,3-hinge),(free,3-free)):
+        if base == free:
+            anchor=corners[hinge]
+            corners[base]=(anchor[0]-outward[0]*width,anchor[1]-outward[1]*width,corners[base][2])
+            corners[top]=(anchor[0]-outward[0]*width,anchor[1]-outward[1]*width,corners[top][2])
+    return tuple(corners)

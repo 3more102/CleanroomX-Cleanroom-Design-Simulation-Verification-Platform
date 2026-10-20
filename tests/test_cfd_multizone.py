@@ -49,7 +49,7 @@ def test_generated_case_has_real_conformal_multiblock_and_every_device_boundary(
     assert manifest["input_mode"]=="hypothetical_all_doors_open"
     assert set(manifest["files"]) == {
         "system/blockMeshDict","system/controlDict","system/fvSchemes","system/fvSolution",
-        "constant/transportProperties","constant/turbulenceProperties","0/U","0/p"
+        "constant/transportProperties","constant/momentumTransport","0/U","0/p"
     }
     evidence=manifest["case"]
     assert evidence["door_mode"]=="open"
@@ -76,7 +76,8 @@ def test_generated_case_has_real_conformal_multiblock_and_every_device_boundary(
         assert f"return_{rid}\n    {{\n        type fixedValue; value uniform 0;" in p
     assert "walls\n    {\n        type noSlip;" in u
     assert "application simpleFoam;" in (root/"system/controlDict").read_text()
-    assert "simulationType laminar;" in (root/"constant/turbulenceProperties").read_text()
+    assert "simulationType laminar;" in (root/"constant/momentumTransport").read_text()
+    assert "div((nuEff*dev2(T(grad(U))))) Gauss linear;" in (root/"system/fvSchemes").read_text()
     assert all(hashlib.sha256((root/name).read_bytes()).hexdigest()==sha
                for name,sha in manifest["files"].items())
     assert json.loads((root/"manifest.json").read_text())==manifest
@@ -143,3 +144,33 @@ def test_cli_explicit_open_door_mode_required():
     assert args.command=="multizone-generate"
     assert args.cell_size_y_m==.1
     assert parser.parse_args(["multizone-run","output"]).command=="multizone-run"
+
+
+def test_independent_closed_room_export_rejects_open_design_door(tmp_path):
+    from cleanroomx.cfd_project_rooms import generate_project_room_cases
+    raw=json.loads(bundled_demo_project_path().read_text())
+    door=next(d for d in raw["project"]["metadata"]["spatial_layout"]["devices"] if d["type"]=="door")
+    door["door_state"]="open"
+    source=tmp_path/"open-design.json"
+    source.write_text(json.dumps(raw))
+    with pytest.raises(ValueError,match="requires closed"):
+        generate_project_room_cases(source,tmp_path/"closed",kinematic_viscosity_m2_s=1.5e-5)
+
+
+def test_multizone_equipment_respects_room_floor_elevation():
+    project=load_project_document(bundled_demo_project_path())
+    for room in project.metadata["spatial_layout"]["rooms"]:
+        room["floor_elevation_m"]=1.2
+    _,metadata=_build_case(project,pitch=(.5,.1,.3),viscosity_m2_s=1.5e-5,iterations=10,interval=5)
+    assert metadata["origin_m"][2]==1.2
+    assert len(metadata["ffu_mesh_faces"])==12
+    assert all(x>0 for x in metadata["ffu_mesh_faces"].values())
+    assert all(x>0 for x in metadata["return_mesh_faces"].values())
+
+
+def test_unconfigured_shared_wall_never_becomes_an_unintended_passage():
+    project=load_project_document(bundled_demo_project_path())
+    devices=project.metadata["spatial_layout"]["devices"]
+    devices[:]=[d for d in devices if d["id"]!="door-preparation-ante"]
+    with pytest.raises(ValueError,match="Unconfigured shared"):
+        _geometry(project,(.5,.1,.3))

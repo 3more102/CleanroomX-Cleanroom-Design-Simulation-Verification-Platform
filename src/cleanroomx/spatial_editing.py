@@ -115,6 +115,11 @@ def update_spatial_properties(
                     item[field] = text
                 else:
                     item.pop(field, None)
+        if item.get("type") == "door" and "door_state" in values:
+            state = values["door_state"].strip().lower() or "closed"
+            if state not in ("open", "closed"):
+                raise ValueError("Door state must be open or closed")
+            item["door_state"] = state
 
     validate_spatial_layout_document(candidate)
     return candidate

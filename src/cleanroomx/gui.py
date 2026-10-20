@@ -2266,6 +2266,10 @@ class CleanroomXApp:
             label="Generate Connected Open-Door CFD Case...",
             command=self.export_connected_open_door_case,
         )
+        analyze_menu.add_command(
+            label="Run / Review Multiroom CFD...",
+            command=self.show_multizone_cfd,
+        )
         menubar.add_cascade(label="Analyze", menu=analyze_menu)
 
         verify_menu = tk.Menu(menubar, tearoff=False)
@@ -6388,6 +6392,7 @@ class CleanroomXApp:
         self.status_var.set(
             "Generated hypothetical connected open-door multizone CFD input"
         )
+        self._last_multizone_case = destination
         messagebox.showinfo(
             "Connected OpenFOAM input generated",
             f"Case folder: {destination}\n"
@@ -6398,6 +6403,11 @@ class CleanroomXApp:
             "and independently review the resulting physics.",
             parent=self.root,
         )
+
+    def show_multizone_cfd(self):
+        from .cfd_multizone_gui import MultizoneCFDWindow
+        window = MultizoneCFDWindow(self.root, directory=getattr(self, "_last_multizone_case", None))
+        return window
 
     def export_project_engineering_dossier(self) -> None:
         if self._running:

@@ -1,0 +1,359 @@
+"""Desktop workspace for recorded, genuinely computed multiroom CFD fields."""
+from __future__ import annotations
+
+import json
+import math
+from pathlib import Path
+import queue
+import threading
+import tkinter as tk
+from tkinter import filedialog, messagebox, ttk
+
+from .cfd_multizone import run_multizone_open_door_case, verify_multizone_inputs
+from .cfd_multizone_results import analyze_multizone_case, export_multizone_report
+
+
+def slice_samples(report: dict, axis: str, position_m: float, room: str = "all") -> list:
+    """Select one actual cell layer; never interpolate or fill missing cells."""
+    if axis not in ("x","y","z") or not math.isfinite(position_m):
+        raise ValueError("Choose a finite x/y/z section coordinate")
+    a = "xyz".index(axis)
+    half = report["voxel_pitch_m"][a]/2
+    return [c for c in report["cells"] if (room=="all" or c["room_id"]==room)
+            and abs(c["center_m"][a]-position_m) < half-1e-8]
+
+
+class MultizoneCFDWindow(tk.Toplevel):
+    """Run in a worker, tail actual logs, and review recorded field samples."""
+
+    def __init__(self, master, *, directory: str | Path | None = None):
+        super().__init__(master)
+        self.title("CleanroomX • Multiroom CFD")
+        self.geometry("1230x830")
+        self.minsize(850,600)
+        self.report = None
+        self.running = False
+        self.events = queue.Queue()
+        self.case_path = tk.StringVar(value=str(directory or ""))
+        self.density = tk.StringVar(value="")
+        self.reference = tk.StringVar(value="corridor")
+        self.time_name = tk.StringVar(value="latest")
+        self.field = tk.StringVar(value="Pressure (Pa)")
+        self.axis = tk.StringVar(value="z")
+        self.position = tk.StringVar(value="1.35")
+        self.room = tk.StringVar(value="all")
+        self.vectors = tk.BooleanVar(value=True)
+        self.status = tk.StringVar(value="Select a generated connected case. Enter the actual air density before importing fields.")
+        self.active_log = None
+        self.log_offset = 0
+        self._build()
+        self._poll_id = self.after(150,self._poll)
+        self.protocol("WM_DELETE_WINDOW",self.close)
+
+    def _build(self):
+        top=ttk.Frame(self,padding=12)
+        top.pack(fill="x")
+        ttk.Label(top,text="MULTIROOM CFD",font=("TkDefaultFont",16,"bold")).pack(anchor="w")
+        ttk.Label(top,text="All doors open • computed values stay separate from the design pressure targets").pack(anchor="w",pady=(2,8))
+        location=ttk.Frame(top)
+        location.pack(fill="x")
+        ttk.Label(location,text="Case folder").pack(side="left")
+        ttk.Entry(location,textvariable=self.case_path).pack(side="left",fill="x",expand=True,padx=8)
+        ttk.Button(location,text="Browse",command=self.browse).pack(side="left")
+        commands=ttk.Frame(top)
+        commands.pack(fill="x",pady=8)
+        ttk.Label(commands,text="Density (kg/m³)").pack(side="left")
+        ttk.Entry(commands,textvariable=self.density,width=8).pack(side="left",padx=6)
+        ttk.Label(commands,text="Pressure reference room").pack(side="left")
+        ttk.Entry(commands,textvariable=self.reference,width=13).pack(side="left",padx=6)
+        self.run_button=ttk.Button(commands,text="Run OpenFOAM 10",command=self.run_case)
+        self.run_button.pack(side="left",padx=8)
+        self.import_button=ttk.Button(commands,text="Import computed fields",command=self.import_case)
+        self.import_button.pack(side="left")
+        ttk.Button(commands,text="Export report",command=self.export_report).pack(side="right")
+        ttk.Label(top,textvariable=self.status,wraplength=1130).pack(anchor="w")
+        self.progress=ttk.Progressbar(top,mode="indeterminate")
+        self.progress.pack(fill="x",pady=(8,0))
+        self.tabs=ttk.Notebook(self)
+        self.tabs.pack(fill="both",expand=True,padx=12,pady=(0,12))
+        summary=ttk.Frame(self.tabs,padding=10)
+        fields=ttk.Frame(self.tabs,padding=8)
+        residuals=ttk.Frame(self.tabs,padding=8)
+        logs=ttk.Frame(self.tabs,padding=8)
+        diagnostics=ttk.Frame(self.tabs,padding=8)
+        for tab,label in ((summary,"Room comparison"),(fields,"Computed sections"),(residuals,"Residual histories"),(logs,"Solver logs"),(diagnostics,"Diagnostics / provenance")):
+            self.tabs.add(tab,text=label)
+        columns=("name","target","pressure","speed","supply","returns","imbalance","upward")
+        self.room_table=ttk.Treeview(summary,columns=columns,show="headings",height=5)
+        for key,label,width in zip(columns,("Room","Target Pa","Computed Pa*","Mean m/s","Supply m³/h","Return m³/h","Imbalance m³/s","Upward %"),(165,80,105,90,100,100,130,90)):
+            self.room_table.heading(key,text=label)
+            self.room_table.column(key,width=width,minwidth=60)
+        self.room_table.pack(fill="x")
+        ttk.Label(summary,text="*Computed pressure is relative to the selected room's computed mean. Targets are design inputs, not imposed CFD results.",wraplength=1100).pack(anchor="w",pady=6)
+        self.pressure_canvas=tk.Canvas(summary,background="#101b2b",highlightthickness=0,height=220)
+        self.pressure_canvas.pack(fill="both",expand=True,pady=8)
+        self.pressure_canvas.bind("<Configure>",lambda e:self.draw_pressure())
+        self.door_table=ttk.Treeview(summary,columns=("door","dp","target","flow","reverse"),show="headings",height=4)
+        for key,label in (("door","Open door"),("dp","Computed Δp (Pa)"),("target","Target Δp (Pa)"),("flow","Net transfer (m³/h)"),("reverse","Reverse component (m³/h)")):
+            self.door_table.heading(key,text=label)
+            self.door_table.column(key,width=190)
+        self.door_table.pack(fill="x")
+        controls=ttk.Frame(fields)
+        controls.pack(fill="x",pady=(0,6))
+        for var,values,width in ((self.field,("Pressure (Pa)","Speed (m/s)"),18),(self.axis,("x","y","z"),3),(self.room,("all",),14),(self.time_name,("latest",),8)):
+            combo=ttk.Combobox(controls,textvariable=var,values=values,state="readonly",width=width)
+            combo.pack(side="left",padx=4)
+            combo.bind("<<ComboboxSelected>>",lambda e:self.draw_section())
+            if var is self.room:
+                self.room_picker=combo
+            if var is self.time_name:
+                self.time_picker=combo
+                combo.bind("<<ComboboxSelected>>",lambda e:self.import_case())
+        ttk.Label(controls,text="Plane (m)").pack(side="left")
+        ttk.Entry(controls,textvariable=self.position,width=8).pack(side="left",padx=4)
+        ttk.Checkbutton(controls,text="Velocity vectors",variable=self.vectors,command=self.draw_section).pack(side="left",padx=4)
+        ttk.Button(controls,text="Apply section",command=self.draw_section).pack(side="left",padx=6)
+        self.section_canvas=tk.Canvas(fields,background="#101b2b",highlightthickness=0)
+        self.section_canvas.pack(fill="both",expand=True)
+        self.section_canvas.bind("<Configure>",lambda e:self.draw_section())
+        ttk.Label(fields,text="Actual cell values at the selected layer. Arrows show projected computed velocity; no manufactured streamlines or filled gaps.").pack(anchor="w",pady=5)
+        self.residual_canvas=tk.Canvas(residuals,background="#101b2b",highlightthickness=0)
+        self.residual_canvas.pack(fill="both",expand=True)
+        self.residual_canvas.bind("<Configure>",lambda e:self.draw_residuals())
+        ttk.Label(residuals,text="Initial linear residuals on a log₁₀ scale. SIMPLE iteration is not physical transient time.").pack(anchor="w",pady=5)
+        self.log_text=tk.Text(logs,background="#101b2b",foreground="#d9e7f7",wrap="none",font=("TkFixedFont",10))
+        self.log_text.pack(fill="both",expand=True)
+        self.diagnostics=tk.Text(diagnostics,wrap="word",font=("TkFixedFont",10))
+        self.diagnostics.pack(fill="both",expand=True)
+
+    def browse(self):
+        if self.running:
+            return
+        path=filedialog.askdirectory(parent=self,title="Select generated connected OpenFOAM case")
+        if path:
+            self.case_path.set(path)
+            self.time_name.set("latest")
+            self.report=None
+            self._clear_results()
+
+    def _worker(self, function):
+        if self.running:
+            return
+        self.running=True
+        self.run_button.configure(state="disabled")
+        self.import_button.configure(state="disabled")
+        self.progress.start(15)
+        def work():
+            try:
+                self.events.put(("result",function()))
+            except Exception as exc:
+                self.events.put(("error",str(exc)))
+        threading.Thread(target=work,daemon=True).start()
+
+    def run_case(self):
+        try:
+            root,_=verify_multizone_inputs(self.case_path.get())
+        except (OSError,ValueError) as exc:
+            messagebox.showerror("Invalid CFD case",str(exc),parent=self)
+            return
+        self.report=None
+        self._clear_results()
+        self.status.set("Running recorded OpenFOAM stages. Review logs and numerical convergence after execution.")
+        self.tabs.select(3)
+        self._worker(lambda:run_multizone_open_door_case(root,on_progress=lambda event:self.events.put(("progress",event))))
+
+    def import_case(self):
+        try:
+            density=float(self.density.get())
+            if not math.isfinite(density) or density<=0:
+                raise ValueError("Enter a finite positive air density in kg/m³")
+            root=Path(self.case_path.get()).resolve(strict=True)
+            reference=self.reference.get().strip()
+            selected=self.time_name.get()
+        except (OSError,ValueError) as exc:
+            messagebox.showerror("CFD field import",str(exc),parent=self)
+            return
+        self.status.set("Verifying recorded inputs, logs, mesh and computed field hashes…")
+        self.report=None
+        self._clear_results()
+        self._worker(lambda:analyze_multizone_case(root,density_kg_m3=density,reference_room_id=reference,
+                                                  time_name=None if selected=="latest" else selected))
+
+    def _poll(self):
+        try:
+            while True:
+                kind,payload=self.events.get_nowait()
+                if kind=="progress":
+                    self.status.set(f"{payload['stage']}: {payload['event']}")
+                    if payload["event"]=="started":
+                        self.active_log=Path(payload["log"])
+                        self.log_offset=0
+                        self.log_text.insert("end",f"\n--- {payload['stage']} ---\n")
+                    else:
+                        self._tail_log()
+                else:
+                    self._tail_log()
+                    self.running=False
+                    self.progress.stop()
+                    self.run_button.configure(state="normal")
+                    self.import_button.configure(state="normal")
+                    if kind=="error":
+                        self.status.set("CFD operation failed: "+payload)
+                        messagebox.showerror("CFD operation failed",payload,parent=self)
+                    elif payload.get("schema")=="cleanroomx.multizone-results.v1":
+                        self.load_report(payload)
+                    else:
+                        self.status.set(payload["status"].replace("_"," ")+". Enter density and import computed fields to review.")
+        except queue.Empty:
+            pass
+        self._tail_log()
+        self._poll_id=self.after(150,self._poll)
+
+    def _tail_log(self):
+        if self.active_log and self.active_log.is_file():
+            with self.active_log.open("rb") as stream:
+                stream.seek(self.log_offset)
+                data=stream.read(128*1024)
+                self.log_offset=stream.tell()
+            if data:
+                self.log_text.insert("end",data.decode("utf-8",errors="replace"))
+                if int(self.log_text.index("end-1c").split(".")[0])>6000:
+                    self.log_text.delete("1.0","2000.0")
+                self.log_text.see("end")
+
+    def _clear_results(self):
+        for table in (self.room_table,self.door_table):
+            table.delete(*table.get_children())
+        for canvas in (self.section_canvas,self.residual_canvas,self.pressure_canvas):
+            canvas.delete("all")
+
+    def load_report(self, report):
+        self.report=report
+        self.density.set(f"{report['density_kg_m3']:g}")
+        self.reference.set(report["pressure_reference"]["room_id"])
+        self._clear_results()
+        for rid,r in report["rooms"].items():
+            target=r["design_pressure_relative_to_reference_pa"]
+            self.room_table.insert("","end",iid=rid,values=(r["name"],"—" if target is None else f"{target:g}",
+                f"{r['mean_pressure_pa_relative_to_reference']:.5g}",f"{r['mean_speed_m_s']:.4g}",
+                f"{r['supply_inflow_m3_s']*3600:.4g}",f"{r['return_outflow_m3_s']*3600:.4g}",
+                f"{r['net_outward_imbalance_m3_s']:.3g}",f"{r['upward_volume_fraction']*100:.1f}"))
+        for name,d in report["doors"].items():
+            self.door_table.insert("","end",values=(name,f"{d['computed_delta_pressure_pa']:.5g}",
+                d["design_delta_pressure_target_pa"],f"{d['computed_net_transfer_m3_s']*3600:.5g}",
+                f"{d['computed_reverse_m3_s']*3600:.5g}"))
+        self.room_picker.configure(values=("all",*report["rooms"]))
+        self.time_picker.configure(values=("latest",*report["available_times"]))
+        self.time_name.set(report["time_name"])
+        reference=report["pressure_reference"]["room_id"]
+        self.status.set(f"COMPUTED • {report['mesh']['cells']:.0f} cells • iteration {report['time_name']} • "
+                        +("solver reported convergence" if report["solver_reported_convergence"] else "NOT CONVERGED")
+                        +f" • pressure relative to computed mean in {reference}. Engineering review required.")
+        summary={k:v for k,v in report.items() if k not in ("cells","residual_history")}
+        self.diagnostics.delete("1.0","end")
+        self.diagnostics.insert("1.0",json.dumps(summary,indent=2,sort_keys=True,allow_nan=False))
+        self.draw_pressure()
+        self.draw_section()
+        self.draw_residuals()
+        self.tabs.select(0)
+
+    def draw_pressure(self):
+        c=self.pressure_canvas
+        c.delete("all")
+        if not self.report:
+            return
+        width=max(c.winfo_width(),600)
+        values=list(self.report["rooms"].values())
+        peak=max(1e-9,*(abs(r["mean_pressure_pa_relative_to_reference"]) for r in values))
+        c.create_text(12,15,anchor="w",fill="#d9e7f7",text="Computed room pressures (Pa) • chart uses computed values only")
+        center=width*.48
+        for i,r in enumerate(values):
+            y=48+i*37
+            value=r["mean_pressure_pa_relative_to_reference"]
+            end=center+value/peak*width*.26
+            c.create_text(12,y,anchor="w",fill="#d9e7f7",text=r["name"])
+            c.create_rectangle(min(center,end),y-9,max(center+1,end),y+9,fill="#22c5d6",outline="",tags="computed-pressure")
+            c.create_text(width-20,y,anchor="e",fill="#d9e7f7",text=f"{value:.6g} Pa")
+
+    def draw_section(self):
+        c=self.section_canvas
+        c.delete("all")
+        if not self.report:
+            return
+        try:
+            samples=slice_samples(self.report,self.axis.get(),float(self.position.get()),self.room.get())
+        except ValueError:
+            return
+        if not samples:
+            c.create_text(30,30,anchor="w",fill="white",text="No computed cell layer at this coordinate. Choose a cell-centre coordinate.")
+            return
+        axes=[i for i in range(3) if i!="xyz".index(self.axis.get())]
+        a,b=axes
+        ha,hb=(self.report["voxel_pitch_m"][i]/2 for i in axes)
+        lo=[min(s["center_m"][i] for s in samples)-self.report["voxel_pitch_m"][i]/2 for i in axes]
+        hi=[max(s["center_m"][i] for s in samples)+self.report["voxel_pitch_m"][i]/2 for i in axes]
+        width,height=max(c.winfo_width(),600),max(c.winfo_height(),350)
+        scale=min((width-100)/(hi[0]-lo[0]),(height-95)/(hi[1]-lo[1]))
+        def point(x,y):
+            return 45+(x-lo[0])*scale,height-45-(y-lo[1])*scale
+        values=[s["pressure_pa_relative_to_reference"] if self.field.get().startswith("Pressure") else math.sqrt(sum(v*v for v in s["velocity_m_s"])) for s in samples]
+        low,high=min(values),max(values)
+        for s,value in zip(samples,values):
+            x,y=s["center_m"][a],s["center_m"][b]
+            t=(value-low)/(high-low) if high>low else .5
+            color=f"#{int(30+220*t):02x}{int(130+70*(1-abs(2*t-1))):02x}{int(240-210*t):02x}"
+            c.create_rectangle(*point(x-ha,y-hb),*point(x+ha,y+hb),fill=color,outline="",tags="computed-cell")
+        if self.vectors.get():
+            vmax=max(math.hypot(s["velocity_m_s"][a],s["velocity_m_s"][b]) for s in samples)
+            vector_scale=30/max(vmax,1e-12)
+            for s in samples[::max(1,len(samples)//150)]:
+                x,y=point(s["center_m"][a],s["center_m"][b])
+                u,v=s["velocity_m_s"][a],s["velocity_m_s"][b]
+                c.create_line(x,y,x+u*vector_scale,y-v*vector_scale,fill="#102030",arrow="last",tags="computed-vector")
+        c.create_text(12,16,anchor="w",fill="white",text=f"{self.field.get()} • {low:.5g} to {high:.5g} • axes {'xyz'[a]}/{'xyz'[b]} (m) • {len(samples)} actual cells")
+        c.create_text(12,36,anchor="w",fill="#b6cddd",text="" if self.report["solver_reported_convergence"] else "NOT CONVERGED • provisional numerical fields")
+
+    def draw_residuals(self):
+        c=self.residual_canvas
+        c.delete("all")
+        if not self.report:
+            return
+        width,height=max(c.winfo_width(),600),max(c.winfo_height(),350)
+        histories=self.report["residual_history"]
+        times=[h["iteration"] for h in histories if h["iteration"] is not None]
+        max_time=max(times,default=1)
+        for power in range(0,-11,-1):
+            y=35+(-power)/10*(height-80)
+            c.create_line(65,y,width-20,y,fill="#24374e")
+            c.create_text(50,y,anchor="e",text=f"1e{power}",fill="#b6cddd")
+        for field,color in (("p","#ffbf69"),("Ux","#22c5d6"),("Uy","#98d36b"),("Uz","#d990ed")):
+            data=[h for h in histories if h["field"]==field and h["iteration"] is not None]
+            points=[]
+            for h in data:
+                x=65+h["iteration"]/max_time*(width-90)
+                y=35-min(0,max(-10,math.log10(max(h["initial"],1e-10))))/10*(height-80)
+                points.extend((x,y))
+            if len(points)>=4:
+                c.create_line(*points,fill=color,width=1.5,tags="computed-residual")
+            index=("p","Ux","Uy","Uz").index(field)
+            c.create_text(90+index*100,height-20,text=field,fill=color)
+
+    def export_report(self):
+        if not self.report or self.running:
+            return
+        target=filedialog.asksaveasfilename(parent=self,title="New report directory (must not exist)",initialfile="cleanroomx-cfd-report")
+        if not target:
+            return
+        try:
+            path=export_multizone_report(self.report,target)
+        except (OSError,ValueError) as exc:
+            messagebox.showerror("Report export failed",str(exc),parent=self)
+            return
+        self.status.set(f"Computed report exported: {path}")
+
+    def close(self):
+        if self.running:
+            self.status.set("An OpenFOAM operation is running. This window remains open until execution finishes.")
+            return
+        self.after_cancel(self._poll_id)
+        self.destroy()

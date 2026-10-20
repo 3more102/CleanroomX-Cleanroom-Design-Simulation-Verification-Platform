@@ -56,6 +56,46 @@ def test_bundled_demo_renders_design_intent_ceiling_downflow_arrows(app):
     assert len(workspace.canvas_2d.find_withtag("door-hinge-2d")) == 3
 
 
+def test_door_state_changes_leaf_geometry_and_survives_save_reopen(app,tmp_path):
+    workspace=app.spatial_workspace
+    door=next(d for d in workspace.layout["devices"] if d["type"]=="door")
+    workspace.select_item("device",door["id"])
+    tag=f"device:{door['id']}"
+    def leaf(canvas,label):
+        return next(canvas.coords(item) for item in canvas.find_withtag(tag)
+                    if label in canvas.gettags(item))
+    closed_2d=leaf(workspace.canvas_2d,"door-leaf-2d")
+    closed_3d=leaf(workspace.canvas_3d,"door-leaf-3d")
+    workspace.toggle_selected_door()
+    app.root.update()
+    assert next(d for d in workspace.layout["devices"] if d["id"]==door["id"])["door_state"]=="open"
+    assert leaf(workspace.canvas_2d,"door-leaf-2d")!=closed_2d
+    assert leaf(workspace.canvas_3d,"door-leaf-3d")!=closed_3d
+    assert app.undo_project_edit()
+    assert next(d for d in workspace.layout["devices"] if d["id"]==door["id"])["door_state"]=="closed"
+    assert app.redo_project_edit()
+    path=tmp_path/"open-door.cleanroomx.json"
+    save_project_document(path,app.project)
+    app.load_project_path(path)
+    assert next(d for d in app.spatial_workspace.layout["devices"] if d["id"]==door["id"])["door_state"]=="open"
+
+
+def test_ffu_and_return_visibility_controls_are_independent(app):
+    w=app.spatial_workspace
+    ffu=next(d for d in w.layout["devices"] if d["type"]=="ffu")
+    ret=next(d for d in w.layout["devices"] if d["type"]=="return")
+    w._show_ffu.set(False)
+    w.redraw()
+    assert not w.canvas_3d.find_withtag(f"device:{ffu['id']}")
+    assert w.canvas_3d.find_withtag(f"device:{ret['id']}")
+    assert not w.canvas_3d.find_withtag("design-downflow")
+    w._show_ffu.set(True)
+    w._show_returns.set(False)
+    w.redraw()
+    assert w.canvas_3d.find_withtag(f"device:{ffu['id']}")
+    assert not w.canvas_3d.find_withtag(f"device:{ret['id']}")
+
+
 def test_duplicate_edit_undo_redo_save_reopen_and_analysis(app, tmp_path):
     workspace = app.spatial_workspace
     room = workspace.layout["rooms"][0]

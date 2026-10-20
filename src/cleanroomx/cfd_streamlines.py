@@ -6,7 +6,9 @@ parameter has dimensions of seconds but is NOT a CFD transient simulation.
 """
 from __future__ import annotations
 
+import json
 import math
+from pathlib import Path
 
 SOURCE_SCHEMA = "cleanroomx.multizone-results.v1"
 TRACE_SCHEMA = "cleanroomx.steady-streamline.v1"
@@ -144,3 +146,31 @@ def trace_computed_streamline(report: dict, seed_m, *,
         "max_integration_parameter_s":duration,
         "termination":reason, "points":points,
     }
+
+
+def export_computed_streamlines(traces: list[dict], destination: str | Path) -> Path:
+    """Write explicit, provenance-tagged steady traces without overwriting files."""
+    if not traces or len(traces) > 20:
+        raise ValueError("Export requires one to twenty computed traces")
+    source = traces[0]
+    if any(trace.get("schema") != TRACE_SCHEMA or
+           trace.get("source_manifest_sha256") != source.get("source_manifest_sha256") or
+           trace.get("source_run_receipt_sha256") != source.get("source_run_receipt_sha256") or
+           trace.get("source_iteration") != source.get("source_iteration")
+           for trace in traces):
+        raise ValueError("All traces must come from one recorded CFD iteration")
+    payload = {
+        "schema": "cleanroomx.steady-streamline-collection.v1",
+        "validation": "steady_visualization_only_not_particle_transport",
+        "source_iteration": source["source_iteration"],
+        "source_manifest_sha256": source["source_manifest_sha256"],
+        "source_run_receipt_sha256": source["source_run_receipt_sha256"],
+        "units": {"xyz_m": "m", "speed_m_s": "m/s",
+                  "integration_parameter_s": "steady-field integration parameter, NOT solver transient time"},
+        "traces": traces,
+    }
+    serialized = json.dumps(payload, indent=2, allow_nan=False) + "\n"
+    path = Path(destination)
+    with path.open("x", encoding="utf-8") as output:
+        output.write(serialized)
+    return path

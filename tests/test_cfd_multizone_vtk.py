@@ -12,7 +12,7 @@ vtk = pytest.importorskip("vtk")
 
 from cleanroomx.cfd_multizone_vtk import (
     MAX_3D_CELLS, build_multizone_vtk_renderer, computed_field_polydata,
-    computed_trace_polydata, sampled_velocity_glyph_actor,
+    computed_trace_polydata, sampled_velocity_glyph_actor, select_recorded_cells,
 )
 from cleanroomx.cfd_streamlines import trace_computed_streamline
 
@@ -112,3 +112,59 @@ def test_3d_velocity_glyphs_handle_zero_velocity_without_invented_arrows():
     actor=sampled_velocity_glyph_actor(report,max_arrows=3)
     actor.GetMapper().Update()
     assert actor.GetMapper().GetInput().GetNumberOfPoints()==0
+
+
+def test_recorded_3d_plane_does_not_interpolate_missing_solver_values():
+    report=_source()
+    original=select_recorded_cells(report)
+    assert len(original)==3
+    x_plane=select_recorded_cells(
+        report,plane_axis="x",plane_position_m=1.5)
+    assert len(x_plane)==1
+    assert x_plane[0]["center_m"]==[1.5,0.5,0.5]
+    filtered=computed_field_polydata(
+        report,plane_axis="x",plane_position_m=1.5)
+    assert filtered.GetNumberOfPoints()==filtered.GetNumberOfVerts()==1
+    assert filtered.GetPoint(0)==pytest.approx([1.5,0.5,0.5])
+    assert filtered.GetPointData().GetArray(
+        "Computed pressure relative (Pa)").GetTuple1(0)==pytest.approx(0.0)
+    assert select_recorded_cells(report,plane_axis="y",plane_position_m=.5)==original
+    assert select_recorded_cells(report,plane_axis="z",plane_position_m=.5)==original
+    renderer=build_multizone_vtk_renderer(
+        report,[],room_id="r1",plane_axis="x",plane_position_m=1.5)
+    assert isinstance(renderer,vtk.vtkRenderer)
+    with pytest.raises(ValueError,match="No computed cells"):
+        computed_field_polydata(report,plane_axis="x",plane_position_m=50)
+
+
+@pytest.mark.parametrize("kwargs,error",[
+    ({"room_id":"unknown"},"existing computed room"),
+    ({"plane_axis":"t"},"Plane axis"),
+    ({"plane_axis":"z","plane_position_m":float("nan")},"finite"),
+    ({"plane_axis":"x","plane_position_m":float("inf")},"finite"),
+    ({"plane_axis":"x"},"finite"),
+    ({"plane_axis":"all","plane_position_m":.5},"omitted"),
+])
+def test_recorded_3d_filter_rejects_invalid_or_unsolved_selection(kwargs,error):
+    with pytest.raises(ValueError,match=error):
+        select_recorded_cells(_source(),**kwargs)
+
+
+def test_recorded_3d_room_filter_preserves_only_selected_room_membership():
+    report=_source()
+    report["cells"][-1]["room_id"]="r2"
+    report["geometry"]["r1"]["length_m"]=2.
+    report["geometry"]["r2"]={
+        "x_m":2.,"y_m":0.,"floor_elevation_m":0.,
+        "length_m":1.,"width_m":1.,"height_m":1.
+    }
+    chosen=select_recorded_cells(report,room_id="r2")
+    assert len(chosen)==1
+    assert chosen[0]["center_m"]==[2.5,0.5,0.5]
+    field=computed_field_polydata(report,room_id="r2")
+    assert field.GetNumberOfPoints()==1
+    only_one_room=build_multizone_vtk_renderer(
+        report,[],room_id="r2",vectors=False)
+    two_rooms=build_multizone_vtk_renderer(
+        report,[],vectors=False)
+    assert two_rooms.GetActors().GetNumberOfItems()==only_one_room.GetActors().GetNumberOfItems()+1

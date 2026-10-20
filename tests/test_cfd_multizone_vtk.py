@@ -13,6 +13,7 @@ vtk = pytest.importorskip("vtk")
 from cleanroomx.cfd_multizone_vtk import (
     MAX_3D_CELLS, build_multizone_vtk_renderer, computed_field_polydata,
     computed_trace_polydata, sampled_velocity_glyph_actor, select_recorded_cells,
+    seed_streamline_from_displayed_point, _recorded_cell_actor,
 )
 from cleanroomx.cfd_streamlines import trace_computed_streamline
 
@@ -168,3 +169,28 @@ def test_recorded_3d_room_filter_preserves_only_selected_room_membership():
     two_rooms=build_multizone_vtk_renderer(
         report,[],vectors=False)
     assert two_rooms.GetActors().GetNumberOfItems()==only_one_room.GetActors().GetNumberOfItems()+1
+
+
+def test_3d_point_seed_comes_from_displayed_recorded_cell_only():
+    report=_source()
+    trace=seed_streamline_from_displayed_point(report,[],1,
+        room_id="r1",plane_axis="x",plane_position_m=1.5)
+    assert trace["points"][0]["xyz_m"]==[1.5,.5,.5]
+    assert trace["source_iteration"]==report["time_name"]
+    assert trace["validated_particle_tracking"] is False
+    selected=build_multizone_vtk_renderer(report,[],vectors=False)
+    actor=_recorded_cell_actor(selected)
+    assert actor.GetMapper().GetInput().GetNumberOfPoints()==3
+    assert actor.GetMapper().GetInput().GetPointData().GetArray(
+        "Computed U (m/s)") is not None
+    with pytest.raises(ValueError,match="not in the displayed"):
+        seed_streamline_from_displayed_point(
+            report,[],2,plane_axis="x",plane_position_m=1.5)
+    with pytest.raises(ValueError,match="integer"):
+        seed_streamline_from_displayed_point(report,[],True)
+    with pytest.raises(ValueError,match="at most 20"):
+        seed_streamline_from_displayed_point(report,[trace]*20,0)
+    tampered=copy.deepcopy(trace)
+    tampered["source_iteration"]="stale"
+    with pytest.raises(ValueError,match="originate"):
+        seed_streamline_from_displayed_point(report,[tampered],0)

@@ -345,3 +345,20 @@ deposition, resuspension, collisions, transient gas fields or two-way
 feedback are modeled. No infection/contamination or cleanroom compliance
 claim is made. The test suite explicitly distinguishes synthetic numerical
 fixtures from real OpenFOAM cell-field ingestion checks.
+
+
+### Recorded-vertex particle playback
+
+The **Particle elapsed time (s)** slider and **Play samples / Pause**
+buttons in the native VTK 3D window show bright green particle-position markers.
+Every marker uses the most recent **actual numeric integration vertex** at or
+before the selected elapsed particle-model time. Playback holds positions
+between solver-screening integration samples rather than interpolating
+fictitious particle positions. The green path remains visible to review the
+full one-way particle trajectory; the gold path is a separate steady-air
+streamline. Playback speed is an operator display setting, *not* OpenFOAM
+physical time nor a CFD-transient video. If a simulated particle reaches an
+unsolved or solid voxel boundary, its screening path terminates rather than
+claiming deposition. The native VTK + real Tk + Xvfb smoke regression exercises
+the time slider and verifies that marker coordinates equal recorded sample
+positions from the frozen-field particle model.

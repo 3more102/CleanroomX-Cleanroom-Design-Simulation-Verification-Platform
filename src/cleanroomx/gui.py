@@ -64,6 +64,7 @@ from .project_bundle import (
     extract_project_bundle,
 )
 from .cfd_project_rooms import CASE_RE, generate_project_room_cases
+from .cfd_multizone import generate_multizone_open_door_case
 from .project_diagnostics import markdown_project_diagnostics_report
 from .project_diagnostics_cli import (
     _assert_project_output_is_safe,
@@ -2260,6 +2261,10 @@ class CleanroomXApp:
         analyze_menu.add_command(
             label="Generate OpenFOAM Room Cases...",
             command=self.export_openfoam_room_cases,
+        )
+        analyze_menu.add_command(
+            label="Generate Connected Open-Door CFD Case...",
+            command=self.export_connected_open_door_case,
         )
         menubar.add_cascade(label="Analyze", menu=analyze_menu)
 
@@ -6285,6 +6290,112 @@ class CleanroomXApp:
             "The 5 Pa pressure-network example is NOT CFD-coupled; "
             "run blockMesh, checkMesh and simpleFoam separately to obtain "
             "real results, then review mesh quality and convergence.",
+            parent=self.root,
+        )
+
+    def export_connected_open_door_case(self) -> None:
+        """Save-bound, expressly open-door CFD input export; never run a solver."""
+        if self._running:
+            messagebox.showwarning(
+                "Analysis running",
+                "Abandon the current run before generating a connected CFD case.",
+                parent=self.root,
+            )
+            return
+        try:
+            if self._editor_analysis() is not None:
+                self._commit_editor()
+            else:
+                self._sync_metadata()
+        except Exception as exc:
+            messagebox.showerror(
+                "Cannot prepare multizone CFD", str(exc), parent=self.root
+            )
+            return
+        if self.project_path is None or self._has_unsaved_changes():
+            self.status_var.set("Connected CFD export blocked: save the project first")
+            messagebox.showinfo(
+                "Save project first",
+                "Save all project and spatial layout changes before exporting "
+                "a connected CFD case tied to exact project bytes.",
+                parent=self.root,
+            )
+            return
+        try:
+            revision = capture_project_file_revision(self.project_path)
+            opened = getattr(self, "_project_file_revision", None)
+            if opened is not None and not project_file_revision_matches(opened, revision):
+                raise RuntimeError(
+                    "Project file changed on disk; reload or reconcile before generating CFD"
+                )
+        except Exception as exc:
+            messagebox.showerror("Connected CFD export blocked", str(exc), parent=self.root)
+            return
+        confirmed = messagebox.askyesno(
+            "Hypothetical open-door CFD scenario",
+            "Generate a SINGLE CONNECTED hypothetical airflow model with ALL "
+            "three room-to-room doors OPEN?\\n\\n"
+            "This does NOT reproduce the CLOSED-door 5 Pa pressure-cascade "
+            "network. No solver has run or been verified.",
+            parent=self.root,
+        )
+        if not confirmed:
+            return
+        nu = simpledialog.askfloat(
+            "Multizone air property",
+            "Enter air kinematic viscosity (m²/s), based on actual physical conditions:",
+            parent=self.root, minvalue=1e-12,
+        )
+        if nu is None:
+            return
+        parent_dir = filedialog.askdirectory(
+            parent=self.root,
+            title="Choose existing parent directory for NEW multizone CFD case",
+            initialdir=str(self.project_path.parent),
+            mustexist=True,
+        )
+        if not parent_dir:
+            return
+        folder = simpledialog.askstring(
+            "New connected CFD case folder",
+            "New output folder name:",
+            parent=self.root,
+            initialvalue="cleanroomx-open-door-multizone",
+        )
+        if folder is None:
+            return
+        if not CASE_RE.fullmatch(folder):
+            messagebox.showerror(
+                "Invalid folder name",
+                "Use 1–64 ASCII letters, numbers, underscores or hyphens; "
+                "start with a letter or number.",
+                parent=self.root,
+            )
+            return
+        destination = Path(parent_dir) / folder
+        try:
+            latest = capture_project_file_revision(self.project_path)
+            if not project_file_revision_matches(revision, latest):
+                raise RuntimeError("Project changed while the CFD export dialogs were open")
+            result = generate_multizone_open_door_case(
+                self.project_path, destination,
+                door_mode="open", kinematic_viscosity_m2_s=nu,
+            )
+        except (OSError, ValueError, RuntimeError, FileExistsError) as exc:
+            self.status_var.set("Connected CFD geometry preparation failed")
+            messagebox.showerror("Connected CFD export failed", str(exc), parent=self.root)
+            return
+        self.status_var.set(
+            "Generated hypothetical connected open-door multizone CFD input"
+        )
+        messagebox.showinfo(
+            "Connected OpenFOAM input generated",
+            f"Case folder: {destination}\\n"
+            f"Connected fluid blocks: {result['case']['fluid_block_count']}\\n"
+            f"Traversable doors: {len(result['case']['open_doors'])}\\n\\n"
+            "No OpenFOAM solver was launched. The 5 Pa CLOSED-door targets "
+            "are NOT imposed. Run blockMesh/checkMesh/simpleFoam explicitly "
+            "and independently review the resulting physics.",
             parent=self.root,
         )
 

@@ -611,3 +611,48 @@ termination and explicit noncertifying limitations. Validation:
 - Foundation v10 actual computed-U ingestion/integration check
 
 A passing timestep screen is a **limited numerical diagnostic only**.
+
+
+## Source-checked SIMPLE numerical convergence triage (20 October 2026)
+
+The **Iteration stability** desktop tab now provides **Numerical drift triage**,
+a separate *operator-tolerance numerical screening* of authentic OpenFOAM
+saved SIMPLE snapshots. The workflow first uses the existing
+**Analyze saved iterations** function to load and verify actual recorded
+pressure/velocity/flux fields with SHA-256-linked source receipts. The new
+triage cannot operate on an arbitrary unverified particle playback, rendered
+streamline, synthetic animation, or unlinked set of snapshots.
+
+The operator explicitly specifies:
+
+- Maximum observed change of room-mean and door-relative pressure between
+  the two compared saved snapshots, in Pa
+- Maximum change of computed net doorway flux, in m³/s
+- Maximum summed absolute computed cell-flow imbalance, in m³/s
+- Number of last consecutive **saved snapshot differences** to examine,
+  2 through 11 (requiring at least N+1 recorded snapshots)
+
+For each available consecutive difference the tool records the original
+SIMPLE iteration identifiers, actual drift magnitudes and which
+**operator-provided diagnostic thresholds** were exceeded. The reported
+classification is one of: insufficient saved iterations, solver did not
+report convergence, observed drift exceeding operator limits, or bounded
+saved-snapshot drift under operator limits. Even the last option is **not**
+proof of steady solver convergence order, mesh independence, a validated
+flow regime, or engineering acceptance. The tool never invents unsaved
+intermediate solver iterations, physical times, or pressure values.
+
+This is important for the bundled connected **all-doors-open** case, whose
+600-iteration SIMPLE solve did **not** report convergence. Its resulting
+pressure differences must never be presented as a 5 Pa **closed-door**
+demonstration. At each numerical triage result, the canonical engineering
+release remains **HOLD**.
+
+The desktop can export a new, non-overwriting JSON report retaining the
+OpenFOAM source manifest hash, run receipt hash, selected SIMPLE iterations,
+all supplied tolerances and observed breaches. Numerical smoke tests use
+strictly labelled synthetic snapshot fixtures. The Foundation v10 integration
+test consumes **genuinely computed** saved solver iterations and checks
+source identity, classification and the HOLD gate. The real Tk GUI test
+validates numerical controls, rejection of invalid tolerance values,
+source-linked export and the correct iteration-history notebook tab.

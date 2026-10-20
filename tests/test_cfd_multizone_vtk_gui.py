@@ -105,6 +105,20 @@ def test_real_tk_vtk_window_opens_and_updates_selected_field_and_glyphs(tmp_path
         assert content["tracks"][0]["diameter_um"]==pytest.approx(5.)
         assert not window._cleanroomx_export_particles_to_path(particle_file)
         assert "Particle export rejected" in window._cleanroomx_view_status.get()
+        diagnostic_window=window._cleanroomx_analyze_particle_paths()
+        assert isinstance(diagnostic_window,tk.Toplevel)
+        root.update()
+        diagnostics=diagnostic_window._cleanroomx_particle_diagnostics
+        assert diagnostics["source_iteration"]=="50"
+        assert diagnostics["number_of_screening_tracks"]==1
+        assert diagnostics["engineering_release"]=="HOLD"
+        assert diagnostics["validated_particle_transport"] is False
+        assert len(diagnostic_window._cleanroomx_particle_diagnostics_table.get_children())==1
+        assert diagnostics["tracks"][0]["sample_count"]==len(recorded)
+        diagnostic_window.destroy()
+        window._cleanroomx_particles.clear()
+        assert window._cleanroomx_analyze_particle_paths() is None
+        assert "Particle diagnostics rejected" in window._cleanroomx_view_status.get()
     finally:
         if window is not None:
             window.destroy()

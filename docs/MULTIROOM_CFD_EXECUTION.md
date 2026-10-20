@@ -431,3 +431,60 @@ between saved snapshots is not proof of mesh independence, convergence
 between unsaved steps, an acceptable aerodynamic pattern or a compliant
 closed-door 5 Pa pressure cascade. These are diagnostic observations
 without automatically invented pass/fail numerical tolerances.
+
+
+## Independent closed-door leakage-network comparison and scenario sensitivity
+
+The new **Closed-door network** tab compares the last imported *genuine
+all-doors-open CFD* p/phi results with a separately specified **closed-door
+pressure/leakage NETWORK**. These are two physically distinct models. It
+**does not** generate or run a closed-door OpenFOAM mesh, assume a 5 Pa
+pressure controller, determine door-seal leakage from the open doorway,
+or certify cleanroom pressurization.
+
+1. Import the existing recorded Foundation v10 OpenFOAM fields as usual.
+2. In **Closed-door network**, click **Create missing-input template**.
+   The JSON contains the actual room IDs, modeled door IDs, nominal
+   per-door pressure targets and corridor reference of the imported CFD.
+   **All mechanical supply/return/exhaust flows, leakage coefficients,
+   exponents and leakage source references remain unset.** This file
+   must not solve until these missing values are explicitly supplied.
+3. Enter independent equipment/commissioning mechanical airflow data
+   for *every room* and source-identifiable door-seal leakage data
+   (power-law coefficient/exponent, or equivalent orifice Cd/area/density).
+   Identify each path source as `measured`, `manufacturer` or
+   `engineering_assumption`; include a meaningful reference.
+   The latter is a named hypothetical input, **not** measured evidence.
+4. Choose **Load leakage scenario JSON**. The pre-existing pressure
+   network solver computes all node pressures and path flows. The
+   comparison shows the OPEN-CFD Δp from actual volume-mean p, the
+   independent CLOSED-network Δp, signed difference, nominal target,
+   and hypothetical closed-door leakage flow. It also reconciles
+   each room's *solved open-CFD supply/return phi patch integrals*
+   against independently supplied network supply/return/exhaust values
+   in m³/h. Numerical equality does not make the two models identical.
+5. **Export comparison JSON** saves a non-overwriting engineering-HOLD
+   package with both source identifiers and the explicit network input.
+   **Illustrative leakage sweep** varies every independently configured
+   leakage coefficient (or orifice area) simultaneously by **0.5×, 1×,
+   2×**, re-solving the pressure network for each factor. This is a
+   *hypothesis stress test* — **not** a measured uncertainty range,
+   statistical confidence interval or sensitivity of OpenFOAM CFD.
+   **Export sweep JSON** retains the hypothetical multipliers, per-door
+   calculated pressures/leakages, nominal network target results and
+   the original source CFD/closed-door input identity.
+
+### Physical and numerical requirements before actual sign-off
+
+The status remains **ENGINEERING HOLD** regardless of whether the separate
+leakage network meets its nominal pressure target. There is still no
+closed-door CFD, door-seal performance verification, calibrated leakage
+coefficients, actual transient door behavior, coupled fan/control solution,
+commissioning measurement or mesh sensitivity proof. Solved closed-network
+results describe a steady, well-mixed mechanical/leakage hypothesis; OPEN
+CFD visualization cannot validate its room pressure-control predictions.
+
+A prior GitHub Actions OpenFOAM failure at commit `06071624` occurred in
+the *runtime installation* step and is not evidence of a CFD numerical
+failure. Later VTK and actual OpenFOAM regression workflow runs must be
+checked by commit SHA before any statement of complete CI success.

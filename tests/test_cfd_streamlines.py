@@ -4,12 +4,13 @@ These fixtures are explicitly NOT OpenFOAM runs or physical validation evidence.
 Actual solver-field provenance is verified by the multizone integration suite.
 """
 import copy
+import json
 import math
 
 import pytest
 
 from cleanroomx.cfd_streamlines import (
-    ComputedVelocityGrid, TRACE_SCHEMA, trace_computed_streamline,
+    ComputedVelocityGrid, TRACE_SCHEMA, trace_computed_streamline, export_computed_streamlines,
 )
 
 
@@ -119,3 +120,23 @@ def test_gui_click_on_computed_cell_traces_recorded_three_dimensional_field():
     assert fake_window.trace_paths[0]["points"][0]["xyz_m"] == sample["center_m"]
     assert redraws == [True]
     assert "not transient particle motion" in updates[-1]
+
+
+def test_exported_streamlines_are_provenance_tagged_and_never_overwritten(tmp_path):
+    trace = trace_computed_streamline(_report(), (0.5, 0.5, 0.5),
+                                      max_integration_s=1)
+    destination = tmp_path / "traces.json"
+    assert export_computed_streamlines([trace], destination) == destination
+    payload = json.loads(destination.read_text())
+    assert payload["source_manifest_sha256"] == "a"*64
+    assert payload["source_run_receipt_sha256"] == "b"*64
+    assert payload["source_iteration"] == "100"
+    assert payload["traces"][0]["points"][-1]["xyz_m"] == pytest.approx([1.5, 0.5, 0.5])
+    assert "NOT solver transient time" in payload["units"]["integration_parameter_s"]
+    with pytest.raises(FileExistsError):
+        export_computed_streamlines([trace], destination)
+    other = copy.deepcopy(trace)
+    other["source_iteration"] = "50"
+    with pytest.raises(ValueError, match="one recorded CFD iteration"):
+        export_computed_streamlines([trace, other], tmp_path / "invalid.json")
+    assert not (tmp_path / "invalid.json").exists()

@@ -1,15 +1,18 @@
 """Desktop workspace for recorded, genuinely computed multiroom CFD fields."""
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 from pathlib import Path
 import queue
+import sys
 import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 from .cfd_multizone import run_multizone_open_door_case, verify_multizone_inputs
+from .cfd_wsl_bridge import run_wsl_bridge
 from .cfd_multizone_results import analyze_multizone_case, export_multizone_report
 from .cfd_streamlines import trace_computed_streamline, export_computed_streamlines
 from .cfd_multizone_review import review_recorded_multizone, export_engineering_review
@@ -36,6 +39,42 @@ def slice_samples(report: dict, axis: str, position_m: float, room: str = "all")
             and abs(c["center_m"][a]-position_m) < half-1e-8]
 
 
+
+def wsl_gui_command(*, repository: Path, directory: Path | None = None,
+                    distribution: str = "Ubuntu", mode: str = "probe") -> dict:
+    """Run opt-in WSL on a worker; do not equate solver exit with CFD validity."""
+    if mode not in ("probe", "run"):
+        raise ValueError("Unsupported WSL GUI operation")
+    result=run_wsl_bridge(
+        repository=repository, distribution=distribution, mode=mode,
+        case_directory=directory if mode=="run" else None,
+    )
+    if result != 0:
+        raise RuntimeError(
+            f"WSL {mode} exited with code {result}. Review the solver logs, "
+            "WSL installation and Foundation v10 environment."
+        )
+    if mode=="probe":
+        return {"status":"wsl_probe_ready"}
+    if directory is None:
+        raise ValueError("WSL solver run requires a generated case")
+    receipt_path=directory/"run-receipt.json"
+    try:
+        receipt=json.loads(receipt_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise RuntimeError("WSL returned success without a readable execution receipt") from exc
+    expected_sha=hashlib.sha256((directory/"manifest.json").read_bytes()).hexdigest()
+    if (not isinstance(receipt,dict) or
+        receipt.get("status")!="executed_requires_convergence_review" or
+        receipt.get("manifest_sha256")!=expected_sha):
+        raise RuntimeError("WSL completion receipt is missing, stale or incomplete")
+    return {"status":"wsl_solver_executed_requires_convergence_review"}
+
+
+def _windows_wsl_available() -> bool:
+    return sys.platform=="win32"
+
+
 class MultizoneCFDWindow(tk.Toplevel):
     """Run in a worker, tail actual logs, and review recorded field samples."""
 
@@ -55,6 +94,10 @@ class MultizoneCFDWindow(tk.Toplevel):
         self.running = False
         self.events = queue.Queue()
         self.case_path = tk.StringVar(value=str(directory or ""))
+        self.wsl_distribution = tk.StringVar(value="Ubuntu")
+        self._wsl_running_case = None
+        self._wsl_log_positions = {}
+        self._wsl_seen_stages = set()
         self.density = tk.StringVar(value="")
         self.reference = tk.StringVar(value="corridor")
         self.time_name = tk.StringVar(value="latest")
@@ -95,6 +138,23 @@ class MultizoneCFDWindow(tk.Toplevel):
         self.import_button=ttk.Button(commands,text="Import computed fields",command=self.import_case)
         self.import_button.pack(side="left")
         ttk.Button(commands,text="Export report",command=self.export_report).pack(side="right")
+        wsl_controls=ttk.Frame(top)
+        wsl_controls.pack(fill="x",pady=(0,6))
+        ttk.Label(wsl_controls,text="Windows → WSL OpenFOAM 10").pack(side="left")
+        ttk.Label(wsl_controls,text="Distribution").pack(side="left",padx=(12,4))
+        self.wsl_distribution_entry=ttk.Entry(
+            wsl_controls,textvariable=self.wsl_distribution,width=16)
+        self.wsl_distribution_entry.pack(side="left")
+        initial_state="normal" if _windows_wsl_available() else "disabled"
+        self.wsl_probe_button=ttk.Button(
+            wsl_controls,text="Probe WSL",command=self.probe_wsl,state=initial_state)
+        self.wsl_probe_button.pack(side="left",padx=8)
+        self.wsl_run_button=ttk.Button(
+            wsl_controls,text="Run case in WSL",command=self.run_wsl_case,state=initial_state)
+        self.wsl_run_button.pack(side="left",padx=4)
+        ttk.Label(
+            wsl_controls,text="Opt-in; inspect real solver logs and import recorded fields. Engineering HOLD."
+        ).pack(side="left",padx=8)
         ttk.Label(top,textvariable=self.status,wraplength=1130).pack(anchor="w")
         self.progress=ttk.Progressbar(top,mode="indeterminate")
         self.progress.pack(fill="x",pady=(8,0))
@@ -294,6 +354,8 @@ class MultizoneCFDWindow(tk.Toplevel):
         self.running=True
         self.run_button.configure(state="disabled")
         self.import_button.configure(state="disabled")
+        self.wsl_probe_button.configure(state="disabled")
+        self.wsl_run_button.configure(state="disabled")
         self.progress.start(15)
         def work():
             try:
@@ -314,6 +376,55 @@ class MultizoneCFDWindow(tk.Toplevel):
         self.tabs.select(3)
         self._worker(lambda:run_multizone_open_door_case(root,on_progress=lambda event:self.events.put(("progress",event))))
 
+    def probe_wsl(self):
+        if self.running or not _windows_wsl_available():
+            return
+        distribution=self.wsl_distribution.get().strip()
+        self.status.set("Probing installed WSL OpenFOAM Foundation v10 and Linux Python; no CFD run is started.")
+        self._worker(lambda:wsl_gui_command(
+            repository=Path(__file__).resolve().parents[2],
+            distribution=distribution,mode="probe"))
+
+    def run_wsl_case(self):
+        if self.running or not _windows_wsl_available():
+            return
+        try:
+            root,_=verify_multizone_inputs(self.case_path.get())
+        except (OSError,ValueError) as exc:
+            messagebox.showerror("Invalid connected CFD case",str(exc),parent=self)
+            return
+        distribution=self.wsl_distribution.get().strip()
+        self.report=None
+        self._clear_results()
+        self.active_log=None
+        self.log_offset=0
+        self._wsl_running_case=root
+        self._wsl_log_positions={}
+        self._wsl_seen_stages=set()
+        self.status.set(
+            "Running the verified OpenFOAM 10 pipeline in WSL. Solver exit is NOT convergence or 5 Pa validation.")
+        self.tabs.select(3)
+        self._worker(lambda:wsl_gui_command(
+            repository=Path(__file__).resolve().parents[2],
+            directory=root,distribution=distribution,mode="run"))
+
+    def _poll_wsl_logs(self):
+        """Follow genuine stage log files produced in the shared Windows case."""
+        if self._wsl_running_case is None:
+            return
+        for stage in ("blockMesh","checkMesh","simpleFoam","postProcess"):
+            path=self._wsl_running_case/(stage+".log")
+            if not path.is_file():
+                continue
+            if stage not in self._wsl_seen_stages:
+                self._wsl_seen_stages.add(stage)
+                self.log_text.insert("end",f"\n--- WSL: {stage} (recorded log) ---\n")
+                self.status.set(f"WSL: {stage} | reading actual solver log; no convergence claim")
+            self.active_log=path
+            self.log_offset=self._wsl_log_positions.get(stage,0)
+            self._tail_log()
+            self._wsl_log_positions[stage]=self.log_offset
+
     def import_case(self):
         try:
             density=float(self.density.get())
@@ -332,6 +443,7 @@ class MultizoneCFDWindow(tk.Toplevel):
                                                   time_name=None if selected=="latest" else selected))
 
     def _poll(self):
+        self._poll_wsl_logs()
         try:
             while True:
                 kind,payload=self.events.get_nowait()
@@ -349,6 +461,10 @@ class MultizoneCFDWindow(tk.Toplevel):
                     self.progress.stop()
                     self.run_button.configure(state="normal")
                     self.import_button.configure(state="normal")
+                    state="normal" if _windows_wsl_available() else "disabled"
+                    self.wsl_probe_button.configure(state=state)
+                    self.wsl_run_button.configure(state=state)
+                    self._wsl_running_case=None
                     if kind=="error":
                         self.status.set("CFD operation failed: "+payload)
                         messagebox.showerror("CFD operation failed",payload,parent=self)
@@ -356,6 +472,8 @@ class MultizoneCFDWindow(tk.Toplevel):
                         self.load_report(payload)
                     elif payload.get("schema")==HISTORY_SCHEMA:
                         self.load_iteration_history(payload)
+                    elif payload.get("status")=="wsl_probe_ready":
+                        self.status.set("WSL Foundation v10 probe READY. Generate a new connected case before running.")
                     else:
                         self.status.set(payload["status"].replace("_"," ")+". Enter density and import computed fields to review.")
         except queue.Empty:

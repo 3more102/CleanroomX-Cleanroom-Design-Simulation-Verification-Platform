@@ -12,6 +12,7 @@ from tkinter import filedialog, messagebox, ttk
 from .cfd_multizone import run_multizone_open_door_case, verify_multizone_inputs
 from .cfd_multizone_results import analyze_multizone_case, export_multizone_report
 from .cfd_streamlines import trace_computed_streamline, export_computed_streamlines
+from .cfd_multizone_review import review_recorded_multizone, export_engineering_review
 
 
 def slice_samples(report: dict, axis: str, position_m: float, room: str = "all") -> list:
@@ -33,6 +34,7 @@ class MultizoneCFDWindow(tk.Toplevel):
         self.geometry("1230x830")
         self.minsize(850,600)
         self.report = None
+        self.engineering_review = None
         self.running = False
         self.events = queue.Queue()
         self.case_path = tk.StringVar(value=str(directory or ""))
@@ -86,7 +88,8 @@ class MultizoneCFDWindow(tk.Toplevel):
         residuals=ttk.Frame(self.tabs,padding=8)
         logs=ttk.Frame(self.tabs,padding=8)
         diagnostics=ttk.Frame(self.tabs,padding=8)
-        for tab,label in ((summary,"Room comparison"),(fields,"Computed sections"),(residuals,"Residual histories"),(logs,"Solver logs"),(diagnostics,"Diagnostics / provenance")):
+        engineering=ttk.Frame(self.tabs,padding=10)
+        for tab,label in ((summary,"Room comparison"),(engineering,"Engineering review"),(fields,"Computed sections"),(residuals,"Residual histories"),(logs,"Solver logs"),(diagnostics,"Diagnostics / provenance")):
             self.tabs.add(tab,text=label)
         columns=("name","target","pressure","speed","supply","returns","imbalance","balance_pct","upward")
         self.room_table=ttk.Treeview(summary,columns=columns,show="headings",height=5)
@@ -95,6 +98,32 @@ class MultizoneCFDWindow(tk.Toplevel):
             self.room_table.column(key,width=width,minwidth=60)
         self.room_table.pack(fill="x")
         ttk.Label(summary,text="*Pressure relative to the selected room's computed mean. Targets are design inputs. †Absolute net imbalance / mean incoming and outgoing face flow; no acceptance limit is assumed.",wraplength=1100).pack(anchor="w",pady=6)
+        self.engineering_verdict=tk.StringVar(value="Engineering HOLD — import genuine computed fields for a review.")
+        ttk.Label(
+            engineering,textvariable=self.engineering_verdict,wraplength=1080,
+            font=("TkDefaultFont",11,"bold")).pack(anchor="w",pady=6)
+        ttk.Label(
+            engineering,
+            text="Open-door CFD observations only. No numerical tolerance, mesh-independence, leakage scenario or cleanroom acceptance is assumed.",
+            wraplength=1080).pack(anchor="w",pady=6)
+        self.engineering_table=ttk.Treeview(
+            engineering,columns=("door","target","observed","gap","direction","forward","reverse"),
+            show="headings",height=5)
+        for key,label in (
+            ("door","Door"),("target","Design Δp (Pa)"),("observed","Computed Δp (Pa)"),
+            ("gap","Computed − target (Pa)"),("direction","Reversed Δp?"),
+            ("forward","Forward solved phi (m³/h)"),("reverse","Reverse solved phi (m³/h)")
+        ):
+            self.engineering_table.heading(key,text=label)
+            self.engineering_table.column(key,width=145,minwidth=75)
+        self.engineering_table.pack(fill="x",pady=8)
+        ttk.Label(engineering,text="Review limitations and next engineering checks:").pack(anchor="w",pady=4)
+        self.engineering_text=tk.Text(
+            engineering,wrap="word",height=14,font=("TkFixedFont",10))
+        self.engineering_text.pack(fill="both",expand=True)
+        ttk.Button(
+            engineering,text="Export review JSON (HOLD only)",
+            command=self.export_engineering_review_file).pack(anchor="e",pady=8)
         self.pressure_canvas=tk.Canvas(summary,background="#101b2b",highlightthickness=0,height=220)
         self.pressure_canvas.pack(fill="both",expand=True,pady=8)
         self.pressure_canvas.bind("<Configure>",lambda e:self.draw_pressure())
@@ -245,7 +274,10 @@ class MultizoneCFDWindow(tk.Toplevel):
         self._section_samples = []
         self._section_to_pixel = None
         self.trace_status.set("Click a computed fluid cell to trace its steady 3D streamline.")
-        for table in (self.room_table,self.door_table,self.residual_table):
+        self.engineering_review = None
+        self.engineering_verdict.set("Engineering HOLD — import genuine computed fields for a review.")
+        self.engineering_text.delete("1.0","end")
+        for table in (self.room_table,self.door_table,self.residual_table,self.engineering_table):
             table.delete(*table.get_children())
         self.numerical_status.set("")
         self.diagnostics.delete("1.0","end")
@@ -257,6 +289,29 @@ class MultizoneCFDWindow(tk.Toplevel):
         self.density.set(f"{report['density_kg_m3']:g}")
         self.reference.set(report["pressure_reference"]["room_id"])
         self._clear_results()
+        self.engineering_review=review_recorded_multizone(report)
+        review=self.engineering_review
+        self.engineering_verdict.set(
+            f"ENGINEERING HOLD | {len(review['doors'])} computed open-door pressure deltas | "
+            +("solver-reported convergence" if review["numerical_convergence_at_selected_iteration"] else "NOT CONVERGED")
+            +" | 5 Pa CLOSED-DOOR PERFORMANCE NOT DEMONSTRATED")
+        for item in review["door_review_by_absolute_mismatch"]:
+            gap=item["delta_minus_target_pa"]
+            target=item["target_delta_pa"]
+            reversed_flag=item["target_direction_reversed"]
+            self.engineering_table.insert("","end",values=(
+                item["door"],"—" if target is None else f"{target:.6g}",
+                f"{item['observed_delta_pa']:.6g}",
+                "—" if gap is None else f"{gap:+.6g}",
+                "unknown" if reversed_flag is None else ("YES" if reversed_flag else "no"),
+                f"{item['computed_forward_m3_s']*3600:.6g}",
+                f"{item['computed_reverse_m3_s']*3600:.6g}"))
+        lines=["Reasons for HOLD:",*(
+            "• "+reason["code"]+": "+reason["message"]
+            for reason in review["reasons"]),
+            "", "Non-prescriptive next engineering checks:",
+            *("• "+action for action in review["non_prescriptive_checks"])]
+        self.engineering_text.insert("1.0","\n".join(lines))
         for rid,r in report["rooms"].items():
             target=r["design_pressure_relative_to_reference_pa"]
             self.room_table.insert("","end",iid=rid,values=(r["name"],"—" if target is None else f"{target:g}",
@@ -315,6 +370,21 @@ class MultizoneCFDWindow(tk.Toplevel):
             c.create_text(12,y,anchor="w",fill="#d9e7f7",text=r["name"])
             c.create_rectangle(min(center,end),y-9,max(center+1,end),y+9,fill="#22c5d6",outline="",tags="computed-pressure")
             c.create_text(width-20,y,anchor="e",fill="#d9e7f7",text=f"{value:.6g} Pa")
+
+    def export_engineering_review_file(self):
+        if not self.engineering_review or self.running:
+            return
+        destination=filedialog.asksaveasfilename(
+            parent=self,title="Export computed CFD engineering review (HOLD)",
+            defaultextension=".json",filetypes=(("JSON","*.json"),))
+        if not destination:
+            return
+        try:
+            saved=export_engineering_review(self.engineering_review,destination)
+        except (OSError,ValueError) as exc:
+            messagebox.showerror("Engineering review export failed",str(exc),parent=self)
+            return
+        self.engineering_verdict.set(f"ENGINEERING HOLD | Evidence saved: {saved}")
 
     def open_vtk_3d(self):
         """Open real 3D computed-cell geometry and recorded steady flow paths."""

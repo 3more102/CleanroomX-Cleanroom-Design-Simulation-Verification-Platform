@@ -12,6 +12,9 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 from .cfd_multizone import run_multizone_open_door_case, verify_multizone_inputs
+from .cfd_convergence_triage import (
+    triage_recorded_convergence, export_convergence_triage,
+)
 from .cfd_wsl_bridge import run_wsl_bridge
 from .cfd_multizone_results import (
     _recorded_outputs, analyze_multizone_case, export_multizone_report,
@@ -224,6 +227,8 @@ class MultizoneCFDWindow(tk.Toplevel):
             command=self.analyze_iteration_history).pack(side="right",padx=4)
         ttk.Button(history_header,text="Export iteration history",
             command=self.export_iteration_history).pack(side="right",padx=4)
+        ttk.Button(history_header,text="Numerical drift triage",
+            command=self.open_convergence_triage).pack(side="right",padx=4)
         self.history_table=ttk.Treeview(
             history_tab,columns=("iteration","converged","door_pa","door_flow","cell_sum","room_p"),
             show="headings",height=6)
@@ -704,6 +709,119 @@ class MultizoneCFDWindow(tk.Toplevel):
         axes(self.history_balance_canvas,"Σ absolute cell flow imbalance",
             [("All cells",[snap["sum_absolute_cell_imbalance_m3_s"]
                           for snap in snapshots])],"m³/s")
+
+    def open_convergence_triage(self):
+        """User-tolerance numerical drift check using only imported REAL snapshots."""
+        if self.running or not self.iteration_history:
+            self.history_status.set(
+                "Analyze genuine saved OpenFOAM iterations before numerical drift triage.")
+            return None
+        dialog=tk.Toplevel(self)
+        dialog.title("CleanroomX | Recorded SIMPLE numerical drift triage")
+        dialog.geometry("1050x565")
+        dialog.minsize(760,370)
+        frame=ttk.Frame(dialog,padding=12)
+        frame.pack(fill="both",expand=True)
+        ttk.Label(
+            frame,text="OPEN-door recorded SIMPLE snapshots • numeric drift screening only • ENGINEERING HOLD",
+            font=("TkDefaultFont",11,"bold")).pack(anchor="w")
+        ttk.Label(
+            frame,text="These are OPERATOR-SUPPLIED diagnostic tolerances, not physical acceptance "
+                       "criteria. SIMPLE iteration differences are not seconds; do not infer 5 Pa "
+                       "closed-door compliance, convergence order or mesh independence.",
+            wraplength=990).pack(anchor="w",pady=6)
+        controls=ttk.Frame(frame)
+        controls.pack(fill="x",pady=6)
+        limits=(
+            ("Pressure drift (Pa)","pressure_drift_limit_pa","0.01"),
+            ("Door flux drift (m³/s)","transfer_drift_limit_m3_s","0.00001"),
+            ("Cell imbalance (m³/s)","cell_imbalance_limit_m3_s","0.001"),
+            ("Compare last N changes","consecutive_changes","2"),
+        )
+        entries={}
+        for title,key,default in limits:
+            ttk.Label(controls,text=title).pack(side="left",padx=(8,2))
+            variable=tk.StringVar(value=default)
+            ttk.Entry(controls,textvariable=variable,width=10).pack(side="left")
+            entries[key]=variable
+        result_status=tk.StringVar(
+            value="Select Review last saved snapshots; thresholds never authorize engineering release.")
+        ttk.Label(frame,textvariable=result_status,wraplength=980).pack(anchor="w")
+        columns=("previous","current","room","door","transfer","imbalance","within")
+        table=ttk.Treeview(frame,columns=columns,show="headings",height=7)
+        for key,label,width in (
+            ("previous","Prior SIMPLE",90),("current","Saved SIMPLE",90),
+            ("room","Room Δp drift Pa",145),("door","Door Δp drift Pa",145),
+            ("transfer","Door flux drift m³/s",160),
+            ("imbalance","Absolute cell imbalance m³/s",185),
+            ("within","Within operator limits?",155)):
+            table.heading(key,text=label)
+            table.column(key,width=width,minwidth=75)
+        table.pack(fill="both",expand=True,pady=8)
+        latest={"value":None}
+        actions=ttk.Frame(frame)
+        actions.pack(fill="x")
+        export_button=ttk.Button(actions,text="Export triage JSON",state="disabled")
+        export_button.pack(side="right",padx=5)
+
+        def review():
+            try:
+                values={
+                    key:(int(var.get()) if key=="consecutive_changes" else float(var.get()))
+                    for key,var in entries.items()
+                }
+                report=triage_recorded_convergence(self.iteration_history,**values)
+            except (ValueError,TypeError,KeyError) as exc:
+                latest["value"]=None
+                export_button.configure(state="disabled")
+                result_status.set(f"Numerical triage rejected: {exc}")
+                table.delete(*table.get_children())
+                return False
+            latest["value"]=report
+            table.delete(*table.get_children())
+            for row in report["reviewed_changes"]:
+                obs=row["observed"]
+                table.insert("","end",values=(
+                    row["previous_iteration"],row["iteration"],
+                    f"{obs['max_absolute_room_pressure_change_pa']:.6g}",
+                    f"{obs['max_absolute_door_delta_change_pa']:.6g}",
+                    f"{obs['max_absolute_door_transfer_change_m3_s']:.6g}",
+                    f"{obs['sum_absolute_cell_imbalance_m3_s']:.6g}",
+                    "yes" if all(row["within_explicit_operator_limits"].values()) else "NO"))
+            result_status.set(
+                f"Numerical screen: {report['numerical_screening']} | "
+                f"Solver convergence: {'reported' if report['latest_solver_reported_convergence'] else 'NOT REPORTED'} | "
+                f"breaches {len(report['observed_breaches'])} | ENGINEERING HOLD.")
+            export_button.configure(state="normal")
+            return True
+
+        def export():
+            report=latest["value"]
+            if report is None:
+                return False
+            path=filedialog.asksaveasfilename(
+                parent=dialog,title="Export noncertifying SIMPLE drift triage",
+                defaultextension=".json",filetypes=(("JSON","*.json"),))
+            if not path:
+                return False
+            try:
+                written=export_convergence_triage(report,path)
+            except (OSError,ValueError) as exc:
+                result_status.set(f"Triage export rejected: {exc}")
+                return False
+            result_status.set(f"ENGINEERING HOLD | Recorded numerical triage: {written}")
+            return True
+        export_button.configure(command=export)
+        ttk.Button(actions,text="Review saved snapshots",command=review).pack(
+            side="right",padx=5)
+        dialog._cleanroomx_convergence_review=review
+        dialog._cleanroomx_convergence_export=export
+        dialog._cleanroomx_convergence_latest=latest
+        dialog._cleanroomx_convergence_variables=entries
+        dialog._cleanroomx_convergence_status=result_status
+        dialog._cleanroomx_convergence_table=table
+        review()
+        return dialog
 
     def export_iteration_history(self):
         if not self.iteration_history or self.running:

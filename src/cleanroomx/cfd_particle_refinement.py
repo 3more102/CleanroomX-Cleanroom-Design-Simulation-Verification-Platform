@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from pathlib import Path
 
 from .cfd_particle_diagnostics import analyze_particle_trajectories
@@ -17,6 +18,7 @@ from .cfd_streamlines import _finite
 
 SCHEMA="cleanroomx.particle-timestep-refinement.v1"
 _FACTORS=(1.0,0.5,0.25)
+_HASH=re.compile(r"[0-9a-f]{64}\Z")
 
 
 def _replay_settings(track):
@@ -182,6 +184,32 @@ def export_particle_timestep_refinement(study,destination):
         type(study.get("runs")) is not list or
         [r.get("step_cap_factor") for r in study["runs"]]!=list(_FACTORS)):
         raise ValueError("Only complete noncertifying refinement screening may be exported")
+    for key in ("source_manifest_sha256","source_run_receipt_sha256"):
+        value=study.get(key)
+        if type(value) is not str or not _HASH.fullmatch(value):
+            raise ValueError("Source SHA-256 hashes must be present for export")
+    if type(study.get("source_iteration")) is not str or not study["source_iteration"]:
+        raise ValueError("Recorded CFD iteration is required for export")
+    flags=("actual_timestep_refinement_observed",
+           "all_runs_completed_full_integration_horizon",
+           "sampled_room_transition_pattern_consistent",
+           "low_slip_reynolds_on_all_runs",
+           "all_endpoint_deltas_under_user_tolerance")
+    if any(type(study.get(k)) is not bool for k in flags):
+        raise ValueError("Refinement screening flags must be explicit booleans")
+    expected=("bounded_endpoint_change_under_tolerance"
+              if all(study[k] for k in flags) else "not_demonstrated")
+    if study.get("screening_status")!=expected:
+        raise ValueError("Refinement screening verdict contradicts the recorded flags")
+    for record in study["runs"]:
+        if (type(record) is not dict or
+            type(record.get("integration_segments")) is not int or
+            not 0<=record["integration_segments"]<=10000 or
+            type(record.get("termination")) is not str or
+            type(record.get("endpoint_xyz_m")) is not list or
+            len(record["endpoint_xyz_m"])!=3 or
+            any(not math.isfinite(_finite(x,"endpoint")) for x in record["endpoint_xyz_m"])):
+            raise ValueError("Invalid recorded timestep-refinement run")
     content=json.dumps(study,allow_nan=False,indent=2)+"\n"
     target=Path(destination)
     with target.open("x",encoding="utf-8") as output:

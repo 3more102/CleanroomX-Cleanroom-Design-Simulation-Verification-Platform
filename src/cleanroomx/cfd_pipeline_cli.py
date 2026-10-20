@@ -5,6 +5,7 @@ import sys
 from .cfd_openfoam import export_openfoam_cases, run_openfoam_cases
 from .cfd_project_rooms import generate_project_room_cases, run_project_room_cases
 from .cfd_project_audit import audit_project_room_cases
+from .cfd_multizone import generate_multizone_open_door_case, run_multizone_open_door_case
 from .cfd_vtk import populate_study_from_vtk
 from .cfd_visualization import render_cfd_cross_section
 from .cfd_scalar import prepare_scalar_case, run_scalar_case
@@ -55,6 +56,23 @@ def build_parser():
     project_audit.add_argument("--max-final-residual", required=True, type=float)
     project_audit.add_argument("--max-global-continuity", type=float)
     project_audit.add_argument("--window", type=int, default=3)
+    multizone=sub.add_parser(
+        "multizone-generate",
+        help="Create ONE connected OpenFOAM CFD input domain through expressly OPEN doors",
+    )
+    multizone.add_argument("project")
+    multizone.add_argument("directory")
+    multizone.add_argument("--door-mode", choices=("open",), required=True,
+                           help="Required: open door passages are a different scenario from the 5 Pa closed-door network")
+    multizone.add_argument("--kinematic-viscosity-m2-s", type=float, required=True)
+    multizone.add_argument("--cell-size-x-m", type=float, default=0.5)
+    multizone.add_argument("--cell-size-y-m", type=float, default=0.1)
+    multizone.add_argument("--cell-size-z-m", type=float, default=0.3)
+    multizone.add_argument("--max-iterations", type=int, default=150)
+    multizone.add_argument("--output-interval", type=int, default=50)
+    multi_run=sub.add_parser("multizone-run",help="Opt-in blockMesh/checkMesh/simpleFoam for the connected case")
+    multi_run.add_argument("directory")
+    multi_run.add_argument("--timeout-seconds", type=int, default=3600)
     importer=sub.add_parser("import-vtk",help="Import real VTK cell data to existing study")
     for cfg in (1,2,3):
         importer.add_argument(f"--case-{cfg}",required=True)
@@ -117,6 +135,22 @@ def main():
         result=run_project_room_cases(
             args.directory, timeout_seconds=args.timeout_seconds,
         )
+        print(dumps_strict_json(result))
+        return 0 if result["status"]=="executed_requires_convergence_review" else 2
+    if args.command=="multizone-generate":
+        result=generate_multizone_open_door_case(
+            args.project, args.directory, door_mode=args.door_mode,
+            cell_size_x_m=args.cell_size_x_m,
+            cell_size_y_m=args.cell_size_y_m,
+            cell_size_z_m=args.cell_size_z_m,
+            kinematic_viscosity_m2_s=args.kinematic_viscosity_m2_s,
+            max_iterations=args.max_iterations,
+            output_interval=args.output_interval,
+        )
+        print(dumps_strict_json(result))
+        return 0
+    if args.command=="multizone-run":
+        result=run_multizone_open_door_case(args.directory,timeout_seconds=args.timeout_seconds)
         print(dumps_strict_json(result))
         return 0 if result["status"]=="executed_requires_convergence_review" else 2
     if args.command=="project-rooms-audit":

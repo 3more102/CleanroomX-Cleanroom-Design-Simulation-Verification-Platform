@@ -227,7 +227,26 @@ def _face_layout(room: dict, devices: list[dict], rooms: list[dict],
     }
     area_outlet = sum(return_hits[item["id"]] * outlet_face_areas[item["wall_side"]]
                       for item in returns)
-    area_doors = len(patch_faces["closedDoors"]) * dy * dz
+    door_mesh_areas = {
+        item["door_id"]: door_hits[item["door_id"]] * (
+            dy * dz if item["side"] in ("west", "east") else dx * dz
+        )
+        for item in regions
+    }
+    area_doors = sum(door_mesh_areas.values())
+    door_area_errors = {
+        item["door_id"]: (
+            door_mesh_areas[item["door_id"]] - item["design_area_m2"]
+        ) / item["design_area_m2"]
+        for item in regions
+    }
+    ffu_mesh_areas = {
+        item["id"]: ffu_hits[item["id"]] * dx * dy for item in ffus
+    }
+    return_mesh_areas = {
+        item["id"]: return_hits[item["id"]] * outlet_face_areas[item["wall_side"]]
+        for item in returns
+    }
     expected = 2 * (nx * ny + ny * nz + nx * nz)
     surfaces = [tuple(sorted(face)) for faces in patch_faces.values() for face in faces]
     if len(surfaces) != expected or len(set(surfaces)) != expected:
@@ -236,6 +255,11 @@ def _face_layout(room: dict, devices: list[dict], rooms: list[dict],
         "inlet_area_m2": area_inlet,
         "outlet_area_m2": area_outlet,
         "closed_door_mesh_area_m2": area_doors,
+        "closed_door_per_leaf_mesh_area_m2": door_mesh_areas,
+        "closed_door_relative_area_error": door_area_errors,
+        "per_ffu_mesh_area_m2": ffu_mesh_areas,
+        "per_return_mesh_area_m2": return_mesh_areas,
+        "area_reporting_note": "Mesh-resolved patch areas are center-sampled stair-step approximations, NOT exact equipment or door geometry.",
         "nominal_ffu_counts": ffu_hits,
         "nominal_return_counts": return_hits,
         "closed_door_face_counts": door_hits,

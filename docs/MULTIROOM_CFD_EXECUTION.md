@@ -527,3 +527,39 @@ The dedicated VTK/Xvfb workflow includes the real interactive diagnostics
 window. The Foundation v10 integration suite uses genuinely computed U fields,
 while synthetic tests are labelled numerical/API checks rather than solver
 evidence.
+
+
+## Recorded-cell multi-injection (20 October 2026)
+
+The native/embedded 3D VTK review now supports bounded, deterministic
+multi-point screening. In **Open real VTK 3D**, select a room and optional
+recorded x/y/z layer; click **Apply room/plane** and enter a count in
+**Recorded-cell multi-injection → New seeds**. Select
+**Inject room/plane seeds** to create additional one-way particle tracks
+from precisely the existing solver cell centres.
+
+- This is a geometric *maximin* sampling strategy: select a central eligible
+  observed cell, then deterministically choose well-separated recorded cells.
+  Existing particle seed centres are excluded. The method makes no inference
+  about source emission likelihood, independent contamination events, random
+  particle distributions, physical particle density or room cleanliness.
+- Up to 20 paths total; a selected layer with insufficient cells is rejected.
+  The batch is computed on a worker thread; Tk and VTK scene changes occur
+  only on the GUI thread after completion.
+- A changed room/plane selection or a modified particle collection during
+  calculation causes the batch to be discarded instead of mixing stale
+  results. Numerical failures cannot leave a partially appended batch.
+- Each generated path retains the original CFD iteration, manifest and receipt
+  SHA-256 identity, frozen recorded-U field, particle parameters and
+  noncertifying limits. The result is checked through the independent particle
+  trajectory diagnostics validator before being added.
+- For export, use the existing **Export particle paths** and
+  **Analyze particle paths → Export diagnostics JSON** actions. There is
+  no inferred concentration, deposition, real transient airflow, turbulent
+  dispersion or 5 Pa closed-door acceptance. **Engineering release: HOLD**.
+
+Synthetic contract checks:
+`tests/test_cfd_particle_ensemble.py`.
+The actual VTK-on-Tk regression exercises the asynchronous interface, while
+the OpenFOAM workflow uses actual Foundation v10 recorded solver fields to
+check injection and provenance.

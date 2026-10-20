@@ -150,6 +150,7 @@ def compare_closed_network_with_open_cfd(
     network_result=solve_room_pressure_network(network)
     computed_nodes={row["name"]:row for row in network_result["nodes"]}
     computed_paths={row["name"]:row for row in network_result["paths"]}
+    computed_targets={row["name"]:row for row in network_result["targets"]}
     rows=[]
     for door_id,door in sorted(source_doors.items()):
         src=door_paths[door_id]
@@ -158,6 +159,10 @@ def compare_closed_network_with_open_cfd(
         pb=computed_nodes[door["to_room"]]["pressure_pa"]
         delta=pa-pb
         target=_finite(door["design_delta_pressure_target_pa"],"design target")
+        # The solver evaluates nominal criteria at full internal pressure
+        # precision. Do NOT reclassify its decision using rounded report
+        # node pressures, which can change a boundary 5 Pa verdict.
+        solved_target=computed_targets[targets[door_id].name]
         rows.append({
             "door":door_id,"from_room":door["from_room"],"to_room":door["to_room"],
             "design_target_pa":target,
@@ -166,7 +171,8 @@ def compare_closed_network_with_open_cfd(
             "closed_network_minus_open_cfd_delta_pa":
                 delta-_finite(door["computed_delta_pressure_pa"],"open CFD delta"),
             "closed_network_minus_design_target_pa":delta-target,
-            "closed_network_meets_nominal_target":bool(delta>=target),
+            "network_nominal_target_margin_pa":solved_target["minimum_margin_pa"],
+            "closed_network_meets_nominal_target":solved_target["status"]=="pass",
             "closed_door_network_flow_m3_h":(
                 path["airflow_m3_h"] if
                 src.start_node==door["from_room"] else -path["airflow_m3_h"]

@@ -1072,3 +1072,91 @@ def test_floor_properties_apply_as_one_transaction_and_preserve_cancel_safety(
     workspace.edit_floor()
     app.root.update()
     assert workspace.layout == applied
+
+
+
+def test_gui_can_export_explicit_openfoam_inputs_without_running_solver(
+    app, tmp_path, monkeypatch
+):
+    import json
+    import cleanroomx.gui as gui_module
+
+    reports = []
+    warnings = []
+    errors = []
+    monkeypatch.setattr(
+        gui_module.simpledialog, "askfloat",
+        lambda *a, **kw: 1.5e-5,
+    )
+    monkeypatch.setattr(
+        gui_module.filedialog, "askdirectory",
+        lambda *a, **kw: str(tmp_path),
+    )
+    monkeypatch.setattr(
+        gui_module.simpledialog, "askstring",
+        lambda *a, **kw: "room_inputs",
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox, "showinfo",
+        lambda *a, **kw: reports.append(a),
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox, "showerror",
+        lambda *a, **kw: errors.append(a),
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox, "showwarning",
+        lambda *a, **kw: warnings.append(a),
+    )
+    assert not app._has_unsaved_changes()
+    source_before = app.project_path.read_bytes()
+    app.export_openfoam_room_cases()
+    root = tmp_path / "room_inputs"
+    assert not errors and not warnings
+    assert reports and "No solver has run" in reports[-1][1]
+    manifest = json.loads((root / "manifest.json").read_text())
+    assert set(manifest["cases"]) == {"process", "preparation", "ante"}
+    assert (root / "room_process/0/U").is_file()
+    assert app.project_path.read_bytes() == source_before
+    assert not (root / "room_process/simpleFoam.log").exists()
+    # An existing generated folder is never replaced.
+    app.export_openfoam_room_cases()
+    assert errors and "Refusing overwrite" in errors[-1][1]
+
+
+def test_gui_cfd_export_rejects_unsaved_changes_without_asking_for_physics(
+    app, monkeypatch
+):
+    import cleanroomx.gui as gui_module
+
+    dialogs = []
+    monkeypatch.setattr(
+        gui_module.simpledialog, "askfloat",
+        lambda *a, **kw: dialogs.append("viscosity"),
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox, "showinfo",
+        lambda *a, **kw: dialogs.append(a[0]),
+    )
+    app.description_var.set("Unsaved change: CFD export must fail closed")
+    app.export_openfoam_room_cases()
+    assert dialogs == ["Save project first"]
+
+
+def test_gui_cfd_export_requires_explicit_viscosity_and_supports_cancel(
+    app, tmp_path, monkeypatch
+):
+    import cleanroomx.gui as gui_module
+
+    called = []
+    monkeypatch.setattr(
+        gui_module.simpledialog, "askfloat",
+        lambda *a, **kw: None,
+    )
+    monkeypatch.setattr(
+        gui_module.filedialog, "askdirectory",
+        lambda *a, **kw: called.append("directory"),
+    )
+    app.export_openfoam_room_cases()
+    assert called == []
+    assert list(tmp_path.iterdir()) == []

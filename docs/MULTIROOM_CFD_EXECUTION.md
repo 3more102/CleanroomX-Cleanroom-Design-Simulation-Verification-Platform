@@ -15,8 +15,11 @@ numerical convergence, a valid laminar flow regime, UDAF compliance or certifica
    generates a hypothetical scenario with every connecting door open, regardless
    of the saved design leaf states. Those original states remain in the manifest.
 4. **Analyze → Run / Review Multiroom CFD** opens the execution workspace. Select
-   the generated folder and run OpenFOAM. The process uses the inherited Linux
-   environment. Review the live stage logs.
+   the generated folder. The original **Run OpenFOAM 10** button uses the
+   inherited Linux solver environment. On Windows, select a WSL distribution,
+   click **Probe WSL**, and optionally choose **Run case in WSL** to execute
+   via the verified Foundation v10 wrapper. Both workflows show actual stage
+   logs; execution alone is not numerical convergence.
 5. Enter the actual air density in kg/m³ and choose a modeled reference room ID
    (the demo uses `corridor`). Import recorded computed fields. Pressure in Pa is
    `density × (kinematic pressure − computed reference-room mean)`.
@@ -26,12 +29,13 @@ numerical convergence, a valid laminar flow regime, UDAF compliance or certifica
    CSV and residual CSV. **NOT CONVERGED** stays visible when appropriate.
 
 The new **opt-in Windows-to-WSL solver bridge** allows the Windows GUI to
-create a case and then runs the original verified Foundation v10 solver pipeline
-inside a selected WSL distribution from PowerShell. The resulting case can be
-imported back into the Windows GUI. This is a separate launcher, not automatic
-GUI solver integration, and its actual Windows/WSL behavior has not yet been
-verified on the user's machine. See [Windows/WSL bridge](WINDOWS_WSL_OPENFOAM_BRIDGE.md).
-The Windows GUI's own solver button still requires local solver executables.
+create a case and run the existing verified Foundation v10 pipeline inside the
+selected WSL distribution using **Probe WSL** / **Run case in WSL** desktop
+controls, or the independent PowerShell launcher. The result can be imported
+back into the Windows GUI. Actual Windows/WSL execution is not yet verified on
+the user's computer. See [Windows/WSL bridge](WINDOWS_WSL_OPENFOAM_BRIDGE.md).
+The original **Run OpenFOAM 10** button still requires locally available
+solver executables.
 
 ## Reproduce the executed scenario
 

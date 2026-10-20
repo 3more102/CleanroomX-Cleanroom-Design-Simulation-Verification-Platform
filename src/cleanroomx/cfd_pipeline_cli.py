@@ -4,6 +4,7 @@ import argparse
 import sys
 from .cfd_openfoam import export_openfoam_cases, run_openfoam_cases
 from .cfd_project_rooms import generate_project_room_cases, run_project_room_cases
+from .cfd_project_audit import audit_project_room_cases
 from .cfd_vtk import populate_study_from_vtk
 from .cfd_visualization import render_cfd_cross_section
 from .cfd_scalar import prepare_scalar_case, run_scalar_case
@@ -44,6 +45,16 @@ def build_parser():
     )
     project_run.add_argument("directory")
     project_run.add_argument("--timeout-seconds", type=int, default=3600)
+    project_audit=sub.add_parser(
+        "project-rooms-audit",
+        help="Fail-closed numerical screening of generated room solver logs",
+    )
+    project_audit.add_argument("directory")
+    project_audit.add_argument("--fields", required=True, nargs="+")
+    project_audit.add_argument("--max-initial-residual", required=True, type=float)
+    project_audit.add_argument("--max-final-residual", required=True, type=float)
+    project_audit.add_argument("--max-global-continuity", type=float)
+    project_audit.add_argument("--window", type=int, default=3)
     importer=sub.add_parser("import-vtk",help="Import real VTK cell data to existing study")
     for cfg in (1,2,3):
         importer.add_argument(f"--case-{cfg}",required=True)
@@ -108,6 +119,16 @@ def main():
         )
         print(dumps_strict_json(result))
         return 0 if result["status"]=="executed_requires_convergence_review" else 2
+    if args.command=="project-rooms-audit":
+        result=audit_project_room_cases(
+            args.directory, fields=args.fields,
+            max_initial_residual=args.max_initial_residual,
+            max_final_residual=args.max_final_residual,
+            max_global_continuity=args.max_global_continuity,
+            window=args.window,
+        )
+        print(dumps_strict_json(result))
+        return 0 if result["status"]=="numerically_screened_requires_engineering_review" else 3
     if args.command=="grid-generate":
         report=generate_grid_family(load_cli_input(load_strict_json,args.spec),args.directory)
         print(dumps_strict_json(report))

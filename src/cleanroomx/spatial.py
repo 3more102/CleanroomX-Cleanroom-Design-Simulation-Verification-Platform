@@ -3947,6 +3947,28 @@ class SpatialDesignWorkspace(ttk.Frame):
                         fill="#fbbf24", outline=device_outline,
                         width=2, tags=(tag, "device3d"),
                     )
+                    # An FFU supplies an indicative downward design arrow, not
+                    # CFD velocity vectors or a claim of established laminarity.
+                    if device["type"] == "ffu" and room is not None:
+                        arrow_top_z = room_floor + min(
+                            device["z_m"] - 0.2, room["height_m"] - 0.2
+                        )
+                        arrow_bottom_z = room_floor + 0.35
+                        if arrow_top_z > arrow_bottom_z:
+                            arrow_start = self._project_3d(
+                                device["x_m"] - cx, device["y_m"] - cy,
+                                arrow_top_z,
+                            )
+                            arrow_end = self._project_3d(
+                                device["x_m"] - cx, device["y_m"] - cy,
+                                arrow_bottom_z,
+                            )
+                            canvas.create_line(
+                                *arrow_start, *arrow_end,
+                                fill="#38bdf8", width=2,
+                                dash=(6, 4), arrow=tk.LAST,
+                                tags=(tag, "device3d", "design-downflow"),
+                            )
 
         self._draw_engineering_legend(canvas, overlay)
 

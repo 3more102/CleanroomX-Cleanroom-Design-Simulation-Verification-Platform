@@ -274,78 +274,136 @@ def build_multizone_vtk_renderer(report, traces, *, field="speed", vectors=True)
 
 
 def open_multizone_vtk_window(parent, report, traces):
-    """Embed native mouse-rotatable VTK into an existing Tk desktop application."""
+    """Open interactive 3D with robust support for pip wheels lacking VTK/Tk.
+
+    Prefer embedded vtkTkRenderWindowInteractor when the native Tk plugin is
+    installed. Otherwise open a genuine *independent* VTK render window and
+    keep Tk controls responsive by polling native events via Tk's event loop.
+    This fallback does not require libvtkRenderingTk.
+    """
     import tkinter as tk
     from tkinter import ttk
+
     vtk = _vtk()
-    try:
-        from vtkmodules.tk.vtkTkRenderWindowInteractor import vtkTkRenderWindowInteractor
-    except ImportError as exc:
-        raise RuntimeError("VTK installed without Tk render widget support") from exc
+    # Validate the complete recorded scene *before* opening a native window.
+    renderer = build_multizone_vtk_renderer(report, traces)
     window = tk.Toplevel(parent)
-    window.title("CleanroomX | Interactive computed OpenFOAM 3D")
-    window.geometry("1150x800")
-    window.minsize(720, 500)
+    window.title("CleanroomX | Recorded CFD 3D controls")
+    window.geometry("1120x760")
+    window.minsize(620, 260)
+    render_window = vtk.vtkRenderWindow()
+    render_window.SetMultiSamples(0)
+    render_window.SetWindowName("CleanroomX | Computed OpenFOAM 3D")
+    field_var = tk.StringVar(value="speed")
+    arrows_var = tk.BooleanVar(value=True)
+    mode = "native"
+    widget = None
+    after_id = None
+    interactor = None
     try:
-        field_var = tk.StringVar(value="speed")
-        arrows_var = tk.BooleanVar(value=True)
-        heading = ttk.Frame(window, padding=8)
+        heading = ttk.Frame(window,padding=8)
         heading.pack(fill="x")
-        ttk.Label(heading,
-                  text="Recorded cell centres | 3D room outlines | solver-field steady streamlines"
-                  ).pack(side="left")
-        ttk.Label(heading,
-                  text="Drag: rotate  •  Wheel: zoom  •  Shift+drag: pan"
-                  ).pack(side="right")
-        controls = ttk.Frame(window, padding=(8,0,8,8))
+        ttk.Label(
+            heading,text="Recorded solver p/U | 3D room outlines | steady streamlines (not particles)"
+        ).pack(side="left")
+        controls = ttk.Frame(window,padding=(8,0,8,8))
         controls.pack(fill="x")
-        ttk.Label(controls,text="Recorded field:").pack(side="left")
+        ttk.Label(controls,text="Field:").pack(side="left")
         field_control = ttk.Combobox(
             controls,textvariable=field_var,values=("speed","pressure"),
             state="readonly",width=12)
         field_control.pack(side="left",padx=5)
         arrows_control = ttk.Checkbutton(
-            controls,text="Display sampled U direction arrows",variable=arrows_var)
+            controls,text="Computed U arrows",variable=arrows_var)
         arrows_control.pack(side="left",padx=12)
-        ttk.Label(controls,text="Arrows use visual scaling; not motion",
-                  ).pack(side="left",padx=10)
-        holder = ttk.Frame(window)
-        holder.pack(fill="both", expand=True)
-        render_window = vtk.vtkRenderWindow()
-        render_window.SetMultiSamples(0)
-        widget = vtkTkRenderWindowInteractor(
-            holder, rw=render_window, width=1100, height=680)
-        widget.pack(fill="both", expand=True)
-        interactor = widget.GetRenderWindow().GetInteractor()
+        instructions = tk.StringVar(value="Rotate: drag | zoom: wheel | pan: Shift+drag")
+        ttk.Label(controls,textvariable=instructions).pack(side="right")
+        holder=ttk.Frame(window)
+        holder.pack(fill="both",expand=True)
+
+        # PyPI VTK wheels can expose the Python Tk class WITHOUT shipping
+        # libvtkRenderingTk. A TclError is a normal capability-detection
+        # outcome; it must not make the whole CFD viewer unavailable.
+        try:
+            from vtkmodules.tk.vtkTkRenderWindowInteractor import vtkTkRenderWindowInteractor
+            widget = vtkTkRenderWindowInteractor(
+                holder,rw=render_window,width=1050,height=630)
+        except (ImportError,tk.TclError):
+            widget=None
+
+        if widget is not None:
+            mode="embedded"
+            widget.pack(fill="both",expand=True)
+            interactor=widget.GetRenderWindow().GetInteractor()
+        else:
+            mode="native"
+            holder.destroy()
+            window.geometry("930x160")
+            window.minsize(620,140)
+            ttk.Label(window,padding=8,
+                text="3D scene opens in a separate native VTK window. Controls remain here.").pack(fill="x")
+            render_window.SetSize(1100,760)
+            interactor=vtk.vtkRenderWindowInteractor()
+            interactor.SetRenderWindow(render_window)
+
         interactor.SetInteractorStyle(vtk.vtkInteractorStyleTrackballCamera())
-        renderer = build_multizone_vtk_renderer(
-            report,traces,field=field_var.get(),vectors=arrows_var.get())
         render_window.AddRenderer(renderer)
-        widget.Initialize()
-        renderer.ResetCamera()
+        if widget is not None:
+            widget.Initialize()
+        else:
+            interactor.Initialize()
         render_window.Render()
+        window._cleanroomx_vtk_renderer=renderer
 
         def refresh_scene(*_ignored):
-            """Rebuild from recorded values and preserve the operator camera."""
+            """Rebuild from recorded arrays, retaining the operator's camera."""
             old=window._cleanroomx_vtk_renderer
-            previous_camera=vtk.vtkCamera()
-            previous_camera.DeepCopy(old.GetActiveCamera())
+            camera=vtk.vtkCamera()
+            camera.DeepCopy(old.GetActiveCamera())
             new=build_multizone_vtk_renderer(
                 report,traces,field=field_var.get(),vectors=arrows_var.get())
             render_window.RemoveRenderer(old)
             render_window.AddRenderer(new)
-            new.SetActiveCamera(previous_camera)
+            new.SetActiveCamera(camera)
             render_window.Render()
             window._cleanroomx_vtk_renderer=new
 
         field_control.bind("<<ComboboxSelected>>",refresh_scene)
         arrows_control.configure(command=refresh_scene)
-        window._cleanroomx_vtk_widget = widget
-        window._cleanroomx_vtk_renderer = renderer
-        window._cleanroomx_field_var = field_var
-        window._cleanroomx_arrows_var = arrows_var
-        window._cleanroomx_refresh_scene = refresh_scene
+        window._cleanroomx_vtk_widget=widget
+        window._cleanroomx_vtk_render_window=render_window
+        window._cleanroomx_vtk_mode=mode
+        window._cleanroomx_field_var=field_var
+        window._cleanroomx_arrows_var=arrows_var
+        window._cleanroomx_refresh_scene=refresh_scene
+
+        def pump_native_events():
+            if mode!="native" or not window.winfo_exists():
+                return
+            interactor.ProcessEvents()
+            window._cleanroomx_vtk_after=window.after(30,pump_native_events)
+
+        def cleanup(event):
+            if event.widget is not window:
+                return
+            pending=getattr(window,"_cleanroomx_vtk_after",None)
+            if pending is not None:
+                try:
+                    window.after_cancel(pending)
+                except tk.TclError:
+                    pass
+            if mode=="native":
+                interactor.TerminateApp()
+            render_window.Finalize()
+
+        window.bind("<Destroy>",cleanup,add="+")
+        window.protocol("WM_DELETE_WINDOW",window.destroy)
+        if mode=="native":
+            window._cleanroomx_vtk_after=window.after(30,pump_native_events)
     except BaseException:
-        window.destroy()
+        try:
+            render_window.Finalize()
+        finally:
+            window.destroy()
         raise
     return window

@@ -42,11 +42,44 @@ def _finite_triplet(values, label):
     return [float(x) for x in values]
 
 
-def computed_field_polydata(report):
+def select_recorded_cells(report, *, room_id="all", plane_axis="all",
+                          plane_position_m=None):
+    """Filter actual CFD centres; never resample, interpolate, or fill gaps.
+
+    The plane includes exactly the recorded cell layer whose centre lies
+    strictly within half a grid pitch of the requested coordinate.
+    """
+    cells = _report_cells(report)
+    grid = ComputedVelocityGrid(report)
+    rooms = {cell["room_id"] for cell in cells}
+    if type(room_id) is not str or (room_id != "all" and room_id not in rooms):
+        raise ValueError("Select an existing computed room or all rooms")
+    if plane_axis not in ("all", "x", "y", "z"):
+        raise ValueError("Plane axis must be all, x, y, or z")
+    if plane_axis == "all":
+        if plane_position_m is not None:
+            raise ValueError("Plane position must be omitted for all-axis view")
+        return [c for c in cells if room_id == "all" or c["room_id"] == room_id]
+    if type(plane_position_m) not in (int, float) or not math.isfinite(plane_position_m):
+        raise ValueError("Plane position must be a finite coordinate in metres")
+    index = "xyz".index(plane_axis)
+    half_pitch = grid.pitch[index] / 2
+    selected = [
+        cell for cell in cells
+        if (room_id == "all" or cell["room_id"] == room_id)
+        and abs(cell["center_m"][index] - plane_position_m) < half_pitch - 1e-8
+    ]
+    if not selected:
+        raise ValueError("No computed cells on the selected room/plane layer")
+    return selected
+
+
+def computed_field_polydata(report, *, room_id="all", plane_axis="all",
+                            plane_position_m=None):
     """Construct actual 3D points with recorded pressure and velocity vectors."""
     vtk = _vtk()
-    cells = _report_cells(report)
-    ComputedVelocityGrid(report)  # Validate occupancy and lattice, not just numbers.
+    cells = select_recorded_cells(report,room_id=room_id,plane_axis=plane_axis,
+                                  plane_position_m=plane_position_m)
     points = vtk.vtkPoints()
     points.SetDataTypeToDouble()
     verts = vtk.vtkCellArray()
@@ -132,14 +165,16 @@ def computed_trace_polydata(report, traces):
     return output
 
 
-def sampled_velocity_glyph_actor(report, *, max_arrows=250):
+def sampled_velocity_glyph_actor(report, *, max_arrows=250,
+                                 room_id="all", plane_axis="all", plane_position_m=None):
     """3D glyphs from sampled *recorded* velocity components, never guessed flows.
 
     A constant visual scale factor makes arrows readable without implying
     physical displacement. Sampling is deterministic and limited for display.
     """
     vtk = _vtk()
-    cells = _report_cells(report)
+    cells = select_recorded_cells(report,room_id=room_id,plane_axis=plane_axis,
+                                  plane_position_m=plane_position_m)
     if type(max_arrows) is not int or not 1 <= max_arrows <= 2000:
         raise ValueError("max_arrows must be an integer from 1 to 2000")
     grid = ComputedVelocityGrid(report)
@@ -180,13 +215,15 @@ def sampled_velocity_glyph_actor(report, *, max_arrows=250):
     return actor
 
 
-def build_multizone_vtk_renderer(report, traces, *, field="speed", vectors=True):
+def build_multizone_vtk_renderer(report, traces, *, field="speed", vectors=True,
+                                 room_id="all", plane_axis="all", plane_position_m=None):
     """VTK renderer with solver-derived field samples, line paths and room outlines.
 
     No OpenGL context is opened here, so testing does not require a display.
     """
     vtk = _vtk()
-    data = computed_field_polydata(report)
+    data = computed_field_polydata(report,room_id=room_id,plane_axis=plane_axis,
+                                   plane_position_m=plane_position_m)
     trajectories = computed_trace_polydata(report, traces)
     if field not in ("speed", "pressure"):
         raise ValueError("Select speed or pressure for the 3D field")
@@ -228,7 +265,9 @@ def build_multizone_vtk_renderer(report, traces, *, field="speed", vectors=True)
     if type(vectors) is not bool:
         raise ValueError("vectors must be a boolean")
     if vectors:
-        renderer.AddActor(sampled_velocity_glyph_actor(report))
+        renderer.AddActor(sampled_velocity_glyph_actor(
+            report,room_id=room_id,plane_axis=plane_axis,
+            plane_position_m=plane_position_m))
 
 
     # Room outlines represent input design geometry, never inferred CFD isosurfaces.
@@ -236,6 +275,8 @@ def build_multizone_vtk_renderer(report, traces, *, field="speed", vectors=True)
     if not isinstance(rooms, dict):
         raise ValueError("Recorded geometry must contain room bounds")
     for rid, room in rooms.items():
+        if room_id != "all" and rid != room_id:
+            continue
         values = [room[k] for k in
                   ("x_m", "y_m", "floor_elevation_m", "length_m", "width_m", "height_m")]
         if any(type(v) not in (float, int) or not math.isfinite(v) for v in values):
@@ -263,8 +304,10 @@ def build_multizone_vtk_renderer(report, traces, *, field="speed", vectors=True)
     renderer.AddViewProp(scalar_bar)
     annotation = vtk.vtkTextActor()
     annotation.SetInput(
-        f"OpenFOAM computed cells | SIMPLE iteration {report.get('time_name')} | "
-        "3D steady streamlines (NOT particles)")
+        f"Recorded {data.GetNumberOfPoints()} cells | iteration {report.get('time_name')} | "
+        f"room {room_id} | plane {plane_axis}"
+        + ("" if plane_axis=="all" else f"={plane_position_m:g} m")
+        + " | Steady traces, NOT particles")
     annotation.SetDisplayPosition(15, 16)
     annotation.GetTextProperty().SetColor(.98,.98,.98)
     annotation.GetTextProperty().SetFontSize(15)
@@ -296,6 +339,11 @@ def open_multizone_vtk_window(parent, report, traces):
     render_window.SetWindowName("CleanroomX | Computed OpenFOAM 3D")
     field_var = tk.StringVar(value="speed")
     arrows_var = tk.BooleanVar(value=True)
+    room_var = tk.StringVar(value="all")
+    plane_var = tk.StringVar(value="all")
+    plane_position_var = tk.StringVar(value="")
+    view_status = tk.StringVar(value="Displaying only recorded solver cells; traces are 3D.")
+
     mode = "native"
     widget = None
     after_id = None
@@ -318,6 +366,23 @@ def open_multizone_vtk_window(parent, report, traces):
         arrows_control.pack(side="left",padx=12)
         instructions = tk.StringVar(value="Rotate: drag | zoom: wheel | pan: Shift+drag")
         ttk.Label(controls,textvariable=instructions).pack(side="right")
+        selection=ttk.Frame(window,padding=(8,0,8,8))
+        selection.pack(fill="x")
+        ttk.Label(selection,text="Room:").pack(side="left")
+        room_control=ttk.Combobox(
+            selection,textvariable=room_var,
+            values=("all", *tuple(sorted({c["room_id"] for c in report["cells"]}))),
+            state="readonly",width=15)
+        room_control.pack(side="left",padx=4)
+        ttk.Label(selection,text="Plane:").pack(side="left")
+        plane_control=ttk.Combobox(
+            selection,textvariable=plane_var,values=("all","x","y","z"),
+            state="readonly",width=5)
+        plane_control.pack(side="left",padx=4)
+        ttk.Label(selection,text="Coordinate (m):").pack(side="left")
+        ttk.Entry(selection,textvariable=plane_position_var,width=12).pack(
+            side="left",padx=4)
+        ttk.Label(selection,textvariable=view_status).pack(side="right")
         holder=ttk.Frame(window)
         holder.pack(fill="both",expand=True)
 
@@ -338,8 +403,8 @@ def open_multizone_vtk_window(parent, report, traces):
         else:
             mode="native"
             holder.destroy()
-            window.geometry("930x160")
-            window.minsize(620,140)
+            window.geometry("1050x225")
+            window.minsize(760,200)
             ttk.Label(window,padding=8,
                 text="3D scene opens in a separate native VTK window. Controls remain here.").pack(fill="x")
             render_window.SetSize(1100,760)
@@ -360,14 +425,27 @@ def open_multizone_vtk_window(parent, report, traces):
             old=window._cleanroomx_vtk_renderer
             camera=vtk.vtkCamera()
             camera.DeepCopy(old.GetActiveCamera())
-            new=build_multizone_vtk_renderer(
-                report,traces,field=field_var.get(),vectors=arrows_var.get())
+            try:
+                axis=plane_var.get()
+                pos=None if axis=="all" else float(plane_position_var.get())
+                new=build_multizone_vtk_renderer(
+                    report,traces,field=field_var.get(),vectors=arrows_var.get(),
+                    room_id=room_var.get(),plane_axis=axis,plane_position_m=pos)
+            except (ValueError,OverflowError) as exc:
+                view_status.set(f"Selection rejected: {exc}")
+                return
             render_window.RemoveRenderer(old)
             render_window.AddRenderer(new)
             new.SetActiveCamera(camera)
             render_window.Render()
             window._cleanroomx_vtk_renderer=new
+            count=select_recorded_cells(
+                report,room_id=room_var.get(),plane_axis=plane_var.get(),
+                plane_position_m=pos)
+            view_status.set(f"{len(count)} recorded cells (unconverged if solver says so)")
 
+        ttk.Button(selection,text="Apply room/plane",command=refresh_scene).pack(
+            side="left",padx=8)
         field_control.bind("<<ComboboxSelected>>",refresh_scene)
         arrows_control.configure(command=refresh_scene)
         window._cleanroomx_vtk_widget=widget
@@ -375,6 +453,10 @@ def open_multizone_vtk_window(parent, report, traces):
         window._cleanroomx_vtk_mode=mode
         window._cleanroomx_field_var=field_var
         window._cleanroomx_arrows_var=arrows_var
+        window._cleanroomx_room_var=room_var
+        window._cleanroomx_plane_var=plane_var
+        window._cleanroomx_plane_position_var=plane_position_var
+        window._cleanroomx_view_status=view_status
         window._cleanroomx_refresh_scene=refresh_scene
 
         def pump_native_events():

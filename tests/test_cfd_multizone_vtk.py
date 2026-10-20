@@ -14,6 +14,7 @@ from cleanroomx.cfd_multizone_vtk import (
     MAX_3D_CELLS, build_multizone_vtk_renderer, computed_field_polydata,
     computed_trace_polydata, sampled_velocity_glyph_actor, select_recorded_cells,
     seed_streamline_from_displayed_point, _recorded_cell_actor,
+    seed_particle_from_displayed_point, computed_particle_polydata,
 )
 from cleanroomx.cfd_streamlines import trace_computed_streamline
 
@@ -194,3 +195,40 @@ def test_3d_point_seed_comes_from_displayed_recorded_cell_only():
     tampered["source_iteration"]="stale"
     with pytest.raises(ValueError,match="originate"):
         seed_streamline_from_displayed_point(report,[tampered],0)
+
+
+def test_particle_screening_geometry_uses_recorded_fluid_only_and_distinct_actor():
+    report=_source()
+    particle=seed_particle_from_displayed_point(
+        report,[],0,diameter_um=5.,max_time_s=.3)
+    assert particle["schema"]=="cleanroomx.frozen-field-particle-screening.v1"
+    assert particle["points"][0]["xyz_m"]==[.5,.5,.5]
+    assert particle["source_iteration"]==report["time_name"]
+    assert not particle["validated_particle_transport"]
+    data=computed_particle_polydata(report,[particle])
+    assert data.GetNumberOfPoints()==len(particle["points"])
+    assert data.GetNumberOfLines()==1
+    assert data.GetPointData().GetArray(
+        "Particle frozen-field elapsed time (s)").GetTuple1(0)==0
+    scene=build_multizone_vtk_renderer(report,[],vectors=False,particles=[particle])
+    assert scene.GetActors().GetNumberOfItems()>=4
+    stale=copy.deepcopy(particle)
+    stale["source_iteration"]="another"
+    with pytest.raises(ValueError,match="does not match"):
+        computed_particle_polydata(report,[stale])
+    bad=copy.deepcopy(particle)
+    bad["points"][-1]["xyz_m"]=[999.,0,0]
+    with pytest.raises(ValueError,match="uncomputed"):
+        computed_particle_polydata(report,[bad])
+
+
+def test_particle_seed_rejects_invalid_or_unselected_fluid_cell():
+    report=_source()
+    with pytest.raises(ValueError,match="visible recorded"):
+        seed_particle_from_displayed_point(
+            report,[],1,plane_axis="x",plane_position_m=1.5)
+    with pytest.raises(ValueError,match="integer"):
+        seed_particle_from_displayed_point(report,[],True)
+    track=seed_particle_from_displayed_point(report,[],0)
+    with pytest.raises(ValueError,match="At most 20"):
+        seed_particle_from_displayed_point(report,[track]*20,0)

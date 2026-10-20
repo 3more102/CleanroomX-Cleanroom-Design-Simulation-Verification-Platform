@@ -46,6 +46,14 @@ def test_bundled_demo_renders_design_intent_ceiling_downflow_arrows(app):
     app.notebook.select(workspace)
     app.root.update()
     assert len(workspace.canvas_3d.find_withtag("design-downflow")) == 12
+    # Each closed door has a real wall cutout, a framed 3-D leaf,
+    # and a floor-plan hinge/swing glyph rather than a lone stroke.
+    assert len(workspace.canvas_3d.find_withtag("door-leaf-3d")) == 3
+    assert len(workspace.canvas_3d.find_withtag("door-frame-3d")) == 9
+    assert len(workspace.canvas_3d.find_withtag("door-cut-wall-3d")) >= 3
+    assert len(workspace.canvas_2d.find_withtag("door-gap-2d")) == 3
+    assert len(workspace.canvas_2d.find_withtag("door-swing-2d")) == 3
+    assert len(workspace.canvas_2d.find_withtag("door-hinge-2d")) == 3
 
 
 def test_duplicate_edit_undo_redo_save_reopen_and_analysis(app, tmp_path):

@@ -95,3 +95,27 @@ def test_rejects_duplicate_cells_and_nonfinite_or_off_lattice_samples():
     report["cells"][1]["center_m"][0] += 0.2
     with pytest.raises(ValueError, match="lattice"):
         ComputedVelocityGrid(report)
+
+
+def test_gui_click_on_computed_cell_traces_recorded_three_dimensional_field():
+    """Headless event-contract test; no screenshots or fake CFD execution."""
+    from types import SimpleNamespace
+    from cleanroomx.cfd_multizone_gui import MultizoneCFDWindow
+
+    updates = []
+    redraws = []
+    sample = _report()["cells"][0]
+    fake_window = SimpleNamespace(
+        report=_report(), running=False, trace_paths=[],
+        _section_to_pixel=lambda x, y: (x*20, y*20),
+        _section_plane_axes=(0, 1), _section_half_size=(0.5, 0.5),
+        _section_scale=20, _section_samples=[sample],
+        trace_status=SimpleNamespace(set=updates.append),
+        draw_section=lambda: redraws.append(True),
+    )
+    MultizoneCFDWindow.seed_streamline_at_click(
+        fake_window, SimpleNamespace(x=10, y=10))
+    assert len(fake_window.trace_paths) == 1
+    assert fake_window.trace_paths[0]["points"][0]["xyz_m"] == sample["center_m"]
+    assert redraws == [True]
+    assert "not transient particle motion" in updates[-1]

@@ -18,13 +18,17 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
         with:
           python-version: "3.12"
       - name: Install official OpenFOAM Foundation v10 and real Tk display
         run: |
           curl -fsSL https://dl.openfoam.org/gpg.key | gpg --dearmor | sudo tee /usr/share/keyrings/openfoam.gpg > /dev/null
-          echo "deb [signed-by=/usr/share/keyrings/openfoam.gpg] https://dl.openfoam.org/ubuntu jammy main" | sudo tee /etc/apt/sources.list.d/openfoam.list
+          # Foundation's v10 package endpoint redirects to an HTTP SourceForge URL.
+          # Use its documented APT transport; signed metadata/package hashes remain enforced.
+          echo "deb [signed-by=/usr/share/keyrings/openfoam.gpg] http://dl.openfoam.org/ubuntu jammy main" | sudo tee /etc/apt/sources.list.d/openfoam.list
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends openfoam10 xvfb python3-tk
           python -m pip install -e ".[dev]"

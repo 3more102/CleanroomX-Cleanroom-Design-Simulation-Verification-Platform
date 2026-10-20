@@ -38,8 +38,10 @@ inputs; they are not live sensor readings.
 ## Pressure-network engineering screening
 
 The bundled project also includes an executable **Room pressure network**
-analysis named `Door leakage network | 5 Pa steps (synthetic)`, selected as
-the default active analysis.
+analysis named `Door leakage network | 5 Pa steps (synthetic)`.
+The default active **Facility verification** analysis preserves the spatial
+2-D and 3-D pressure-cascade arrow overlays; select the pressure-network
+analysis explicitly when running its nonlinear leakage solver.
 
 - Nodes: Process, Preparation, Ante and reference Corridor (fixed 0 Pa gauge).
 - Closed-door leakage paths: Process → Preparation → Ante → Corridor.

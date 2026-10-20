@@ -13,7 +13,9 @@ from tkinter import filedialog, messagebox, ttk
 
 from .cfd_multizone import run_multizone_open_door_case, verify_multizone_inputs
 from .cfd_wsl_bridge import run_wsl_bridge
-from .cfd_multizone_results import analyze_multizone_case, export_multizone_report
+from .cfd_multizone_results import (
+    _recorded_outputs, analyze_multizone_case, export_multizone_report,
+)
 from .cfd_streamlines import trace_computed_streamline, export_computed_streamlines
 from .cfd_multizone_review import review_recorded_multizone, export_engineering_review
 from .cfd_closed_door_comparison import (
@@ -68,6 +70,15 @@ def wsl_gui_command(*, repository: Path, directory: Path | None = None,
         receipt.get("status")!="executed_requires_convergence_review" or
         receipt.get("manifest_sha256")!=expected_sha):
         raise RuntimeError("WSL completion receipt is missing, stale or incomplete")
+    # Reuse the canonical OpenFOAM importer integrity gate: every stage, log
+    # hash, generated file hash and source manifest must agree with the receipt.
+    # A zero WSL exit code or a forged/truncated JSON receipt is insufficient.
+    try:
+        _recorded_outputs(directory)
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        raise RuntimeError(
+            "WSL recorded stages, solver logs or computed output provenance failed verification"
+        ) from exc
     return {"status":"wsl_solver_executed_requires_convergence_review"}
 
 

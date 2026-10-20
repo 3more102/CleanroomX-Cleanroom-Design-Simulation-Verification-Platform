@@ -73,6 +73,25 @@ def test_real_tk_vtk_window_opens_and_updates_selected_field_and_glyphs(tmp_path
         assert payload["validation"]=="steady_visualization_only_not_particle_transport"
         assert not window._cleanroomx_export_traces_to_path(exported)
         assert "Export rejected" in window._cleanroomx_view_status.get()
+        window._cleanroomx_particle_mode_var.set(True)
+        window._cleanroomx_particle_diameter_var.set("5")
+        window._cleanroomx_particle_density_var.set("1000")
+        window._cleanroomx_particle_time_var.set(".2")
+        renderer=window._cleanroomx_vtk_renderer
+        renderer.SetWorldPoint(1.5,.5,.5,1.0)
+        renderer.WorldToDisplay()
+        x,y,_=renderer.GetDisplayPoint()
+        assert window._cleanroomx_seed_display_point(x,y)
+        assert len(window._cleanroomx_particles)==1
+        assert window._cleanroomx_particles[0]["points"][0]["xyz_m"]==[1.5,.5,.5]
+        assert "FROZEN steady U, NOT certified" in window._cleanroomx_view_status.get()
+        particle_file=tmp_path/"vtkscreen-particles.json"
+        assert window._cleanroomx_export_particles_to_path(particle_file)
+        content=json.loads(particle_file.read_text(encoding="utf-8"))
+        assert content["schema"]=="cleanroomx.particle-screening-collection.v1"
+        assert content["tracks"][0]["diameter_um"]==pytest.approx(5.)
+        assert not window._cleanroomx_export_particles_to_path(particle_file)
+        assert "Particle export rejected" in window._cleanroomx_view_status.get()
     finally:
         if window is not None:
             window.destroy()

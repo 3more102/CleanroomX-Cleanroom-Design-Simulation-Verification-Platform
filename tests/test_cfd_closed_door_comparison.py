@@ -27,9 +27,11 @@ def _open_report():
         "provenance":{"manifest_sha256":"a"*64,"run_receipt_sha256":"b"*64},
         "rooms":{
             "A":{"name":"A","mean_pressure_pa_relative_to_reference":1.,
-                 "net_outward_imbalance_m3_s":0.,"net_imbalance_fraction_of_throughflow":0.},
+                 "net_outward_imbalance_m3_s":0.,"net_imbalance_fraction_of_throughflow":0.,
+                 "supply_inflow_m3_s":.05,"return_outflow_m3_s":.05},
             "B":{"name":"B","mean_pressure_pa_relative_to_reference":0.,
-                 "net_outward_imbalance_m3_s":0.,"net_imbalance_fraction_of_throughflow":0.}
+                 "net_outward_imbalance_m3_s":0.,"net_imbalance_fraction_of_throughflow":0.,
+                 "supply_inflow_m3_s":.05,"return_outflow_m3_s":.05}
         },
         "doors":{"doorAB":{
             "from_room":"A","to_room":"B","computed_delta_pressure_pa":1.,
@@ -73,6 +75,16 @@ def test_two_models_remain_distinct_even_when_network_predicts_exact_five_pa():
     assert row["closed_network_meets_nominal_target"]
     assert report["network_nominal_targets_met"]
     assert report["path_evidence"]["doorAB"]["basis"]=="engineering_assumption"
+    mapping=report["mechanical_airflow_boundary_comparison"]
+    assert len(mapping)==2
+    assert mapping[0]["room"]=="A"
+    assert mapping[0]["open_cfd_supply_m3_h"]==pytest.approx(180.)
+    assert mapping[0]["closed_network_supply_input_m3_h"]==pytest.approx(180.)
+    assert mapping[0]["open_cfd_return_m3_h"]==pytest.approx(180.)
+    assert mapping[0]["closed_network_return_input_m3_h"]==0.
+    assert mapping[0]["closed_minus_open_return_m3_h"]==pytest.approx(-180.)
+    assert report["boundary_conditions_match_between_models"] is False
+    assert "Numerical equality is not physical equivalence" in report["boundary_comparison_note"]
     assert report["open_cfd_provenance"]["run_receipt_sha256"]=="b"*64
 
 
@@ -178,3 +190,17 @@ def test_incomplete_template_uses_actual_door_names_but_never_invents_leakage(tm
         _open_report(),model,evidence,scenario_sha256=sha)
     assert comparison["network_nominal_targets_met"]
     assert comparison["engineering_release"]=="HOLD"
+
+
+def test_open_cfd_phi_and_network_mechanical_flows_are_independent():
+    source=_open_report()
+    source["rooms"]["A"]["supply_inflow_m3_s"]=.08
+    source["rooms"]["A"]["return_outflow_m3_s"]=.04
+    comparison=compare_closed_network_with_open_cfd(source,_network(),_evidence())
+    a=comparison["mechanical_airflow_boundary_comparison"][0]
+    assert a["closed_minus_open_supply_m3_h"]==pytest.approx(72-288)
+    assert a["closed_minus_open_return_m3_h"]==pytest.approx(-144)
+    assert comparison["engineering_release"]=="HOLD"
+    source["rooms"]["A"]["supply_inflow_m3_s"]=float("nan")
+    with pytest.raises(ValueError,match="finite"):
+        compare_closed_network_with_open_cfd(source,_network(),_evidence())

@@ -199,6 +199,45 @@ def trace_screening_particle(
     }
 
 
+def particle_positions_at_elapsed(tracks, elapsed_s):
+    """Return only recorded numerical integration vertices for playback.
+
+    Each displayed marker is the last available integrated particle sample
+    at or before t. No fabricated intermediate position or gas frame is
+    interpolated; playback is a display operation, NOT CFD time stepping.
+    """
+    time=_finite(elapsed_s,"elapsed_s")
+    if not 0 <= time <= 60:
+        raise ValueError("Playback time must be between 0 and 60 seconds")
+    if type(tracks) is not list or len(tracks)>MAX_PARTICLES:
+        raise ValueError("At most 20 recorded particle paths may be replayed")
+    positions=[]
+    for track in tracks:
+        if track.get("schema")!=PARTICLE_SCHEMA:
+            raise ValueError("Playback requires particle-screening paths")
+        samples=track.get("points")
+        if not isinstance(samples,list) or not samples:
+            raise ValueError("Particle has no recorded integration vertices")
+        selected=None
+        previous=-1.
+        for entry in samples:
+            sample_time=_finite(entry["elapsed_particle_s"],"sample time")
+            if sample_time<previous:
+                raise ValueError("Recorded particle times must be monotone")
+            previous=sample_time
+            if sample_time<=time+1e-12:
+                selected=entry
+            else:
+                break
+        if selected is not None:
+            positions.append({
+                "xyz_m":list(_vector(selected["xyz_m"],"particle position")),
+                "sample_time_s":selected["elapsed_particle_s"],
+                "termination":track["termination"],
+            })
+    return positions
+
+
 def export_screening_particles(tracks, destination):
     """Export single-iteration screening tracks; refuse to clobber evidence."""
     if type(tracks) is not list or not 1 <= len(tracks) <= MAX_PARTICLES:

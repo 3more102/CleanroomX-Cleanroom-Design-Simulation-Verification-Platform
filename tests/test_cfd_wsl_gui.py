@@ -38,6 +38,11 @@ def test_wsl_gui_requires_real_matching_run_receipt(monkeypatch,tmp_path):
     (case/"manifest.json").write_text('{"example":true}')
     digest=hashlib.sha256((case/"manifest.json").read_bytes()).hexdigest()
     monkeypatch.setattr(gui,"run_wsl_bridge",lambda **kwargs:0)
+    calls=[]
+    def validate_recorded(path):
+        calls.append(path)
+        return ({},{"schema":"cleanroomx.multizone-run.v1"})
+    monkeypatch.setattr(gui,"_recorded_outputs",validate_recorded)
     with pytest.raises(RuntimeError,match="without a readable execution receipt"):
         gui.wsl_gui_command(repository=tmp_path,directory=case,mode="run")
     receipt=case/"run-receipt.json"
@@ -56,6 +61,12 @@ def test_wsl_gui_requires_real_matching_run_receipt(monkeypatch,tmp_path):
     assert gui.wsl_gui_command(
         repository=tmp_path,directory=case,distribution="Ubuntu",mode="run"
     )=={"status":"wsl_solver_executed_requires_convergence_review"}
+    assert calls==[case]
+    def reject_provenance(path):
+        raise ValueError("recorded output changed")
+    monkeypatch.setattr(gui,"_recorded_outputs",reject_provenance)
+    with pytest.raises(RuntimeError,match="output provenance failed verification"):
+        gui.wsl_gui_command(repository=tmp_path,directory=case,mode="run")
 
 
 @pytest.fixture

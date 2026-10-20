@@ -207,7 +207,7 @@ def build_multizone_vtk_renderer(report, traces, *, field="speed"):
     scalar_bar.SetTitle(name)
     scalar_bar.SetNumberOfLabels(5)
     scalar_bar.SetMaximumWidthInPixels(110)
-    renderer.AddActor2D(scalar_bar)
+    renderer.AddViewProp(scalar_bar)
     annotation = vtk.vtkTextActor()
     annotation.SetInput(
         f"OpenFOAM computed cells | SIMPLE iteration {report.get('time_name')} | "
@@ -215,7 +215,7 @@ def build_multizone_vtk_renderer(report, traces, *, field="speed"):
     annotation.SetDisplayPosition(15, 16)
     annotation.GetTextProperty().SetColor(.98,.98,.98)
     annotation.GetTextProperty().SetFontSize(15)
-    renderer.AddActor2D(annotation)
+    renderer.AddViewProp(annotation)
     renderer.ResetCamera()
     return renderer
 

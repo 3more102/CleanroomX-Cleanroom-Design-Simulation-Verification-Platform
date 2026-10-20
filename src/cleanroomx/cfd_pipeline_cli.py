@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import sys
 from .cfd_openfoam import export_openfoam_cases, run_openfoam_cases
+from .cfd_project_rooms import generate_project_room_cases, run_project_room_cases
 from .cfd_vtk import populate_study_from_vtk
 from .cfd_visualization import render_cfd_cross_section
 from .cfd_scalar import prepare_scalar_case, run_scalar_case
@@ -23,6 +24,26 @@ def build_parser():
     runner=sub.add_parser("run",help="Opt-in: run blockMesh, checkMesh, simpleFoam")
     runner.add_argument("directory")
     runner.add_argument("--timeout-seconds",type=int,default=3600)
+    project=sub.add_parser(
+        "project-rooms-generate",
+        help="Generate independent OpenFOAM v10 CFD cases for ceiling-FFU rooms and closed doors",
+    )
+    project.add_argument("project", help="CleanroomX GUI project JSON")
+    project.add_argument("directory", help="New output directory (must not exist)")
+    project.add_argument(
+        "--kinematic-viscosity-m2-s", type=float, required=True,
+        help="Explicit finite positive physical air property; never inferred",
+    )
+    project.add_argument("--mesh-cells", type=int, nargs=3, default=[24, 24, 12],
+                         metavar=("NX", "NY", "NZ"))
+    project.add_argument("--max-iterations", type=int, default=150)
+    project.add_argument("--output-interval", type=int, default=50)
+    project_run=sub.add_parser(
+        "project-rooms-run",
+        help="Opt-in run of independent hashed room cases: blockMesh, checkMesh, simpleFoam",
+    )
+    project_run.add_argument("directory")
+    project_run.add_argument("--timeout-seconds", type=int, default=3600)
     importer=sub.add_parser("import-vtk",help="Import real VTK cell data to existing study")
     for cfg in (1,2,3):
         importer.add_argument(f"--case-{cfg}",required=True)
@@ -69,6 +90,22 @@ def main():
         return 0
     if args.command=="run":
         result=run_openfoam_cases(args.directory,timeout_seconds=args.timeout_seconds)
+        print(dumps_strict_json(result))
+        return 0 if result["status"]=="executed_requires_convergence_review" else 2
+    if args.command=="project-rooms-generate":
+        result=generate_project_room_cases(
+            args.project, args.directory,
+            mesh_cells=tuple(args.mesh_cells),
+            kinematic_viscosity_m2_s=args.kinematic_viscosity_m2_s,
+            max_iterations=args.max_iterations,
+            output_interval=args.output_interval,
+        )
+        print(dumps_strict_json(result))
+        return 0
+    if args.command=="project-rooms-run":
+        result=run_project_room_cases(
+            args.directory, timeout_seconds=args.timeout_seconds,
+        )
         print(dumps_strict_json(result))
         return 0 if result["status"]=="executed_requires_convergence_review" else 2
     if args.command=="grid-generate":

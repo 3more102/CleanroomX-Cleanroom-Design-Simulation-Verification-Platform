@@ -86,9 +86,22 @@ do not expect the runtime/path-dependent log hashes to repeat.
   leakage coefficient, pressure control, turbulence validation or commissioning
   evidence is inferred. The corridor has no FFU/return patch; its unrelated
   verification-analysis supply input is not applied to this connected case.
-- Section views display computed cell values and vectors. Computed 3D
-  streamlines, working-plane UDAF acceptance criteria, clipping of computed 3D
-  fields and validated recirculation classification remain unimplemented.
+- Section views display computed cell values and vectors. Click a coloured
+  recorded fluid cell in **Computed sections** to seed a bounded 3D *steady
+  streamline*. The gold line is an **XY/XZ/YZ projection of the 3D trace** and
+  is NOT restricted to the selected section plane. Switch planes to inspect
+  alternative projections. Up to 20 traces can be displayed; **Clear traces**
+  resets them. Seed points always come from actual recorded cell centres.
+- Trace integration uses the recorded cell-centred `U` velocity for the
+  selected SIMPLE iteration, represented piecewise constantly, and limited-step
+  second-order midpoint marching. Each segment checks occupied fluid voxels;
+  it terminates rather than jumping through missing wall/partition voxels.
+  `max_integration_s` is only a streamline integration parameter for a steady
+  field; this is NOT transient solver time or measured particle travel time.
+- The line does NOT model Brownian motion, turbulence dispersion, particle
+  inertia, wall deposition, resuspension or particle injection. Working-plane
+  UDAF acceptance criteria, true VTK 3D streamline rendering/clipping, mesh
+  convergence and validated recirculation topology remain unimplemented.
 - Upward-volume fraction and whole-room downward-velocity CV are descriptive
   diagnostics. They are not a recirculation topology test or cleanroom compliance.
 
@@ -184,3 +197,31 @@ The final complete suite with actual Foundation v10 and real Tk 8.6 passed
 **2,439 tests, 0 failed, 1 skipped** (optional native IfcOpenShell) in 160.20 s.
 The exact log, source hashes and validation summary are retained in the new
 report folder as `full-suite.log` and `validation.json`.
+
+
+## Computed steady-streamline interaction (20 October 2026)
+
+The new `cleanroomx.cfd_streamlines` helper accepts only a nonempty
+`cleanroomx.multizone-results.v1` report with cell-centred `U` and
+`voxel_pitch_m`; it preserves recorded case- and run-receipt SHA-256 identifiers
+in the trace object. It does not load unverified arbitrary velocity screenshots.
+
+```python
+from cleanroomx.cfd_multizone_results import analyze_multizone_case
+from cleanroomx.cfd_streamlines import trace_computed_streamline
+
+report = analyze_multizone_case(
+    "/tmp/cx-open-case", density_kg_m3=1.2, reference_room_id="corridor"
+)
+seed = report["cells"][0]["center_m"]  # actual solved-fluid cell centre
+trace = trace_computed_streamline(report, seed, max_integration_s=20)
+print(trace["termination"], len(trace["points"]))
+```
+
+The `points` array includes 3D coordinates, source room, locally recorded
+speed, and integration parameter. Stops are explicitly labelled
+`domain_exit`, `stagnation`, `max_steps` or
+`max_integration_parameter`. None imply engineering acceptance. Synthetic
+unit fixtures in `test_cfd_streamlines.py` test numerical boundary behavior
+only; the separate `test_cfd_multizone_execution.py` checks tracing on
+actual OpenFOAM fields when Foundation v10 is available.

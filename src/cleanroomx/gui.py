@@ -63,6 +63,7 @@ from .project_bundle import (
     export_project_bundle,
     extract_project_bundle,
 )
+from .cfd_project_rooms import CASE_RE, generate_project_room_cases
 from .project_diagnostics import markdown_project_diagnostics_report
 from .project_diagnostics_cli import (
     _assert_project_output_is_safe,
@@ -2255,6 +2256,11 @@ class CleanroomXApp:
         analyze_menu.add_command(label="Abandon Current Run", command=self.cancel_run)
         analyze_menu.add_separator()
         analyze_menu.add_command(label="Run History...", command=self.show_run_history)
+        analyze_menu.add_separator()
+        analyze_menu.add_command(
+            label="Generate OpenFOAM Room Cases...",
+            command=self.export_openfoam_room_cases,
+        )
         menubar.add_cascade(label="Analyze", menu=analyze_menu)
 
         verify_menu = tk.Menu(menubar, tearoff=False)
@@ -6174,6 +6180,111 @@ class CleanroomXApp:
                 f"Dependencies packaged: {report['dependency_count']}\n"
                 f"Bundle SHA-256: {report['bundle_sha256']}"
             ),
+            parent=self.root,
+        )
+
+    def export_openfoam_room_cases(self) -> None:
+        """Export checked, separate-room CFD inputs; never launch a solver implicitly.
+
+        This workflow refuses stale or unsaved projects and requires an explicit
+        viscosity value. The GUI does not claim a coupled door pressure solution.
+        """
+        if self._running:
+            messagebox.showwarning(
+                "Analysis running", "Abandon the current run before exporting CFD.",
+                parent=self.root,
+            )
+            return
+        try:
+            if self._editor_analysis() is not None:
+                self._commit_editor()
+            else:
+                self._sync_metadata()
+        except Exception as exc:
+            messagebox.showerror(
+                "Cannot prepare CFD export", str(exc), parent=self.root,
+            )
+            return
+
+        if self.project_path is None or self._has_unsaved_changes():
+            messagebox.showinfo(
+                "Save project first",
+                "Save the project and all spatial changes before generating OpenFOAM "
+                "case inputs. The exported manifest is linked to exact saved bytes.",
+                parent=self.root,
+            )
+            self.status_var.set("OpenFOAM export blocked: save project changes first")
+            return
+        try:
+            current = capture_project_file_revision(self.project_path)
+            expected = getattr(self, "_project_file_revision", None)
+            if expected is not None and not project_file_revision_matches(expected, current):
+                raise RuntimeError(
+                    "The project changed on disk; reload or reconcile it before CFD export."
+                )
+        except Exception as exc:
+            messagebox.showerror("CFD export blocked", str(exc), parent=self.root)
+            self.status_var.set("OpenFOAM export blocked: source revision mismatch")
+            return
+
+        nu = simpledialog.askfloat(
+            "CFD physical property",
+            "Enter an independently selected air kinematic viscosity (m²/s).\n"
+            "No physical property is inferred from the demonstration:",
+            parent=self.root, minvalue=1e-12,
+        )
+        if nu is None:
+            return
+        parent_dir = filedialog.askdirectory(
+            parent=self.root,
+            title="Choose parent folder for NEW OpenFOAM room cases",
+            initialdir=str(self.project_path.parent),
+            mustexist=True,
+        )
+        if not parent_dir:
+            return
+        name = simpledialog.askstring(
+            "OpenFOAM case directory",
+            "Name a NEW output folder (must not already exist):",
+            parent=self.root,
+            initialvalue="cleanroomx-cfd-rooms",
+        )
+        if name is None:
+            return
+        if not CASE_RE.fullmatch(name):
+            messagebox.showerror(
+                "Invalid folder name",
+                "Use 1–64 ASCII letters, numbers, underscores or hyphens; "
+                "start with a letter or number.",
+                parent=self.root,
+            )
+            return
+
+        destination = Path(parent_dir) / name
+        try:
+            current_after_dialogs = capture_project_file_revision(self.project_path)
+            if not project_file_revision_matches(current, current_after_dialogs):
+                raise RuntimeError("Saved project changed while the export dialogs were open")
+            report = generate_project_room_cases(
+                self.project_path, destination,
+                kinematic_viscosity_m2_s=nu,
+            )
+        except (OSError, ValueError, RuntimeError, FileExistsError) as exc:
+            self.status_var.set("OpenFOAM room case generation failed")
+            messagebox.showerror("CFD case generation failed", str(exc), parent=self.root)
+            return
+
+        self.status_var.set(
+            f"Generated {len(report['cases'])} independent OpenFOAM room case inputs"
+        )
+        messagebox.showinfo(
+            "OpenFOAM inputs generated",
+            f"Generated {len(report['cases'])} independent room cases at:\n"
+            f"{destination}\n\n"
+            "No solver has run. The closed doors are no-slip walls. "
+            "The 5 Pa pressure-network example is NOT CFD-coupled; "
+            "run blockMesh, checkMesh and simpleFoam separately to obtain "
+            "real results, then review mesh quality and convergence.",
             parent=self.root,
         )
 

@@ -125,7 +125,11 @@ def run_wsl_bridge(
         _WSL_ENTRYPOINT, "cleanroomx-wsl-bridge",
         linux_repo, linux_case, mode, str(timeout_seconds),
     ]
-    return subprocess.run(command, check=False).returncode
+    # Four OpenFOAM stages each use timeout_seconds in the Linux runner.
+    # Bound the outer WSL handoff as well; a hung distro startup cannot leave
+    # the GUI worker blocked indefinitely.
+    overall_timeout = 180 if mode=="probe" else 4*timeout_seconds+180
+    return subprocess.run(command, check=False, timeout=overall_timeout).returncode
 
 
 def main(argv: list[str] | None = None) -> int:

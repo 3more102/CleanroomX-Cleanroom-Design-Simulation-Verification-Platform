@@ -107,6 +107,24 @@ def test_true_openfoam_saved_iteration_history_uses_p_u_and_phi_snapshots(
     report_path=export_recorded_iteration_history(history,tmp_path/"iteration-review")
     assert report_path.is_file()
     assert "latest_solver_reported_convergence" in report_path.read_text()
+    from cleanroomx.cfd_convergence_triage import (
+        TRIAGE_SCHEMA, triage_recorded_convergence, export_convergence_triage,
+    )
+    triage=triage_recorded_convergence(
+        history,pressure_drift_limit_pa=.01,
+        transfer_drift_limit_m3_s=1e-5,
+        cell_imbalance_limit_m3_s=.001,consecutive_changes=2)
+    assert triage["schema"]==TRIAGE_SCHEMA
+    assert triage["source_manifest_sha256"]==computed_report["provenance"]["manifest_sha256"]
+    assert triage["source_run_receipt_sha256"]==computed_report["provenance"]["run_receipt_sha256"]
+    assert triage["latest_iteration"]=="100"
+    assert len(triage["reviewed_changes"])==2
+    assert triage["engineering_release"]=="HOLD"
+    assert triage["closed_door_5pa_demonstrated"] is False
+    if not computed_report["solver_reported_convergence"]:
+        assert triage["numerical_screening"]=="solver_not_converged"
+    assert export_convergence_triage(
+        triage,tmp_path/"actual-solver-triage.json").is_file()
 
 
 def test_actual_fluxes_units_reference_and_door_pressure(computed_report,executed_case):

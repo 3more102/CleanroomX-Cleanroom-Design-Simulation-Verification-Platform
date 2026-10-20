@@ -99,7 +99,7 @@ For each exported room, the mesh boundaries classify:
 - `inlet`: discrete ceiling rectangles derived from actual FFU locations in
   the spatial layout; downward velocity is calculated from the configured
   supply flow divided by mesh-resolved inlet area
-- `outlet`: discrete low west-wall return grille faces, with a local numerical
+- `outlet`: discrete low south-wall return grille faces, with a local numerical
   pressure reference
 - `closedDoors`: door-shaped **noSlip solid wall** regions on *both sides* of
   each shared wall, covering exactly the same nominal physical doorway
@@ -141,3 +141,9 @@ conditions is needed. The single-room generator does not construct that
 coupling. The same applies to unverified claims of uniform laminar
 downflow and the real ceiling FFU operating speed.
 
+
+The current exporter interprets each FFU's `width_m` and `height_m` as its
+rectangular ceiling **X-by-Y patch footprint** when classifying mesh faces.
+This is a visualization/export convention for the synthetic demo, not an
+independently verified manufacturer FFU footprint. Project-specific FFU
+physical dimensions and supply areas must be reviewed before a real run.

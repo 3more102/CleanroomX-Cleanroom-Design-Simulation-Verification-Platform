@@ -392,3 +392,42 @@ also saves `engineering-review.json` alongside its other computed evidence
 and includes a visibly noncertifying door comparison in the HTML dashboard.
 A completed OpenFOAM execution plus output/manifest hash checks establish
 field *provenance*, not commissioning acceptance or cleanroom performance.
+
+
+## Actual OpenFOAM SIMPLE iteration stability inspection (20 October 2026)
+
+The desktop **Iteration stability** tab has an **Analyze saved iterations**
+button. The analysis rereads the case's *real recorded* p/U/C/phi snapshots
+(default: every available saved iteration, between 2 and 12) using the
+existing fail-closed manifest, run-receipt, stage-log and output-hash checks.
+It compares only snapshots with the same model geometry, door direction
+and design targets, selected air density, reference room, SHA-256 input/run
+receipts, and strictly ascending numerical iteration labels.
+
+For each saved iteration the table displays solver-reported convergence
+status for *that selected field set*, `sum(abs(cell phi imbalance))`,
+maximum changes in room-mean relative pressure and open-door computed
+pressure differences (Pa) since the preceding stored iteration, and
+maximum changes in net door-transfer volume flux (m³/h). The real
+recorded points are plotted on two independent axes: **open-door
+computed pressure differences (Pa) by saved SIMPLE iteration**, and
+**sum of absolute cell face-flux imbalances (m³/s)**. Connecting
+lines are visual guides and are not interpolated solver data.
+
+The comparison refuses to silently mix output from another run, different
+room identities, reversed door orientation or changed target definition.
+It also checks that solved door forward-minus-reverse transfer equals net
+transfer, door pressure is consistent with the computed room means and
+global boundary flow-in/out agree with the recorded signed boundary
+imbalance. Pressure-direction sign reversals across saved snapshots are
+reported separately, not converted into imaginary acceptance failures.
+
+**Export iteration history** writes non-overwriting
+`iteration-history.json` and `iteration-evolution.csv` in a unique
+source-hash-named folder, both preserving the selected source receipts and
+labels. The hard-coded engineering verdict remains **HOLD**:
+SIMPLE iteration counts are **not physical seconds**; small drift
+between saved snapshots is not proof of mesh independence, convergence
+between unsaved steps, an acceptable aerodynamic pattern or a compliant
+closed-door 5 Pa pressure cascade. These are diagnostic observations
+without automatically invented pass/fail numerical tolerances.

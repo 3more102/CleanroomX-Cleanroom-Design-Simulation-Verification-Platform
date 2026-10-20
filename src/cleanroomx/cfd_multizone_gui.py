@@ -13,6 +13,10 @@ from .cfd_multizone import run_multizone_open_door_case, verify_multizone_inputs
 from .cfd_multizone_results import analyze_multizone_case, export_multizone_report
 from .cfd_streamlines import trace_computed_streamline, export_computed_streamlines
 from .cfd_multizone_review import review_recorded_multizone, export_engineering_review
+from .cfd_multizone_stability import (
+    SCHEMA as HISTORY_SCHEMA, analyze_recorded_iteration_history,
+    export_recorded_iteration_history,
+)
 
 
 def slice_samples(report: dict, axis: str, position_m: float, room: str = "all") -> list:
@@ -35,6 +39,7 @@ class MultizoneCFDWindow(tk.Toplevel):
         self.minsize(850,600)
         self.report = None
         self.engineering_review = None
+        self.iteration_history = None
         self.running = False
         self.events = queue.Queue()
         self.case_path = tk.StringVar(value=str(directory or ""))
@@ -89,7 +94,8 @@ class MultizoneCFDWindow(tk.Toplevel):
         logs=ttk.Frame(self.tabs,padding=8)
         diagnostics=ttk.Frame(self.tabs,padding=8)
         engineering=ttk.Frame(self.tabs,padding=10)
-        for tab,label in ((summary,"Room comparison"),(fields,"Computed sections"),(residuals,"Residual histories"),(logs,"Solver logs"),(diagnostics,"Diagnostics / provenance"),(engineering,"Engineering review")):
+        history_tab=ttk.Frame(self.tabs,padding=10)
+        for tab,label in ((summary,"Room comparison"),(fields,"Computed sections"),(residuals,"Residual histories"),(logs,"Solver logs"),(diagnostics,"Diagnostics / provenance"),(engineering,"Engineering review"),(history_tab,"Iteration stability")):
             self.tabs.add(tab,text=label)
         columns=("name","target","pressure","speed","supply","returns","imbalance","balance_pct","upward")
         self.room_table=ttk.Treeview(summary,columns=columns,show="headings",height=5)
@@ -124,6 +130,41 @@ class MultizoneCFDWindow(tk.Toplevel):
         ttk.Button(
             engineering,text="Export review JSON (HOLD only)",
             command=self.export_engineering_review_file).pack(anchor="e",pady=8)
+        history_header=ttk.Frame(history_tab)
+        history_header.pack(fill="x")
+        self.history_status=tk.StringVar(
+            value="Analyze saved OpenFOAM iterations to compare actual numerical drift; not physical time.")
+        ttk.Label(history_header,textvariable=self.history_status,wraplength=960).pack(
+            side="left",fill="x",expand=True)
+        ttk.Button(history_header,text="Analyze saved iterations",
+            command=self.analyze_iteration_history).pack(side="right",padx=4)
+        ttk.Button(history_header,text="Export iteration history",
+            command=self.export_iteration_history).pack(side="right",padx=4)
+        self.history_table=ttk.Treeview(
+            history_tab,columns=("iteration","converged","door_pa","door_flow","cell_sum","room_p"),
+            show="headings",height=6)
+        for key,label in (
+            ("iteration","SIMPLE iteration"),("converged","Selected converged?"),
+            ("door_pa","Max Δ door Δp (Pa)"),("door_flow","Max Δ door transfer (m³/h)"),
+            ("cell_sum","Σ absolute cell imbalance (m³/s)"),
+            ("room_p","Max Δ room pressure (Pa)"),
+        ):
+            self.history_table.heading(key,text=label)
+            self.history_table.column(key,width=175,minwidth=110)
+        self.history_table.pack(fill="x",pady=7)
+        self.history_pressure_canvas=tk.Canvas(
+            history_tab,background="#101b2b",highlightthickness=0,height=205)
+        self.history_pressure_canvas.pack(fill="both",expand=True,pady=4)
+        self.history_balance_canvas=tk.Canvas(
+            history_tab,background="#101b2b",highlightthickness=0,height=140)
+        self.history_balance_canvas.pack(fill="both",expand=True,pady=4)
+        self.history_pressure_canvas.bind(
+            "<Configure>",lambda _e:self.draw_iteration_history())
+        self.history_balance_canvas.bind(
+            "<Configure>",lambda _e:self.draw_iteration_history())
+        ttk.Label(history_tab,
+            text="Every marker is a saved OpenFOAM SIMPLE iteration. Connecting lines are visual guides ONLY; they do not create intermediate CFD results or represent seconds. Engineering decision remains HOLD.",
+            wraplength=1050).pack(anchor="w",pady=5)
         self.pressure_canvas=tk.Canvas(summary,background="#101b2b",highlightthickness=0,height=220)
         self.pressure_canvas.pack(fill="both",expand=True,pady=8)
         self.pressure_canvas.bind("<Configure>",lambda e:self.draw_pressure())
@@ -250,6 +291,8 @@ class MultizoneCFDWindow(tk.Toplevel):
                         messagebox.showerror("CFD operation failed",payload,parent=self)
                     elif payload.get("schema")=="cleanroomx.multizone-results.v1":
                         self.load_report(payload)
+                    elif payload.get("schema")==HISTORY_SCHEMA:
+                        self.load_iteration_history(payload)
                     else:
                         self.status.set(payload["status"].replace("_"," ")+". Enter density and import computed fields to review.")
         except queue.Empty:
@@ -275,6 +318,11 @@ class MultizoneCFDWindow(tk.Toplevel):
         self._section_to_pixel = None
         self.trace_status.set("Click a computed fluid cell to trace its steady 3D streamline.")
         self.engineering_review = None
+        self.iteration_history = None
+        self.history_status.set("Analyze saved OpenFOAM iterations; not physical time.")
+        self.history_table.delete(*self.history_table.get_children())
+        self.history_pressure_canvas.delete("all")
+        self.history_balance_canvas.delete("all")
         self.engineering_verdict.set("Engineering HOLD — import genuine computed fields for a review.")
         self.engineering_text.delete("1.0","end")
         for table in (self.room_table,self.door_table,self.residual_table,self.engineering_table):
@@ -352,6 +400,127 @@ class MultizoneCFDWindow(tk.Toplevel):
         self.draw_section()
         self.draw_residuals()
         self.tabs.select(0)
+
+    def analyze_iteration_history(self):
+        """Compute across all saved iterations in worker, no synthetic snapshots."""
+        if not self.report or self.running:
+            self.history_status.set("Import real OpenFOAM fields before comparing iterations.")
+            return
+        root=self.case_path.get()
+        density=self.report["density_kg_m3"]
+        reference=self.report["pressure_reference"]["room_id"]
+        self.history_status.set("Validating each saved p/U/C/phi snapshot and calculating evolution…")
+        self._worker(lambda:analyze_recorded_iteration_history(
+            root,density_kg_m3=density,reference_room_id=reference))
+
+    def load_iteration_history(self, history):
+        """Render actual saved SIMPLE iteration samples; always noncertifying."""
+        if history.get("schema")!=HISTORY_SCHEMA or history.get("engineering_release")!="HOLD":
+            raise ValueError("Iteration stability requires an unqualified recorded-CFD comparison")
+        if self.report and (
+            history["source_run_receipt_sha256"]!=
+                self.report["provenance"]["run_receipt_sha256"] or
+            history["source_manifest_sha256"]!=
+                self.report["provenance"]["manifest_sha256"]):
+            raise ValueError("Saved snapshot history belongs to a different OpenFOAM run")
+        self.iteration_history=history
+        self.history_table.delete(*self.history_table.get_children())
+        for snap in history["snapshots"]:
+            change=snap["change_from_previous_recorded_iteration"]
+            self.history_table.insert("","end",values=(
+                snap["iteration"],
+                "yes" if snap["solver_reported_convergence"] else "no",
+                "—" if change is None else
+                    f"{change['max_absolute_door_delta_change_pa']:.5g}",
+                "—" if change is None else
+                    f"{3600*change['max_absolute_door_transfer_change_m3_s']:.5g}",
+                f"{snap['sum_absolute_cell_imbalance_m3_s']:.5g}",
+                "—" if change is None else
+                    f"{change['max_absolute_room_pressure_change_pa']:.5g}"))
+        final=history["last_saved_snapshot_change"]
+        self.history_status.set(
+            f"ENGINEERING HOLD | {len(history['snapshots'])} real saved SIMPLE iterations | "
+            f"last maximum door Δp drift {final['max_absolute_door_delta_change_pa']:.5g} Pa | "
+            +("latest solver reported convergence" if history["latest_solver_reported_convergence"]
+              else "latest NOT CONVERGED")
+            +" | does NOT prove a 5 Pa closed-door cascade")
+        self.draw_iteration_history()
+        self.tabs.select(self.tabs.index("end")-1)
+
+    def draw_iteration_history(self):
+        """Chart only genuine saved iteration points, never estimated CFD values."""
+        history=self.iteration_history
+        for canvas in (self.history_pressure_canvas,self.history_balance_canvas):
+            canvas.delete("all")
+        if history is None:
+            return
+        snapshots=history["snapshots"]
+        if not snapshots:
+            return
+        def axes(canvas,title,series,unit):
+            w=max(canvas.winfo_width(),650)
+            h=max(canvas.winfo_height(),120)
+            left,right,top,bottom=72,w-18,40,h-26
+            lows=[float(snapshot["iteration"]) for snapshot in snapshots]
+            if not all(math.isfinite(v) for v in lows) or lows[0]==lows[-1]:
+                raise ValueError("Invalid recorded SIMPLE iteration indices")
+            vals=[v for _,points in series for v in points]
+            low=min(vals)
+            high=max(vals)
+            span=max(high-low,abs(high)*1e-6,1e-10)
+            low-=span*.08
+            high+=span*.08
+            canvas.create_text(15,14,anchor="w",fill="#e6eef7",
+                text=f"{title} ({unit}) — saved SIMPLE iterations only",tags="history-chart-title")
+            canvas.create_line(left,top,left,bottom,fill="#718096")
+            canvas.create_line(left,bottom,right,bottom,fill="#718096")
+            canvas.create_text(7,top,anchor="w",fill="#acbfd4",text=f"{high:.4g}")
+            canvas.create_text(7,bottom,anchor="w",fill="#acbfd4",text=f"{low:.4g}")
+            def xp(i):
+                return left+(float(snapshots[i]["iteration"])-lows[0])/(lows[-1]-lows[0])*(right-left)
+            def yp(v):
+                return bottom-(v-low)/(high-low)*(bottom-top)
+            for i,snap in enumerate(snapshots):
+                canvas.create_text(xp(i),bottom+13,fill="#acbfd4",
+                    text=snap["iteration"],tags="computed-iteration-label")
+            colors=("#22c5d6","#ffca65","#c5a4ff","#8de0a7","#e89eb0","#a8c2d4")
+            for n,(name,values) in enumerate(series):
+                coords=[(xp(i),yp(value)) for i,value in enumerate(values)]
+                color=colors[n%len(colors)]
+                for a,b in zip(coords,coords[1:]):
+                    canvas.create_line(a[0],a[1],b[0],b[1],
+                        fill=color,width=2,tags="snapshot-visual-guide")
+                for x,y in coords:
+                    canvas.create_oval(x-3.5,y-3.5,x+3.5,y+3.5,
+                        fill=color,outline="#101b2b",tags="computed-iteration-point")
+                canvas.create_text(right-8,top+n*15,anchor="ne",fill=color,
+                    text=str(name),tags="computed-series-label")
+        doors=tuple(sorted(snapshots[0]["doors"]))
+        axes(self.history_pressure_canvas,"Open-door computed Δp",
+            [(name,[snap["doors"][name]["delta_pa"] for snap in snapshots])
+             for name in doors],"Pa")
+        axes(self.history_balance_canvas,"Σ absolute cell flow imbalance",
+            [("All cells",[snap["sum_absolute_cell_imbalance_m3_s"]
+                          for snap in snapshots])],"m³/s")
+
+    def export_iteration_history(self):
+        if not self.iteration_history or self.running:
+            self.history_status.set("Analyze recorded iterations before exporting history.")
+            return
+        root=filedialog.askdirectory(
+            parent=self,title="Choose NEW directory for solver iteration history")
+        if not root:
+            return
+        # Exporter creates the destination itself. Prevent accidental
+        # rewriting by using a nonexisting child inside the selected parent.
+        dest=Path(root)/("iteration-history-"+
+                         self.iteration_history["source_run_receipt_sha256"][:12])
+        try:
+            saved=export_recorded_iteration_history(self.iteration_history,dest)
+        except (OSError,ValueError) as exc:
+            messagebox.showerror("Iteration history export failed",str(exc),parent=self)
+            return
+        self.history_status.set(f"ENGINEERING HOLD | Saved recorded evolution: {saved}")
 
     def draw_pressure(self):
         c=self.pressure_canvas

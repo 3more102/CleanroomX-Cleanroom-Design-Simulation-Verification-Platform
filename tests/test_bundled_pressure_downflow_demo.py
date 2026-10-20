@@ -79,7 +79,7 @@ def test_demo_ceiling_ffus_and_low_level_returns_are_explicitly_design_only():
     assert all(item["z_m"] < 0.5 for item in returns)
     scenario = project.metadata["demo_scenario"]
     assert scenario["downflow_velocity_m_s"] is None
-    assert "not a computed 3-D velocity field" in scenario["airflow"]
+    assert "do not represent a computed 3-D velocity field" in scenario["airflow"]
 
 
 def test_synthetic_pressure_network_solves_five_pascal_steps_and_mass_balance():

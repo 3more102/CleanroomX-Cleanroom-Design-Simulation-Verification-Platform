@@ -6334,7 +6334,7 @@ class CleanroomXApp:
         confirmed = messagebox.askyesno(
             "Hypothetical open-door CFD scenario",
             "Generate a SINGLE CONNECTED hypothetical airflow model with ALL "
-            "three room-to-room doors OPEN?\\n\\n"
+            "three room-to-room doors OPEN?\n\n"
             "This does NOT reproduce the CLOSED-door 5 Pa pressure-cascade "
             "network. No solver has run or been verified.",
             parent=self.root,
@@ -6390,9 +6390,9 @@ class CleanroomXApp:
         )
         messagebox.showinfo(
             "Connected OpenFOAM input generated",
-            f"Case folder: {destination}\\n"
-            f"Connected fluid blocks: {result['case']['fluid_block_count']}\\n"
-            f"Traversable doors: {len(result['case']['open_doors'])}\\n\\n"
+            f"Case folder: {destination}\n"
+            f"Connected fluid blocks: {result['case']['fluid_block_count']}\n"
+            f"Traversable doors: {len(result['case']['open_doors'])}\n\n"
             "No OpenFOAM solver was launched. The 5 Pa CLOSED-door targets "
             "are NOT imposed. Run blockMesh/checkMesh/simpleFoam explicitly "
             "and independently review the resulting physics.",

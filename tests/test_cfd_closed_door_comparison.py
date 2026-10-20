@@ -12,6 +12,7 @@ from cleanroomx.pressure_network import (
 from cleanroomx.cfd_closed_door_comparison import (
     RESULT_SCHEMA, SCENARIO_SCHEMA, compare_closed_network_with_open_cfd,
     load_closed_door_network_scenario, export_closed_door_comparison,
+    write_closed_door_scenario_template,
 )
 
 
@@ -147,3 +148,33 @@ def test_forged_closed_mode_and_missing_target_provenance_are_rejected():
     report["doors"]["doorAB"]["design_delta_pressure_target_pa"]=None
     with pytest.raises(ValueError,match="positive explicit"):
         compare_closed_network_with_open_cfd(report,_network(),_evidence())
+
+
+def test_incomplete_template_uses_actual_door_names_but_never_invents_leakage(tmp_path):
+    path=tmp_path/"explicit-closed-door-input.json"
+    assert write_closed_door_scenario_template(_open_report(),path)==path
+    data=json.loads(path.read_text())
+    assert data["schema"]==SCENARIO_SCHEMA
+    assert [node["name"] for node in data["network"]["nodes"]]==["A","B"]
+    assert data["network"]["nodes"][1]["fixed_pressure_pa"]==0.
+    assert data["network"]["nodes"][0]["supply_m3_h"] is None
+    assert data["network"]["paths"][0]["name"]=="doorAB"
+    assert data["network"]["paths"][0]["coefficient_m3_s_pa_n"] is None
+    assert data["path_evidence"]["doorAB"]["reference"]==""
+    with pytest.raises(ValueError,match="Fill every room"):
+        load_closed_door_network_scenario(path)
+    with pytest.raises(FileExistsError):
+        write_closed_door_scenario_template(_open_report(),path)
+    for node in data["network"]["nodes"]:
+        node["supply_m3_h"]=180. if node["name"]=="A" else 0.
+        node["return_m3_h"]=0.
+        node["exhaust_m3_h"]=0.
+    data["network"]["paths"][0]["coefficient_m3_s_pa_n"]=.01
+    data["network"]["paths"][0]["exponent"]=1.
+    data["path_evidence"]["doorAB"]["reference"]="Synthetic value only"
+    path.write_text(json.dumps(data))
+    model,evidence,sha=load_closed_door_network_scenario(path)
+    comparison=compare_closed_network_with_open_cfd(
+        _open_report(),model,evidence,scenario_sha256=sha)
+    assert comparison["network_nominal_targets_met"]
+    assert comparison["engineering_release"]=="HOLD"

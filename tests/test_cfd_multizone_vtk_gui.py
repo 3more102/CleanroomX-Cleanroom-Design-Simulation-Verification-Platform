@@ -53,6 +53,17 @@ def test_real_tk_vtk_window_opens_and_updates_selected_field_and_glyphs():
         window._cleanroomx_plane_position_var.set("")
         window._cleanroomx_refresh_scene()
         assert "3 recorded cells" in window._cleanroomx_view_status.get()
+        # Genuine VTK display-to-world projection followed by vtkPointPicker.
+        renderer=window._cleanroomx_vtk_renderer
+        renderer.SetWorldPoint(1.5,0.5,0.5,1.0)
+        renderer.WorldToDisplay()
+        x,y,_=renderer.GetDisplayPoint()
+        assert window._cleanroomx_seed_display_point(x,y)
+        assert len(window._cleanroomx_traces)==2
+        assert window._cleanroomx_traces[-1]["points"][0]["xyz_m"]==[1.5,0.5,0.5]
+        assert "NOT particle tracking" in window._cleanroomx_view_status.get()
+        assert not window._cleanroomx_seed_display_point(-100,-100)
+        assert len(window._cleanroomx_traces)==2
     finally:
         if window is not None:
             window.destroy()

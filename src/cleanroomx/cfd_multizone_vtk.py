@@ -9,6 +9,9 @@ from __future__ import annotations
 
 import math
 
+from .cfd_particle_diagnostics import (
+    analyze_particle_trajectories, export_particle_trajectory_diagnostics,
+)
 from .cfd_particles import (
     PARTICLE_SCHEMA, MAX_PARTICLES, trace_screening_particle,
     export_screening_particles, particle_positions_at_elapsed,
@@ -783,6 +786,98 @@ def open_multizone_vtk_window(parent, report, traces):
             command=choose_particle_export
         ).pack(side="left",padx=4)
 
+        def open_particle_diagnostics():
+            """Analyze ACTUAL recorded screening samples, never concentrations."""
+            try:
+                summary=analyze_particle_trajectories(report,particles)
+            except (ValueError,TypeError,KeyError) as exc:
+                view_status.set(f"Particle diagnostics rejected: {exc}")
+                return None
+            from tkinter import filedialog
+            dialogue=tk.Toplevel(window)
+            dialogue.title("CleanroomX | Sampled particle trajectory diagnostics")
+            dialogue.geometry("1030x625")
+            dialogue.minsize(770,440)
+            content=ttk.Frame(dialogue,padding=12)
+            content.pack(fill="both",expand=True)
+            count=summary["number_of_screening_tracks"]
+            aggregate=summary["aggregate"]
+            ttk.Label(
+                content,text=f"{count} frozen-U one-way screening path(s) | "
+                f"{aggregate['first_observed_room_transitions']} sampled room-label transition(s) | "
+                f"{aggregate['tracks_with_stokes_regime_warning']} Stokes warning(s) | "
+                "ENGINEERING HOLD",
+                font=("TkDefaultFont",11,"bold"),wraplength=980,
+            ).pack(anchor="w",pady=(0,6))
+            ttk.Label(
+                content,
+                text="Recorded vertices only. Paths are polygonal approximations; "
+                "room times use left-sample labels (NOT actual crossing instants). "
+                "No particle concentration, deposition, physical residence-time "
+                "or 5 Pa closed-door acceptance is calculated.",
+                wraplength=985,
+            ).pack(anchor="w",pady=(0,10))
+            headings=(
+                ("index","#",40),("start","Start room",115),
+                ("end","End room",115),("size","µm",70),
+                ("samples","Samples",70),("seconds","Elapsed s",95),
+                ("distance","Path m",95),("net","Displacement m",115),
+                ("cross","Transitions",95),("stop","Termination",240),
+            )
+            table_frame=ttk.Frame(content)
+            table_frame.pack(fill="both",expand=True)
+            table=ttk.Treeview(
+                table_frame,columns=[x[0] for x in headings],
+                show="headings",height=12)
+            for key,label,width in headings:
+                table.heading(key,text=label)
+                table.column(key,width=width,minwidth=45,stretch=True)
+            for item in summary["tracks"]:
+                table.insert("","end",values=(
+                    item["particle_index"],item["start_room_id"],
+                    item["end_room_id"],f"{item['diameter_um']:.4g}",
+                    item["sample_count"],
+                    f"{item['recorded_sample_elapsed_s']:.5g}",
+                    f"{item['polygonal_path_length_m']:.6g}",
+                    f"{item['end_to_end_displacement_m']:.6g}",
+                    item["first_observed_transition_count"],item["termination"],
+                ))
+            scrollbar=ttk.Scrollbar(table_frame,orient="vertical",command=table.yview)
+            table.configure(yscrollcommand=scrollbar.set)
+            scrollbar.pack(side="right",fill="y")
+            table.pack(side="left",fill="both",expand=True)
+            foot=ttk.Frame(content)
+            foot.pack(fill="x",pady=(10,0))
+            export_status=tk.StringVar(
+                value="Diagnostics remain noncertifying; source hashes and SIMPLE iteration are retained.")
+            ttk.Label(foot,textvariable=export_status,wraplength=710).pack(
+                side="left",fill="x",expand=True)
+            def choose_diagnostics_export():
+                destination=filedialog.asksaveasfilename(
+                    parent=dialogue,title="Export source-checked particle diagnostics",
+                    defaultextension=".json",filetypes=(("JSON","*.json"),))
+                if not destination:
+                    return
+                try:
+                    saved=export_particle_trajectory_diagnostics(summary,destination)
+                except (OSError,ValueError) as exc:
+                    export_status.set(f"Export rejected: {exc}")
+                    return
+                export_status.set(f"Saved noncertifying, provenance-tagged diagnostics: {saved}")
+            ttk.Button(foot,text="Export diagnostics JSON",
+                       command=choose_diagnostics_export).pack(side="right",padx=6)
+            dialogue._cleanroomx_particle_diagnostics=summary
+            dialogue._cleanroomx_particle_diagnostics_table=table
+            dialogue._cleanroomx_export_diagnostics=choose_diagnostics_export
+            view_status.set(
+                f"Analyzed {count} recorded sample path(s); no inferred concentration or deposition")
+            return dialogue
+
+        ttk.Button(
+            particle_controls,text="Analyze particle paths",
+            command=open_particle_diagnostics
+        ).pack(side="left",padx=5)
+
         def seed_display_point(x,y):
             is_particle=particle_mode_var.get()
             if len(particles if is_particle else traces)>=20:
@@ -856,6 +951,7 @@ def open_multizone_vtk_window(parent, report, traces):
         window._cleanroomx_play_particle_screening=play_particle_screening
         window._cleanroomx_pause_particle_playback=pause_particle_playback
         window._cleanroomx_export_particles_to_path=export_particles
+        window._cleanroomx_analyze_particle_paths=open_particle_diagnostics
         window._cleanroomx_traces=traces
         window._cleanroomx_seed_display_point=seed_display_point
         window._cleanroomx_export_traces_to_path=export_paths

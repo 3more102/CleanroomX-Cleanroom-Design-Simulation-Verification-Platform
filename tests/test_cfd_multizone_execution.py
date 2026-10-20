@@ -263,3 +263,31 @@ def test_real_openfoam_cell_velocity_drives_bounded_3d_streamline(computed_repor
         assert point["speed_m_s"] == pytest.approx(math.dist((0,0,0),sample[0]))
     if len(trace["points"]) > 1:
         assert trace["points"][-1]["integration_parameter_s"] > 0
+
+
+def test_real_solver_computed_fields_feed_true_vtk_3d(computed_report):
+    """Source VTK point scalars/vectors from actual validated OpenFOAM U/p.
+
+    VTK is an optional rendering dependency; this check runs when installed.
+    This does not establish physical mesh or convergence validity.
+    """
+    pytest.importorskip("vtk")
+    from cleanroomx.cfd_multizone_vtk import (
+        computed_field_polydata, sampled_velocity_glyph_actor,
+        build_multizone_vtk_renderer,
+    )
+    actual=computed_report
+    points=computed_field_polydata(actual)
+    assert points.GetNumberOfPoints()==actual["mesh"]["cells"]==13210
+    assert points.GetNumberOfVerts()==13210
+    for index in (0, 6605, 13209):
+        cell=actual["cells"][index]
+        assert points.GetPoint(index)==pytest.approx(cell["center_m"])
+        assert points.GetPointData().GetArray("Computed U (m/s)").GetTuple3(index)==pytest.approx(cell["velocity_m_s"])
+        assert points.GetPointData().GetArray("Computed pressure relative (Pa)").GetTuple1(index)==pytest.approx(
+            cell["pressure_pa_relative_to_reference"])
+    scene=build_multizone_vtk_renderer(actual,[],field="pressure",vectors=False)
+    assert scene.GetActors().GetNumberOfItems()>=6
+    arrows=sampled_velocity_glyph_actor(actual,max_arrows=60)
+    arrows.GetMapper().Update()
+    assert arrows.GetMapper().GetInput().GetNumberOfPoints()>0

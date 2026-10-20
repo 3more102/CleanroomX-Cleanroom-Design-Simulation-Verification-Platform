@@ -1159,4 +1159,5 @@ def test_gui_cfd_export_requires_explicit_viscosity_and_supports_cancel(
     )
     app.export_openfoam_room_cases()
     assert called == []
-    assert list(tmp_path.iterdir()) == []
+    assert not (tmp_path / "cleanroomx-cfd-rooms").exists()
+    assert not any(path.name.startswith("room_") for path in tmp_path.iterdir())

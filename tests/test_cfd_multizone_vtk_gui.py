@@ -6,6 +6,7 @@ real solver-field contract tests.
 """
 import tkinter as tk
 import json
+import time
 
 import pytest
 
@@ -119,6 +120,28 @@ def test_real_tk_vtk_window_opens_and_updates_selected_field_and_glyphs(tmp_path
         window._cleanroomx_particles.clear()
         assert window._cleanroomx_analyze_particle_paths() is None
         assert "Particle diagnostics rejected" in window._cleanroomx_view_status.get()
+
+        # The multi-injection feature uses actual selected solver centres and
+        # processes numerical traces on a worker without blocking the viewer.
+        window._cleanroomx_ensemble_count_var.set("2")
+        window._cleanroomx_particle_time_var.set(".1")
+        assert window._cleanroomx_inject_ensemble()
+        deadline=time.monotonic()+10
+        while window._cleanroomx_ensemble_state["busy"] and time.monotonic()<deadline:
+            root.update()
+            time.sleep(.02)
+        root.update()
+        assert not window._cleanroomx_ensemble_state["busy"]
+        assert len(window._cleanroomx_particles)==2
+        assert len({
+            tuple(p["points"][0]["xyz_m"])
+            for p in window._cleanroomx_particles
+        })==2
+        assert all(p["source_iteration"]=="50" for p in window._cleanroomx_particles)
+        assert "NOT a probability or concentration" in window._cleanroomx_ensemble_status.get()
+        window._cleanroomx_ensemble_count_var.set("21")
+        assert window._cleanroomx_inject_ensemble() is False
+        assert "Selection rejected" in window._cleanroomx_ensemble_status.get()
     finally:
         if window is not None:
             window.destroy()

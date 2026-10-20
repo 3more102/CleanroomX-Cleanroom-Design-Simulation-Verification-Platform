@@ -39,6 +39,8 @@ def test_saved_snapshot_triage_shows_recorded_drift_not_certification(gui,tmp_pa
     history=compare_recorded_iterations(_series())
     window.load_iteration_history(history)
     root.update()
+    assert window.tabs.select()==str(window.history_tab)
+    assert window.tabs.tab(window.tabs.select(),"text")=="Iteration stability"
     dialog=window.open_convergence_triage()
     assert isinstance(dialog,tk.Toplevel)
     root.update()

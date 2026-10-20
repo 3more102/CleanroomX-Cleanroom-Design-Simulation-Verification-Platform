@@ -563,3 +563,51 @@ Synthetic contract checks:
 The actual VTK-on-Tk regression exercises the asynchronous interface, while
 the OpenFOAM workflow uses actual Foundation v10 recorded solver fields to
 check injection and provenance.
+
+
+## Particle numerical timestep-refinement screening (20 October 2026)
+
+The one-way frozen-field particle integrator now records the previously missing
+**initial velocity, gravity vector, maximum integration-step count and fixed
+Cunningham mean-free-path assumption**. This allows an independently
+reproducible numerical study instead of reconstructing missing conditions.
+
+In **Open real VTK 3D → Analyze particle paths**, select a particle in the
+table and choose **Check step refinement**. Enter an explicit endpoint
+tolerance in metres. This executes three exact same-physics/source particle
+integrations with maximum timestep limits at 1x, 0.5x and 0.25x of the
+original setting, asynchronously without freezing Tk. It compares:
+
+- Actual largest recorded time-step and integration-segment counts, not only
+  nominal timestep caps
+- Elapsed integration horizon, termination reasons and Stokes slip-Re warning
+- Sampled room transition *pairs* (not claimed exact crossing instants)
+- Endpoints and successive endpoint distances in metres
+
+The initial (1x) run **must exactly reproduce every exported sample and
+metadata field**. Older particle tracks which lack the added initial
+conditions are still displayable but **cannot** be used for this test;
+re-inject with the updated version. A forged or inconsistent baseline is
+rejected. A refined nominal time-step that does not actually reduce the
+recorded step durations is explicitly **not demonstrated**.
+
+A bounded endpoint-difference screen requires all scenarios to complete,
+observe smaller actual timesteps and more integration segments, match
+recorded room-transition sequences, stay in the low-slip-Re regime and have
+both endpoint differences within the operator-supplied tolerance. This
+does NOT prove formal numerical convergence order, mesh-independence,
+physical particle trajectory validity, turbulence dispersion, particle
+deposition or cleanroom performance. The original carrier CFD field is
+held **fixed** and remains a single steady SIMPLE iteration.
+**Engineering release always remains HOLD.**
+
+Exporting step study JSON uses exclusive-create and includes the exact
+recorded CFD hashes/iteration, initial conditions, each step setting,
+termination and explicit noncertifying limitations. Validation:
+
+- Synthetic exact-replay, zero-refinement, wall-contact, large-slip-Re,
+  tampering and export tests: \`tests/test_cfd_particle_refinement.py\`
+- Real VTK/Tk step-study GUI smoke test under Xvfb
+- Foundation v10 actual computed-U ingestion/integration check
+
+A passing timestep screen is a **limited numerical diagnostic only**.

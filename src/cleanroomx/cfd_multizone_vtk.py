@@ -405,6 +405,8 @@ def open_multizone_vtk_window(parent, report, traces):
     render_window.SetWindowName("CleanroomX | Computed OpenFOAM 3D")
     field_var = tk.StringVar(value="speed")
     arrows_var = tk.BooleanVar(value=True)
+    click_seed_var = tk.BooleanVar(value=False)
+    displayed_selection = {"room_id":"all","plane_axis":"all","plane_position_m":None}
     room_var = tk.StringVar(value="all")
     plane_var = tk.StringVar(value="all")
     plane_position_var = tk.StringVar(value="")
@@ -507,6 +509,11 @@ def open_multizone_vtk_window(parent, report, traces):
             new.SetActiveCamera(camera)
             render_window.Render()
             window._cleanroomx_vtk_renderer=new
+            displayed_selection.update({
+                "room_id":room_var.get(),
+                "plane_axis":axis,
+                "plane_position_m":pos,
+            })
             count=select_recorded_cells(
                 report,room_id=room_var.get(),plane_axis=plane_var.get(),
                 plane_position_m=pos)
@@ -516,6 +523,39 @@ def open_multizone_vtk_window(parent, report, traces):
 
         ttk.Button(selection,text="Apply room/plane",command=refresh_scene).pack(
             side="left",padx=8)
+        ttk.Checkbutton(
+            selection,text="Pick fluid seed in 3D",variable=click_seed_var
+        ).pack(side="left",padx=5)
+        ttk.Button(
+            selection,text="Clear 3D traces",
+            command=lambda: (traces.clear(),refresh_scene())
+        ).pack(side="left",padx=5)
+
+        def seed_display_point(x,y):
+            if len(traces)>=MAX_3D_TRACES:
+                view_status.set("Maximum 20 traces; clear 3D traces before adding more")
+                return False
+            try:
+                point_id=pick_recorded_solver_point(
+                    window._cleanroomx_vtk_renderer,x,y)
+                trace=seed_streamline_from_displayed_point(
+                    report,traces,point_id,**displayed_selection)
+                traces.append(trace)
+                refresh_scene()
+            except (ValueError,OverflowError) as exc:
+                view_status.set(f"3D seed rejected: {exc}")
+                return False
+            view_status.set(
+                f"Trace {len(traces)}: {len(trace['points'])} computed points, "
+                f"{trace['termination']}; steady streamline, NOT particle tracking")
+            return True
+
+        def on_vtk_click(_caller,_event):
+            if click_seed_var.get():
+                x,y=interactor.GetEventPosition()
+                seed_display_point(x,y)
+
+        interactor.AddObserver("LeftButtonPressEvent",on_vtk_click,1.0)
         field_control.bind("<<ComboboxSelected>>",refresh_scene)
         arrows_control.configure(command=refresh_scene)
         window._cleanroomx_vtk_widget=widget
@@ -527,6 +567,9 @@ def open_multizone_vtk_window(parent, report, traces):
         window._cleanroomx_plane_var=plane_var
         window._cleanroomx_plane_position_var=plane_position_var
         window._cleanroomx_view_status=view_status
+        window._cleanroomx_click_seed_var=click_seed_var
+        window._cleanroomx_traces=traces
+        window._cleanroomx_seed_display_point=seed_display_point
         window._cleanroomx_refresh_scene=refresh_scene
 
         def pump_native_events():

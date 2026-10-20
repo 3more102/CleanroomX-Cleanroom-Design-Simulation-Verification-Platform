@@ -60,8 +60,9 @@ reference boundary; there is no independent corridor ventilation design.
 ## Downflow limitations
 
 The ceiling FFUs and low returns express the intended **top-to-bottom
-unidirectional air pattern**. The current spatial GUI depicts devices,
-not a resolved fluid velocity field or CFD streamlines.
+unidirectional air pattern**. The spatial 3-D view draws dashed cyan **design-intent downflow arrows** beneath
+ceiling FFUs (tagged `design-downflow`); they are illustrations, not
+computed velocity vectors, streamlines, or a resolved CFD flow field.
 
 To establish a real laminar/unidirectional flow field: specify actual FFU
 face area, velocity/flow and recirculation details, return boundary

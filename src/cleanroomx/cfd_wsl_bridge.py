@@ -30,7 +30,7 @@ if [[ ! -f "$repo/scripts/with_openfoam10.sh" || ! -d "$repo/src/cleanroomx" ]];
     exit 2
 fi
 cd "$repo"
-export PYTHONPATH="$repo/src\${PYTHONPATH:+:$PYTHONPATH}"
+export PYTHONPATH="$repo/src${PYTHONPATH:+:$PYTHONPATH}"
 if [[ "$mode" == probe ]]; then
     exec bash "$repo/scripts/with_openfoam10.sh" python3 -c \
         'import cleanroomx.cfd_pipeline_cli; print("CleanroomX + OpenFOAM Foundation v10 probe: READY")'

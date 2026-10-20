@@ -7,11 +7,15 @@ VTK is an optional dependency; the core CleanroomX GUI remains usable without it
 """
 from __future__ import annotations
 
+import copy
 import math
 import queue
 import threading
 
 from .cfd_particle_ensemble import inject_recorded_particle_ensemble
+from .cfd_particle_refinement import (
+    analyze_particle_timestep_refinement, export_particle_timestep_refinement,
+)
 from .cfd_particle_diagnostics import (
     analyze_particle_trajectories, export_particle_trajectory_diagnostics,
 )
@@ -863,6 +867,140 @@ def open_multizone_vtk_window(parent, report, traces):
             table.configure(yscrollcommand=scrollbar.set)
             scrollbar.pack(side="right",fill="y")
             table.pack(side="left",fill="both",expand=True)
+            first=table.get_children()[0]
+            table.selection_set(first)
+            table.focus(first)
+
+            refine_bar=ttk.Frame(content)
+            refine_bar.pack(fill="x",pady=(8,0))
+            ttk.Label(refine_bar,text="Particle numerical step-size study").pack(side="left")
+            ttk.Label(refine_bar,text="Endpoint tolerance (m)").pack(
+                side="left",padx=(12,4))
+            refine_tolerance=tk.StringVar(value="0.001")
+            ttk.Entry(
+                refine_bar,textvariable=refine_tolerance,width=9).pack(side="left")
+            refine_status=tk.StringVar(
+                value="Three fixed-U replays (1x, 1/2x, 1/4x); never a physical convergence PASS.")
+            ttk.Label(
+                refine_bar,textvariable=refine_status,wraplength=505).pack(
+                    side="right",fill="x",expand=True,padx=8)
+            refine_queue=queue.Queue()
+            refine_state={"busy":False,"after":None,"last":None}
+
+            def show_refinement_result(study):
+                result_window=tk.Toplevel(dialogue)
+                result_window.title("CleanroomX | Particle timestep sensitivity")
+                result_window.geometry("925x420")
+                result_window.minsize(750,330)
+                result_body=ttk.Frame(result_window,padding=12)
+                result_body.pack(fill="both",expand=True)
+                ttk.Label(
+                    result_body,
+                    text=f"Screen: {study['screening_status']} | "
+                    f"Baseline/half endpoint Δ {study['endpoint_delta_baseline_to_half_m']:.6g} m | "
+                    f"Half/quarter endpoint Δ {study['endpoint_delta_half_to_quarter_m']:.6g} m",
+                    wraplength=880,font=("TkDefaultFont",10,"bold")).pack(anchor="w")
+                ttk.Label(
+                    result_body,
+                    text="Numerical endpoint screen ONLY on a fixed recorded CFD snapshot. "
+                    "It is not particle physics validation, time-dependent CFD, "
+                    "mesh independence, deposition or cleanroom acceptance. "
+                    "Engineering release: HOLD.",wraplength=880
+                ).pack(anchor="w",pady=8)
+                cols=("factor","cap","actual","steps","end","termination")
+                table2=ttk.Treeview(
+                    result_body,columns=cols,show="headings",height=4)
+                for key,label in (
+                    ("factor","Cap factor"),("cap","Max cap (s)"),
+                    ("actual","Largest actual Δt (s)"),("steps","Segments"),
+                    ("end","Endpoint xyz (m)"),("termination","Termination"),
+                ):
+                    table2.heading(key,text=label)
+                    table2.column(key,width=155)
+                for row in study["runs"]:
+                    table2.insert("","end",values=(
+                        row["step_cap_factor"],f"{row['configured_max_step_s']:.6g}",
+                        f"{row['largest_recorded_elapsed_step_s']:.6g}",
+                        row["integration_segments"],
+                        ", ".join(f"{v:.5g}" for v in row["endpoint_xyz_m"]),
+                        row["termination"],
+                    ))
+                table2.pack(fill="both",expand=True,pady=8)
+                output_status=tk.StringVar(value="No output is written until export is requested.")
+                ttk.Label(result_body,textvariable=output_status).pack(
+                    side="left",fill="x",expand=True)
+                def save_refinement():
+                    destination=filedialog.asksaveasfilename(
+                        parent=result_window,
+                        title="Export noncertifying particle step refinement",
+                        defaultextension=".json",filetypes=(("JSON","*.json"),))
+                    if not destination:
+                        return
+                    try:
+                        saved=export_particle_timestep_refinement(study,destination)
+                    except (OSError,ValueError) as exc:
+                        output_status.set(f"Export rejected: {exc}")
+                    else:
+                        output_status.set(f"Saved: {saved}")
+                ttk.Button(
+                    result_body,text="Export refinement JSON",
+                    command=save_refinement).pack(side="right",padx=6)
+                result_window._cleanroomx_refinement=study
+                return result_window
+
+            def start_refinement():
+                if refine_state["busy"] or not dialogue.winfo_exists():
+                    return False
+                try:
+                    selection=table.selection()
+                    if not selection:
+                        raise ValueError("Select a particle row")
+                    index=int(table.item(selection[0],"values")[0])-1
+                    if index<0 or index>=len(particles):
+                        raise ValueError("Selected particle no longer exists")
+                    sample=copy.deepcopy(particles[index])
+                    tolerance=float(refine_tolerance.get())
+                    if not math.isfinite(tolerance) or not 0<tolerance<=1:
+                        raise ValueError("Endpoint tolerance must be finite and in (0, 1] m")
+                except (ValueError,TypeError,IndexError) as exc:
+                    refine_status.set(f"Refinement rejected: {exc}")
+                    return False
+                refine_state["busy"]=True
+                refine_button.configure(state="disabled")
+                refine_status.set("Replaying three step caps against recorded U; no solver transient.")
+                def work():
+                    try:
+                        result=analyze_particle_timestep_refinement(
+                            report,sample,endpoint_tolerance_m=tolerance)
+                        refine_queue.put(("result",result,index,sample))
+                    except Exception as exc:
+                        refine_queue.put(("error",str(exc),index,sample))
+                threading.Thread(target=work,daemon=True).start()
+                def poll():
+                    refine_state["after"]=None
+                    if not dialogue.winfo_exists():
+                        return
+                    try:
+                        kind,result,index,snapshot=refine_queue.get_nowait()
+                    except queue.Empty:
+                        refine_state["after"]=dialogue.after(100,poll)
+                        return
+                    refine_state["busy"]=False
+                    refine_button.configure(state="normal")
+                    if index>=len(particles) or particles[index]!=snapshot:
+                        refine_status.set("Particle changed during refinement; stale result rejected")
+                    elif kind=="error":
+                        refine_status.set(f"Refinement failed: {result}")
+                    else:
+                        refine_state["last"]=result
+                        refine_status.set(f"Screen: {result['screening_status']} | HOLD")
+                        show_refinement_result(result)
+                refine_state["after"]=dialogue.after(100,poll)
+                return True
+
+            refine_button=ttk.Button(
+                refine_bar,text="Check step refinement",command=start_refinement)
+            refine_button.pack(side="left",padx=8)
             foot=ttk.Frame(content)
             foot.pack(fill="x",pady=(10,0))
             export_status=tk.StringVar(
@@ -886,6 +1024,17 @@ def open_multizone_vtk_window(parent, report, traces):
             dialogue._cleanroomx_particle_diagnostics=summary
             dialogue._cleanroomx_particle_diagnostics_table=table
             dialogue._cleanroomx_export_diagnostics=choose_diagnostics_export
+            dialogue._cleanroomx_start_refinement=start_refinement
+            dialogue._cleanroomx_refinement_state=refine_state
+            dialogue._cleanroomx_refinement_status=refine_status
+            dialogue._cleanroomx_refinement_tolerance=refine_tolerance
+            def cancel_refinement_poll(event):
+                if event.widget is dialogue:
+                    pending=refine_state.get("after")
+                    if pending is not None:
+                        dialogue.after_cancel(pending)
+                        refine_state["after"]=None
+            dialogue.bind("<Destroy>",cancel_refinement_poll,add="+")
             view_status.set(
                 f"Analyzed {count} recorded sample path(s); no inferred concentration or deposition")
             return dialogue

@@ -83,7 +83,7 @@ def audit_project_room_cases(
             try:
                 content, sha = _bounded_log(directory_path / (program + ".log"))
                 evidence[program] = {"sha256": sha, "has_end_marker": bool(
-                    re.search(r"(?m)^\\s*End\\s*$", content)
+                    re.search(r"(?m)^\s*End\s*$", content)
                 )}
                 if not evidence[program]["has_end_marker"]:
                     issues.append(f"{program}: missing terminal End marker")
@@ -91,7 +91,7 @@ def audit_project_room_cases(
                     issues.append(f"{program}: fatal error marker")
                 if program == "checkMesh":
                     evidence[program]["mesh_ok_marker"] = bool(
-                        re.search(r"(?m)^\\s*Mesh OK\\.?(?:\\s*)$", content)
+                        re.search(r"(?m)^\s*Mesh OK\.?(?:\s*)$", content)
                     )
                     if not evidence[program]["mesh_ok_marker"]:
                         issues.append("checkMesh: no Mesh OK marker")

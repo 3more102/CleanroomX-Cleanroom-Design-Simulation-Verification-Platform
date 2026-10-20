@@ -37,6 +37,22 @@ def test_real_tk_vtk_window_opens_and_updates_selected_field_and_glyphs():
         assert window._cleanroomx_field_var.get() == "pressure"
         assert window._cleanroomx_vtk_renderer.GetActors().GetNumberOfItems() >= 3
         assert window._cleanroomx_vtk_renderer.GetActors().GetNumberOfItems() < 5
+        # Rebuild from the exact recorded x-cell layer and reject missing data.
+        window._cleanroomx_room_var.set("r1")
+        window._cleanroomx_plane_var.set("x")
+        window._cleanroomx_plane_position_var.set("1.5")
+        window._cleanroomx_refresh_scene()
+        root.update()
+        assert "1 recorded cells" in window._cleanroomx_view_status.get()
+        old_renderer=window._cleanroomx_vtk_renderer
+        window._cleanroomx_plane_position_var.set("100")
+        window._cleanroomx_refresh_scene()
+        assert window._cleanroomx_vtk_renderer is old_renderer
+        assert "Selection rejected" in window._cleanroomx_view_status.get()
+        window._cleanroomx_plane_var.set("all")
+        window._cleanroomx_plane_position_var.set("")
+        window._cleanroomx_refresh_scene()
+        assert "3 recorded cells" in window._cleanroomx_view_status.get()
     finally:
         if window is not None:
             window.destroy()

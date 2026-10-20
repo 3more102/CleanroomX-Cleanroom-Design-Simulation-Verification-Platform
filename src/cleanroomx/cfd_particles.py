@@ -50,6 +50,23 @@ def _advance(position, velocity, gas, tau, gravity, dt):
     return end, vel
 
 
+def _particle_substep_is_fluid(grid, position, velocity, gas, tau, gravity, dt):
+    """Check the *curved* exact inertial trajectory, not just its chord.
+
+    The occupied lattice is tested in time-ordered substeps. Even if a
+    particle crosses a boundary and returns before the endpoint, it may
+    not be reported as travelling freely through the wall.
+    """
+    previous=position
+    for n in range(1,9):
+        next_position, _=_advance(
+            position,velocity,gas,tau,gravity,dt*n/8)
+        if not grid.connected_segment(previous,next_position):
+            return False
+        previous=next_position
+    return True
+
+
 def trace_screening_particle(
     report, seed_m, *, diameter_um=5.0, particle_density_kg_m3=1000.0,
     air_density_kg_m3=1.2, air_dynamic_viscosity_pa_s=1.81e-5,
@@ -125,15 +142,15 @@ def trace_screening_particle(
                  0.2*min(grid.pitch)/max(speed_bound,1e-9))
         target, new_velocity = _advance(
             position, velocity, gas, tau, buoyant_gravity, dt)
-        if not grid.connected_segment(position, target):
-            # Binary-search the last known in-fluid fraction of the exact
-            # trajectory step; never add an out-of-domain sample.
+        if not _particle_substep_is_fluid(
+                grid,position,velocity,gas,tau,buoyant_gravity,dt):
+            # Find a bounded fluid trajectory prefix, not merely an in-cell
+            # endpoint. Never classify a wall crossing as successful flight.
             low, high = 0.0, dt
             for _ in range(24):
                 mid = (low+high)*0.5
-                candidate, _ = _advance(
-                    position, velocity, gas, tau, buoyant_gravity, mid)
-                if grid.connected_segment(position, candidate):
+                if _particle_substep_is_fluid(
+                        grid,position,velocity,gas,tau,buoyant_gravity,mid):
                     low = mid
                 else:
                     high = mid

@@ -67,7 +67,8 @@
             "height_m": 3,
             "floor_elevation_m": 0,
             "pressure_pa": 0,
-            "classification": "Unclassified reference space (demo)"
+            "classification": "Unclassified reference space (demo)",
+            "analysis_room_name": "Corridor"
           }
         ],
         "devices": [
@@ -77,7 +78,7 @@
             "name": "Process to Preparation — 5 Pa (closed)",
             "room_id": "process",
             "x_m": 6,
-            "y_m": 1.5,
+            "y_m": 2,
             "z_m": 0,
             "width_m": 1,
             "height_m": 2.1,
@@ -344,6 +345,13 @@
               "length_m": 4,
               "width_m": 3,
               "height_m": 3
+            },
+            {
+              "room_id": "corridor",
+              "analysis_room_name": "Corridor",
+              "length_m": 3,
+              "width_m": 3,
+              "height_m": 3
             }
           ]
         }
@@ -357,7 +365,8 @@
         "doors": "All three connecting doors are closed; pressure network models explicitly assumed closed-door leakage, not an open doorway flow field",
         "airflow": "Ceiling-mounted FFUs indicate downward, nominally unidirectional supply over clean zones; low-wall returns indicate intended extraction. Icons do not represent a computed 3-D velocity field.",
         "downflow_velocity_m_s": null,
-        "physical_validation": "Requires actual FFU coverage and flow, returns, mesh, CFD, TAB and airborne particle verification"
+        "physical_validation": "Requires actual FFU coverage and flow, returns, mesh, CFD, TAB and airborne particle verification",
+        "corridor_verification_note": "Reference corridor has synthetic 300 m³/h balanced supply and return and a 1 ACH illustrative requirement solely to keep the GUI and verification room models synchronized. This is not a design recommendation."
       }
     }
   },
@@ -402,6 +411,15 @@
             "supply_airflow_m3_h": 720,
             "min_ach": 20,
             "observed_pressure_pa": 5
+          },
+          {
+            "name": "Corridor",
+            "length_m": 3,
+            "width_m": 3,
+            "height_m": 3,
+            "supply_airflow_m3_h": 300,
+            "min_ach": 1,
+            "observed_pressure_pa": 0
           }
         ],
         "pressure_cascade": [
@@ -442,7 +460,9 @@
           },
           {
             "name": "Corridor",
-            "fixed_pressure_pa": 0
+            "fixed_pressure_pa": 0,
+            "supply_m3_h": 300,
+            "return_m3_h": 300
           }
         ],
         "paths": [

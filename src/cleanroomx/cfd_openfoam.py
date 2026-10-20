@@ -86,10 +86,10 @@ def _layout(nx,ny,nz,config):
         raise ValueError("Missing required inlet/outlet")
     return patches
 
-def _mesh(spec,config):
+def _mesh(spec,config,*,patches_override=None):
     length,width,height=spec["room_m"]
     nx,ny,nz=spec["mesh_cells"]
-    patches=_layout(nx,ny,nz,config)
+    patches=_layout(nx,ny,nz,config) if patches_override is None else patches_override
     vertices=[]
     for k in range(nz+1):
         for j in range(ny+1):
@@ -106,7 +106,7 @@ def _mesh(spec,config):
     patchparts=[]
     for patch,faces in patches.items():
         rendered="\n".join("            ("+" ".join(map(str,face))+")" for face in faces)
-        patchparts.append(f"    {patch}\n    {{\n        type {'wall' if patch=='walls' else 'patch'};"
+        patchparts.append(f"    {patch}\n    {{\n        type {'patch' if patch in ('inlet','outlet') else 'wall'};"
                           f"\n        faces\n        (\n{rendered}\n        );\n    }}")
     body=("convertToMeters 1;\nvertices\n(\n"+"\n".join(vertices)+"\n);\n"
           "blocks\n(\n"+"\n".join(blocks)+"\n);\nedges ();\n"
@@ -114,6 +114,8 @@ def _mesh(spec,config):
     inlet_area=len(patches["inlet"])*length/nx*width/ny
     outlet_area=(len(patches["outlet"])*length/nx*width/ny if config==3
                  else len(patches["outlet"])*width/ny*height/nz)
+    if patches_override is not None and not patches["outlet"]:
+        raise ValueError("Missing project-room outlet patch")
     meta={"inlet_face_count":len(patches["inlet"]),
           "outlet_face_count":len(patches["outlet"]),
           "inlet_area_m2":inlet_area,"outlet_area_m2":outlet_area,

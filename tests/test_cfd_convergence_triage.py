@@ -125,3 +125,20 @@ def test_exclusive_json_export_preserves_numerical_noncertification(tmp_path):
     forged["source_run_receipt_sha256"]="broken"
     with pytest.raises(ValueError,match="SHA-256"):
         export_convergence_triage(forged,tmp_path/"nohash.json")
+    forged=copy.deepcopy(result)
+    forged["numerical_screening"]="bounded_snapshot_drift_under_operator_limits"
+    with pytest.raises(ValueError,match="contradicts"):
+        export_convergence_triage(forged,tmp_path/"fakeconvergence.json")
+    forged=copy.deepcopy(result)
+    forged["reviewed_changes"][0]["within_explicit_operator_limits"][
+        "max_absolute_door_delta_change_pa"]=True
+    with pytest.raises(ValueError,match="contradict"):
+        export_convergence_triage(forged,tmp_path/"fakeflags.json")
+    forged=copy.deepcopy(result)
+    forged["observed_breaches"]=[]
+    with pytest.raises(ValueError,match="breach"):
+        export_convergence_triage(forged,tmp_path/"fakebreaches.json")
+    forged=copy.deepcopy(result)
+    forged["operator_tolerances"]["max_absolute_door_delta_change_pa"]=float("nan")
+    with pytest.raises(ValueError,match="nonnegative"):
+        export_convergence_triage(forged,tmp_path/"nonfinite.json")

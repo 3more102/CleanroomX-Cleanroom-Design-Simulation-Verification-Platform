@@ -186,3 +186,58 @@ standards compliance without subsequent engineering checks.
 
 The generated cases cannot reproduce the nominal 5 Pa inter-room pressure
 differences: there is no fluid coupling through their closed doors.
+
+
+## Explicitly open-door connected 3D OpenFOAM scenario (separate from 5 Pa network)
+
+A new `multizone-generate` CLI command creates a **single face-connected**
+OpenFOAM Foundation v10 mesh covering the Process, Preparation, Ante, and
+reference Corridor volumes. It is a **hypothetical all-doors-open** scenario,
+NOT the existing closed-door 5 Pa leakage-network arrangement.
+
+```powershell
+python -m cleanroomx.cfd_pipeline_cli multizone-generate examples/gui_demo.cleanroomx.json cfd_connected_open_doors --door-mode open --kinematic-viscosity-m2-s 1.5e-5
+```
+
+This uses explicit default voxel dimensions of **0.5 × 0.1 × 0.3 m**
+(X × Y × Z). Each shared wall is represented as a one-voxel-thick
+obstruction on the door-owner side except for the 1 m × 2.1 m door.
+The opening retains fluid blocks on both sides of the shared boundary;
+their coincident faces are internal, allowing solver coupling rather than
+a pair of unrelated wall patches. Conformity, door-aperture alignment,
+unique occupancy, open face counts, and a single face-connected fluid
+component are checked in Python before writing any case files.
+
+The model creates ceiling supply and low-wall return boundary patches for
+each supplied room using the saved spatial design. Individual supply speeds
+are obtained from that room's configured flow divided by the *resolved*
+mesh-patch area. The reference corridor has no synthetic ceiling FFUs;
+airflow enters it through the airlock doorway. The model uses a
+**zero kinematic pressure reference on each configured return** rather
+than attempting to impose 15/10/5/0 Pa target pressures. The actual
+pressure differences would depend on the CFD solve, geometry, leakage
+and all imposed boundary conditions. Convergence and actual flow patterns
+have **not been established** merely because inputs were generated.
+
+To execute externally, with OpenFOAM Foundation v10 available in
+Linux/WSL and the required executables on PATH:
+
+```powershell
+python -m cleanroomx.cfd_pipeline_cli multizone-run cfd_connected_open_doors --timeout-seconds 3600
+```
+
+The runner verifies all generated solver input hashes, executes
+`blockMesh`, `checkMesh`, then `simpleFoam` in the generated case
+folder and records log hashes. Execution must be followed by independent
+mesh-quality review, residual and flux accounting, mesh sensitivity and
+physical validity checks; a zero exit status alone is never a validation.
+
+**Scope limitations:** A voxel-thick wall is not a construction drawing;
+door head/jambs are stair-step idealizations; no real fan curves, FFU
+pressure drops, door undercuts, leakage-gap conductance, turbulence
+model validation, transient opening event or commissioning measurements
+are imported. Consequently, the connected open-door simulation cannot
+be used to verify the 5 Pa **closed-door** pressure cascade. This
+representation is appropriate for functional CFD workflow development,
+not cleanroom certification or a final HVAC design.
+

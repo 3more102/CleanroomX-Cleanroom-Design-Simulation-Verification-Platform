@@ -11,6 +11,7 @@ import math
 
 from .cfd_streamlines import (
     ComputedVelocityGrid, SOURCE_SCHEMA, TRACE_SCHEMA, trace_computed_streamline,
+    export_computed_streamlines,
 )
 
 MAX_3D_CELLS = 100_000
@@ -531,6 +532,26 @@ def open_multizone_vtk_window(parent, report, traces):
             command=lambda: (traces.clear(),refresh_scene())
         ).pack(side="left",padx=5)
 
+        def export_paths(destination):
+            try:
+                saved=export_computed_streamlines(traces,destination)
+            except (OSError, ValueError) as exc:
+                view_status.set(f"Export rejected: {exc}")
+                return False
+            view_status.set(f"Saved {len(traces)} provenance-tagged 3D traces: {saved}")
+            return True
+
+        def choose_export():
+            from tkinter import filedialog
+            destination=filedialog.asksaveasfilename(
+                parent=window,title="Export recorded 3D steady streamlines",
+                defaultextension=".json",filetypes=(("JSON","*.json"),))
+            if destination:
+                export_paths(destination)
+
+        ttk.Button(selection,text="Export 3D traces",command=choose_export).pack(
+            side="left",padx=5)
+
         def seed_display_point(x,y):
             if len(traces)>=MAX_3D_TRACES:
                 view_status.set("Maximum 20 traces; clear 3D traces before adding more")
@@ -570,6 +591,7 @@ def open_multizone_vtk_window(parent, report, traces):
         window._cleanroomx_click_seed_var=click_seed_var
         window._cleanroomx_traces=traces
         window._cleanroomx_seed_display_point=seed_display_point
+        window._cleanroomx_export_traces_to_path=export_paths
         window._cleanroomx_refresh_scene=refresh_scene
 
         def pump_native_events():

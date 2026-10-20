@@ -11,7 +11,7 @@ from tkinter import filedialog, messagebox, ttk
 
 from .cfd_multizone import run_multizone_open_door_case, verify_multizone_inputs
 from .cfd_multizone_results import analyze_multizone_case, export_multizone_report
-from .cfd_streamlines import trace_computed_streamline
+from .cfd_streamlines import trace_computed_streamline, export_computed_streamlines
 
 
 def slice_samples(report: dict, axis: str, position_m: float, room: str = "all") -> list:
@@ -122,6 +122,7 @@ class MultizoneCFDWindow(tk.Toplevel):
         traces.pack(fill="x",pady=(0,5))
         ttk.Label(traces,textvariable=self.trace_status,wraplength=750).pack(side="left",fill="x",expand=True)
         ttk.Button(traces,text="Clear traces",command=self.clear_traces).pack(side="right",padx=4)
+        ttk.Button(traces,text="Export 3D traces",command=self.export_traces).pack(side="right",padx=4)
         self.section_canvas=tk.Canvas(fields,background="#101b2b",highlightthickness=0)
         self.section_canvas.pack(fill="both",expand=True)
         self.section_canvas.bind("<Configure>",lambda e:self.draw_section())
@@ -313,6 +314,22 @@ class MultizoneCFDWindow(tk.Toplevel):
             c.create_text(12,y,anchor="w",fill="#d9e7f7",text=r["name"])
             c.create_rectangle(min(center,end),y-9,max(center+1,end),y+9,fill="#22c5d6",outline="",tags="computed-pressure")
             c.create_text(width-20,y,anchor="e",fill="#d9e7f7",text=f"{value:.6g} Pa")
+
+    def export_traces(self):
+        if not self.trace_paths or self.running:
+            self.trace_status.set("No recorded traces to export.")
+            return
+        destination=filedialog.asksaveasfilename(
+            parent=self,title="Export computed 3D steady streamlines",
+            defaultextension=".json",filetypes=(("JSON","*.json"),))
+        if not destination:
+            return
+        try:
+            path=export_computed_streamlines(self.trace_paths,destination)
+        except (OSError, ValueError) as exc:
+            messagebox.showerror("Streamline export failed",str(exc),parent=self)
+            return
+        self.trace_status.set(f"Provenance-tagged 3D streamline data exported: {path}")
 
     def clear_traces(self):
         self.trace_paths.clear()

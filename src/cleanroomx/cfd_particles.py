@@ -192,6 +192,14 @@ def trace_screening_particle(
         "air_dynamic_viscosity_pa_s": viscosity,
         "cunningham_slip_correction": cc,
         "particle_relaxation_s": tau,
+        # Exact replay requires recording *all* integration controls. Prior
+        # track exports omitted the initial velocity/gravity/max-steps inputs.
+        # Old v1 tracks remain viewable, but cannot support reproducible
+        # timestep-refinement conclusions without these optional fields.
+        "initial_particle_velocity_m_s": list(particle_points[0]["particle_velocity_m_s"]),
+        "gravity_m_s2": list(gravity),
+        "max_steps": max_steps,
+        "slip_mean_free_path_m": 66e-9,
         "max_time_s": horizon, "max_step_s": dt_cap,
         "max_slip_reynolds": max_reynolds,
         "stokes_regime_warning": max_reynolds >= 1.0,

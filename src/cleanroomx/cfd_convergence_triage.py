@@ -198,6 +198,49 @@ def export_convergence_triage(triage, destination):
     for name in ("source_manifest_sha256","source_run_receipt_sha256"):
         if type(triage.get(name)) is not str or not _SHA256.fullmatch(triage[name]):
             raise ValueError("Source SHA-256 provenance missing or invalid")
+    limits=triage.get("operator_tolerances")
+    if not isinstance(limits,dict) or set(limits)!=set(k for k,_,_ in _METRICS):
+        raise ValueError("Recorded operator thresholds are missing")
+    checked={key:_finite_nonnegative(value,key) for key,value in limits.items()}
+    requested=triage.get("consecutive_changes_requested")
+    available=triage.get("consecutive_changes_available")
+    if (type(requested) is not int or not 2<=requested<=11 or
+        type(available) is not int or not 1<=available<=11 or
+        len(triage["reviewed_changes"])!=min(requested,available) or
+        type(triage.get("latest_solver_reported_convergence")) is not bool or
+        triage.get("latest_iteration")!=triage["reviewed_changes"][-1].get("iteration")):
+        raise ValueError("Recorded snapshot windows or solver convergence identity are inconsistent")
+    reconstructed=[]
+    last_number=-math.inf
+    for row in triage["reviewed_changes"]:
+        if (not isinstance(row,dict) or
+            set(row.get("observed",{}))!=set(checked) or
+            not isinstance(row.get("within_explicit_operator_limits"),dict)):
+            raise ValueError("Missing triage observation or per-metric flag")
+        values={k:_finite_nonnegative(v,k) for k,v in row["observed"].items()}
+        verdict={k:values[k]<=checked[k] for k in checked}
+        if row["within_explicit_operator_limits"]!=verdict:
+            raise ValueError("Recorded drift flags contradict source values or operator limits")
+        current=_snapshot_iteration({"iteration":row.get("iteration")})
+        previous=_snapshot_iteration({"iteration":row.get("previous_iteration")})
+        if current<=previous or current<=last_number:
+            raise ValueError("Triage change identifiers are not strictly ordered")
+        last_number=current
+        reconstructed.extend({
+            "previous_iteration":row["previous_iteration"],
+            "iteration":row["iteration"],"metric":k,"observed":v,
+            "limit":checked[k],
+        } for k,v in values.items() if v>checked[k])
+    if triage.get("observed_breaches")!=reconstructed:
+        raise ValueError("Recorded drift-breach inventory was altered")
+    eligible=not reconstructed
+    expected=(
+        "insufficient_saved_iterations" if available<requested
+        else "solver_not_converged" if not triage["latest_solver_reported_convergence"]
+        else "observed_drift_exceeds_operator_limits" if not eligible
+        else "bounded_snapshot_drift_under_operator_limits")
+    if triage.get("numerical_screening")!=expected:
+        raise ValueError("Numerical screening status contradicts recorded drift and convergence")
     source = json.dumps(triage,indent=2,allow_nan=False)+"\n"
     output=Path(destination)
     with output.open("x",encoding="utf-8") as file:

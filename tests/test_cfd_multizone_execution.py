@@ -473,6 +473,14 @@ def test_real_openfoam_drives_one_way_particle_screening(computed_report):
                report["provenance"]["run_receipt_sha256"]
                for p in chosen["new_tracks"])
     assert chosen["noncertifying_diagnostics"]["number_of_screening_tracks"]==2
+    from cleanroomx.cfd_particle_refinement import analyze_particle_timestep_refinement
+    numerical=analyze_particle_timestep_refinement(
+        report,track,endpoint_tolerance_m=.001)
+    assert numerical["source_iteration"]==report["time_name"]
+    assert numerical["source_run_receipt_sha256"]==report["provenance"]["run_receipt_sha256"]
+    assert numerical["engineering_release"]=="HOLD"
+    assert len(numerical["runs"])==3
+    assert numerical["not_physical_convergence"]
 
 
 def test_true_openfoam_fields_produce_noncertifying_design_pressure_review(computed_report):

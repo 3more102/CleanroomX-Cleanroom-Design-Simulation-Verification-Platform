@@ -342,7 +342,9 @@ def open_multizone_vtk_window(parent, report, traces):
     room_var = tk.StringVar(value="all")
     plane_var = tk.StringVar(value="all")
     plane_position_var = tk.StringVar(value="")
-    view_status = tk.StringVar(value="Displaying only recorded solver cells; traces are 3D.")
+    initial_convergence=("solver-reported convergence" if report.get("solver_reported_convergence")
+                         else "NOT CONVERGED - engineering review required")
+    view_status = tk.StringVar(value=f"Recorded cells | {initial_convergence}")
 
     mode = "native"
     widget = None
@@ -442,7 +444,9 @@ def open_multizone_vtk_window(parent, report, traces):
             count=select_recorded_cells(
                 report,room_id=room_var.get(),plane_axis=plane_var.get(),
                 plane_position_m=pos)
-            view_status.set(f"{len(count)} recorded cells (unconverged if solver says so)")
+            convergence=("solver-reported convergence" if report.get("solver_reported_convergence")
+                         else "NOT CONVERGED - engineering review required")
+            view_status.set(f"{len(count)} recorded cells | {convergence}")
 
         ttk.Button(selection,text="Apply room/plane",command=refresh_scene).pack(
             side="left",padx=8)

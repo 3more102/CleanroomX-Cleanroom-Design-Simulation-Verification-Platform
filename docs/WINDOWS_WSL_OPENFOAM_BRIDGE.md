@@ -1,8 +1,9 @@
 # Windows-to-WSL execution of a connected CleanroomX CFD case
 
 This is an **opt-in execution bridge**, not an installer or replacement for
-the native GUI solver button. The Windows GUI generates input and later imports
-recorded results; OpenFOAM Foundation v10 executes inside Linux/WSL.
+the existing native Linux solver workflow. The Windows desktop CFD review window
+now includes **Probe WSL** and **Run case in WSL** controls, alongside its original
+**Run OpenFOAM 10** button. OpenFOAM Foundation v10 executes inside Linux/WSL.
 
 ## Requirements and preflight
 
@@ -52,12 +53,19 @@ source interpolation). It invokes the existing verified Foundation v10 wrapper
 to run the existing multizone-run CLI. Input manifest checks, stage logs,
 return codes and output receipts still belong to the existing CFD runner.
 
-The Windows case directory retains real OpenFOAM output, logs and
-run-receipt.json. Back in the desktop GUI, open Run / Review Multiroom CFD
-and **Import recorded fields** using an explicit actual air density and
-modeled reference room ID; review selected iteration, residuals, pressure,
-velocity, room balances and engineering HOLD reasons. The GUI's own Run
-button still requires locally available OpenFOAM; use this launcher for WSL.
+The Windows case directory retains actual OpenFOAM output, stage logs and
+run-receipt.json. You can instead open **Analyze > Run / Review Multiroom CFD**
+in the desktop application, select the existing case folder, set the selected
+WSL distribution (default: Ubuntu), choose **Probe WSL**, and then choose
+**Run case in WSL**. The Solver logs tab tails the actual shared case logs.
+Both buttons are intentionally disabled on non-Windows platforms. The original
+**Run OpenFOAM 10** button still requires locally available OpenFOAM.
+
+After execution, choose **Import computed fields** using a user-supplied actual
+air density and a modeled reference room ID. Review the recorded iteration,
+residuals, pressure, velocity, room balances and engineering HOLD reasons.
+A successfully completed WSL solver run still requires a successful imported
+report to establish the numerical values.
 
 ## Failure behavior, evidence and limits
 
@@ -79,5 +87,5 @@ button still requires locally available OpenFOAM; use this launcher for WSL.
 Unit contract tests (these are not solver-execution evidence):
 
 ```bash
-python -m pytest -q tests/test_cfd_wsl_bridge.py
+python -m pytest -q tests/test_cfd_wsl_bridge.py tests/test_cfd_wsl_gui.py
 ```

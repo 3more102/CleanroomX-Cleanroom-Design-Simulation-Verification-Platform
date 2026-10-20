@@ -89,7 +89,7 @@ class MultizoneCFDWindow(tk.Toplevel):
         logs=ttk.Frame(self.tabs,padding=8)
         diagnostics=ttk.Frame(self.tabs,padding=8)
         engineering=ttk.Frame(self.tabs,padding=10)
-        for tab,label in ((summary,"Room comparison"),(engineering,"Engineering review"),(fields,"Computed sections"),(residuals,"Residual histories"),(logs,"Solver logs"),(diagnostics,"Diagnostics / provenance")):
+        for tab,label in ((summary,"Room comparison"),(fields,"Computed sections"),(residuals,"Residual histories"),(logs,"Solver logs"),(diagnostics,"Diagnostics / provenance"),(engineering,"Engineering review")):
             self.tabs.add(tab,text=label)
         columns=("name","target","pressure","speed","supply","returns","imbalance","balance_pct","upward")
         self.room_table=ttk.Treeview(summary,columns=columns,show="headings",height=5)

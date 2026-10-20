@@ -11,7 +11,7 @@ import pytest
 
 from cleanroomx.cfd_particles import (
     PARTICLE_SCHEMA, cunningham_slip, trace_screening_particle,
-    export_screening_particles,
+    export_screening_particles, particle_positions_at_elapsed,
 )
 from cleanroomx.cfd_streamlines import ComputedVelocityGrid
 
@@ -153,3 +153,21 @@ def test_curved_inertial_trajectory_cannot_exit_cell_then_reenter_unseen():
     assert len(path["points"])>=1
     assert all(ComputedVelocityGrid(report).cell_at(p["xyz_m"])
                is not None for p in path["points"])
+
+
+def test_playback_uses_only_recorded_particle_vertices_and_no_fabricated_positions():
+    track=trace_screening_particle(
+        _report(),[.5,.5,.5],max_time_s=.2,gravity_m_s2=(0,0,0))
+    samples=track["points"]
+    assert len(samples)>2
+    t0=samples[1]["elapsed_particle_s"]
+    t1=samples[2]["elapsed_particle_s"]
+    between=(t0+t1)/2
+    position=particle_positions_at_elapsed([track],between)
+    assert len(position)==1
+    assert position[0]["xyz_m"]==samples[1]["xyz_m"]
+    assert position[0]["sample_time_s"]==t0
+    assert position[0]["xyz_m"]!=samples[2]["xyz_m"]
+    assert particle_positions_at_elapsed([],0)==[]
+    with pytest.raises(ValueError,match="Playback time"):
+        particle_positions_at_elapsed([track],-1)

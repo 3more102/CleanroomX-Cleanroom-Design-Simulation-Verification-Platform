@@ -9,6 +9,10 @@ from __future__ import annotations
 
 import math
 
+from .cfd_particles import (
+    PARTICLE_SCHEMA, MAX_PARTICLES, trace_screening_particle,
+    export_screening_particles,
+)
 from .cfd_streamlines import (
     ComputedVelocityGrid, SOURCE_SCHEMA, TRACE_SCHEMA, trace_computed_streamline,
     export_computed_streamlines,
@@ -100,6 +104,83 @@ def seed_streamline_from_displayed_point(
     return trace_computed_streamline(
         report,samples[point_id]["center_m"],
         max_integration_s=max_integration_s)
+
+
+def seed_particle_from_displayed_point(
+    report, particles, point_id, *, room_id="all", plane_axis="all",
+    plane_position_m=None, diameter_um=5.0, particle_density_kg_m3=1000.0,
+    max_time_s=2.0,
+):
+    """Particle *screening* from an existing displayed fluid cell, not the air line."""
+    if type(point_id) is not int:
+        raise ValueError("Recorded particle seed ID must be an integer")
+    if not isinstance(particles,list) or len(particles)>=MAX_PARTICLES:
+        raise ValueError("At most 20 particle screening paths may be displayed")
+    if particles:
+        computed_particle_polydata(report,particles)
+    samples=select_recorded_cells(report,room_id=room_id,
+        plane_axis=plane_axis,plane_position_m=plane_position_m)
+    if not 0<=point_id<len(samples):
+        raise ValueError("Particle seed must be a visible recorded CFD fluid cell")
+    return trace_screening_particle(report,samples[point_id]["center_m"],
+        diameter_um=diameter_um,particle_density_kg_m3=particle_density_kg_m3,
+        max_time_s=max_time_s)
+
+
+def computed_particle_polydata(report, particles):
+    """VTK line geometry from physically parameterized frozen-field screening.
+
+    Distinct from gold steady streamlines: lime paths mark particle screening.
+    No new fluid velocity, deposition, or transient solver state is created.
+    """
+    vtk=_vtk()
+    if type(particles) is not list or len(particles)>MAX_PARTICLES:
+        raise ValueError("At most 20 particle screening tracks may be visualized")
+    grid=ComputedVelocityGrid(report)
+    source=report.get("provenance",{})
+    points=vtk.vtkPoints()
+    points.SetDataTypeToDouble()
+    lines=vtk.vtkCellArray()
+    elapsed=vtk.vtkDoubleArray()
+    elapsed.SetName("Particle frozen-field elapsed time (s)")
+    for path in particles:
+        if (path.get("schema")!=PARTICLE_SCHEMA or
+            path.get("source_iteration")!=report.get("time_name") or
+            path.get("source_manifest_sha256")!=source.get("manifest_sha256") or
+            path.get("source_run_receipt_sha256")!=source.get("run_receipt_sha256")):
+            raise ValueError("Particle screening path does not match recorded CFD run")
+        values=path.get("points")
+        if not isinstance(values,list) or not 1<=len(values)<=10002:
+            raise ValueError("Invalid particle screening trajectory")
+        ids=[]
+        previous=None
+        tprev=-1.0
+        for item in values:
+            xyz=_finite_triplet(item["xyz_m"],"particle position")
+            t=item["elapsed_particle_s"]
+            if type(t) not in (float,int) or not math.isfinite(t) or t<tprev:
+                raise ValueError("Particle elapsed time must be monotone")
+            gas=grid.cell_at(xyz)
+            if gas is None or (previous is not None and
+                              not grid.connected_segment(previous,xyz)):
+                raise ValueError("Particle track crosses an uncomputed or solid cell")
+            recorded=_finite_triplet(item["recorded_gas_velocity_m_s"],"recorded gas U")
+            if any(not math.isclose(recorded[i],gas[0][i],rel_tol=1e-8,abs_tol=1e-8)
+                   for i in range(3)):
+                raise ValueError("Particle gas U differs from recorded CFD cell")
+            ids.append(points.InsertNextPoint(*xyz))
+            elapsed.InsertNextValue(float(t))
+            previous=xyz
+            tprev=float(t)
+        if len(ids)>1:
+            lines.InsertNextCell(len(ids))
+            for idx in ids:
+                lines.InsertCellPoint(idx)
+    geometry=vtk.vtkPolyData()
+    geometry.SetPoints(points)
+    geometry.SetLines(lines)
+    geometry.GetPointData().AddArray(elapsed)
+    return geometry
 
 
 def _recorded_cell_actor(renderer):
@@ -283,7 +364,8 @@ def sampled_velocity_glyph_actor(report, *, max_arrows=250,
 
 
 def build_multizone_vtk_renderer(report, traces, *, field="speed", vectors=True,
-                                 room_id="all", plane_axis="all", plane_position_m=None):
+                                 room_id="all", plane_axis="all", plane_position_m=None,
+                                 particles=None):
     """VTK renderer with solver-derived field samples, line paths and room outlines.
 
     No OpenGL context is opened here, so testing does not require a display.
@@ -292,6 +374,7 @@ def build_multizone_vtk_renderer(report, traces, *, field="speed", vectors=True,
     data = computed_field_polydata(report,room_id=room_id,plane_axis=plane_axis,
                                    plane_position_m=plane_position_m)
     trajectories = computed_trace_polydata(report, traces)
+    particles_geometry=computed_particle_polydata(report,particles or [])
     if field not in ("speed", "pressure"):
         raise ValueError("Select speed or pressure for the 3D field")
     name = ("Computed speed (m/s)" if field == "speed"
@@ -329,6 +412,14 @@ def build_multizone_vtk_renderer(report, traces, *, field="speed", vectors=True,
     paths_actor.GetProperty().SetColor(1.0, .80, .25)
     paths_actor.GetProperty().SetLineWidth(3.0)
     renderer.AddActor(paths_actor)
+    particle_mapper=vtk.vtkPolyDataMapper()
+    particle_mapper.SetInputData(particles_geometry)
+    particle_mapper.ScalarVisibilityOff()
+    particle_actor=vtk.vtkActor()
+    particle_actor.SetMapper(particle_mapper)
+    particle_actor.GetProperty().SetColor(.30,1.0,.42)
+    particle_actor.GetProperty().SetLineWidth(3.0)
+    renderer.AddActor(particle_actor)
     if type(vectors) is not bool:
         raise ValueError("vectors must be a boolean")
     if vectors:
@@ -374,7 +465,7 @@ def build_multizone_vtk_renderer(report, traces, *, field="speed", vectors=True,
         f"Recorded {data.GetNumberOfPoints()} cells | iteration {report.get('time_name')} | "
         f"room {room_id} | plane {plane_axis}"
         + ("" if plane_axis=="all" else f"={plane_position_m:g} m")
-        + " | Steady traces, NOT particles")
+        + " | GOLD=steady U | GREEN=one-way particle screening (not certified)")
     annotation.SetDisplayPosition(15, 16)
     annotation.GetTextProperty().SetColor(.98,.98,.98)
     annotation.GetTextProperty().SetFontSize(15)

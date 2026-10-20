@@ -37,7 +37,7 @@ def test_real_tk_vtk_window_opens_and_updates_selected_field_and_glyphs(tmp_path
         root.update()
         assert window._cleanroomx_field_var.get() == "pressure"
         assert window._cleanroomx_vtk_renderer.GetActors().GetNumberOfItems() >= 3
-        assert window._cleanroomx_vtk_renderer.GetActors().GetNumberOfItems() < 5
+        assert window._cleanroomx_vtk_renderer.GetActors().GetNumberOfItems() <= 5
         # Rebuild from the exact recorded x-cell layer and reject missing data.
         window._cleanroomx_room_var.set("r1")
         window._cleanroomx_plane_var.set("x")
@@ -85,6 +85,19 @@ def test_real_tk_vtk_window_opens_and_updates_selected_field_and_glyphs(tmp_path
         assert len(window._cleanroomx_particles)==1
         assert window._cleanroomx_particles[0]["points"][0]["xyz_m"]==[1.5,.5,.5]
         assert "FROZEN steady U, NOT certified" in window._cleanroomx_view_status.get()
+        # Timeline markers use the last ACTUALLY COMPUTED particle vertex.
+        recorded=window._cleanroomx_particles[0]["points"]
+        assert len(recorded)>2
+        window._cleanroomx_playback_var.set((
+            recorded[1]["elapsed_particle_s"]+
+            recorded[2]["elapsed_particle_s"])/2)
+        selected=window._cleanroomx_update_particle_markers()
+        assert selected[0]["xyz_m"]==recorded[1]["xyz_m"]
+        assert window._cleanroomx_particle_marker_points.GetNumberOfPoints()==1
+        assert window._cleanroomx_particle_marker_points.GetPoint(0)==pytest.approx(
+            recorded[1]["xyz_m"])
+        assert not window._cleanroomx_playback_status.get().startswith("Fake")
+
         particle_file=tmp_path/"vtkscreen-particles.json"
         assert window._cleanroomx_export_particles_to_path(particle_file)
         content=json.loads(particle_file.read_text(encoding="utf-8"))

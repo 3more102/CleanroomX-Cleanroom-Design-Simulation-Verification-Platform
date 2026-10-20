@@ -11,7 +11,7 @@ import math
 
 from .cfd_particles import (
     PARTICLE_SCHEMA, MAX_PARTICLES, trace_screening_particle,
-    export_screening_particles,
+    export_screening_particles, particle_positions_at_elapsed,
 )
 from .cfd_streamlines import (
     ComputedVelocityGrid, SOURCE_SCHEMA, TRACE_SCHEMA, trace_computed_streamline,
@@ -502,6 +502,9 @@ def open_multizone_vtk_window(parent, report, traces):
     particle_diameter_var = tk.StringVar(value="5")
     particle_density_var = tk.StringVar(value="1000")
     particle_time_var = tk.StringVar(value="2")
+    playback_var = tk.DoubleVar(value=0.)
+    playback_status = tk.StringVar(value="Particle playback shows recorded sample vertices only")
+    playback_state = {"playing":False, "after_id":None}
     particles = []
     displayed_selection = {"room_id":"all","plane_axis":"all","plane_position_m":None}
     room_var = tk.StringVar(value="all")
@@ -566,6 +569,15 @@ def open_multizone_vtk_window(parent, report, traces):
         ttk.Label(particle_controls,
             text="Gold: air streamlines | Green: inertial particle screening").pack(
             side="right",padx=3)
+        timeline_controls=ttk.Frame(window,padding=(8,0,8,8))
+        timeline_controls.pack(fill="x")
+        ttk.Label(timeline_controls,text="Particle elapsed time (s):").pack(side="left")
+        slider=tk.Scale(
+            timeline_controls,from_=0,to=2,resolution=.01,orient="horizontal",
+            length=300,showvalue=True,variable=playback_var)
+        slider.pack(side="left",padx=5)
+        ttk.Label(timeline_controls,textvariable=playback_status).pack(
+            side="left",padx=10)
         ttk.Label(window,textvariable=view_status).pack(fill="x",padx=8)
         holder=ttk.Frame(window)
         holder.pack(fill="both",expand=True)
@@ -587,8 +599,8 @@ def open_multizone_vtk_window(parent, report, traces):
         else:
             mode="native"
             holder.destroy()
-            window.geometry("1090x255")
-            window.minsize(760,235)
+            window.geometry("1090x310")
+            window.minsize(760,280)
             ttk.Label(window,padding=8,
                 text="3D scene opens in a separate native VTK window. Controls remain here.").pack(fill="x")
             render_window.SetSize(1100,760)
@@ -603,6 +615,84 @@ def open_multizone_vtk_window(parent, report, traces):
             interactor.Initialize()
         render_window.Render()
         window._cleanroomx_vtk_renderer=renderer
+
+        # The animated sphere markers occupy positions from recorded particle
+        # integration samples only. Path geometry stays visible separately.
+        marker_points=vtk.vtkPoints()
+        marker_points.SetDataTypeToDouble()
+        marker_data=vtk.vtkPolyData()
+        marker_data.SetPoints(marker_points)
+        marker_sphere=vtk.vtkSphereSource()
+        marker_sphere.SetRadius(0.15*min(report["voxel_pitch_m"]))
+        marker_sphere.SetThetaResolution(10)
+        marker_sphere.SetPhiResolution(10)
+        marker_glyph=vtk.vtkGlyph3D()
+        marker_glyph.SetSourceConnection(marker_sphere.GetOutputPort())
+        marker_glyph.SetInputData(marker_data)
+        marker_glyph.ScalingOff()
+        marker_mapper=vtk.vtkPolyDataMapper()
+        marker_mapper.SetInputConnection(marker_glyph.GetOutputPort())
+        marker_mapper.ScalarVisibilityOff()
+        marker_actor=vtk.vtkActor()
+        marker_actor.SetMapper(marker_mapper)
+        marker_actor.GetProperty().SetColor(.78,1.0,.26)
+        renderer.AddActor(marker_actor)
+
+        def update_particle_markers(_value=None):
+            # No artificial interpolation: hold the latest actual integration
+            # vertex until another recorded vertex's elapsed time is reached.
+            found=particle_positions_at_elapsed(particles,playback_var.get())
+            marker_points.Reset()
+            for entry in found:
+                marker_points.InsertNextPoint(*entry["xyz_m"])
+            marker_points.Modified()
+            marker_data.Modified()
+            playback_status.set(
+                f"{len(found)} visible simulated particles | "
+                "frozen steady CFD U, not OpenFOAM transient")
+            render_window.Render()
+            return found
+
+        def pause_particle_playback():
+            playback_state["playing"]=False
+            after=playback_state.get("after_id")
+            if after is not None:
+                try:
+                    window.after_cancel(after)
+                except tk.TclError:
+                    pass
+                playback_state["after_id"]=None
+
+        def advance_particle_playback():
+            if not playback_state["playing"] or not window.winfo_exists():
+                return
+            current=playback_var.get()
+            maximum=float(slider.cget("to"))
+            if current>=maximum:
+                pause_particle_playback()
+                return
+            playback_var.set(min(maximum,round(current+.05,3)))
+            update_particle_markers()
+            playback_state["after_id"]=window.after(80,advance_particle_playback)
+
+        def play_particle_screening():
+            if not particles:
+                playback_status.set("Inject a particle screening path first")
+                return False
+            pause_particle_playback()
+            if playback_var.get()>=float(slider.cget("to")):
+                playback_var.set(0.)
+            playback_state["playing"]=True
+            advance_particle_playback()
+            return True
+
+        slider.configure(command=update_particle_markers)
+        ttk.Button(
+            timeline_controls,text="Play samples",command=play_particle_screening
+        ).pack(side="left",padx=5)
+        ttk.Button(
+            timeline_controls,text="Pause",command=pause_particle_playback
+        ).pack(side="left",padx=5)
 
         def refresh_scene(*_ignored):
             """Rebuild from recorded arrays, retaining the operator's camera."""
@@ -621,6 +711,7 @@ def open_multizone_vtk_window(parent, report, traces):
                 return
             render_window.RemoveRenderer(old)
             render_window.AddRenderer(new)
+            new.AddActor(marker_actor)
             new.SetActiveCamera(camera)
             render_window.Render()
             window._cleanroomx_vtk_renderer=new
@@ -707,6 +798,14 @@ def open_multizone_vtk_window(parent, report, traces):
                         particle_density_kg_m3=float(particle_density_var.get()),
                         max_time_s=float(particle_time_var.get()))
                     particles.append(particle)
+                    # Bound the timeline to the actual recorded integration
+                    # horizon, not the requested duration if it hit a wall.
+                    actual_horizon=max(
+                        track["points"][-1]["elapsed_particle_s"]
+                        for track in particles)
+                    slider.configure(to=max(actual_horizon,.01))
+                    playback_var.set(0.)
+                    update_particle_markers()
                 else:
                     trace=seed_streamline_from_displayed_point(
                         report,traces,point_id,**displayed_selection)
@@ -750,6 +849,12 @@ def open_multizone_vtk_window(parent, report, traces):
         window._cleanroomx_particle_density_var=particle_density_var
         window._cleanroomx_particle_time_var=particle_time_var
         window._cleanroomx_particles=particles
+        window._cleanroomx_playback_var=playback_var
+        window._cleanroomx_playback_status=playback_status
+        window._cleanroomx_update_particle_markers=update_particle_markers
+        window._cleanroomx_particle_marker_points=marker_points
+        window._cleanroomx_play_particle_screening=play_particle_screening
+        window._cleanroomx_pause_particle_playback=pause_particle_playback
         window._cleanroomx_export_particles_to_path=export_particles
         window._cleanroomx_traces=traces
         window._cleanroomx_seed_display_point=seed_display_point
@@ -765,6 +870,7 @@ def open_multizone_vtk_window(parent, report, traces):
         def cleanup(event):
             if event.widget is not window:
                 return
+            pause_particle_playback()
             pending=getattr(window,"_cleanroomx_vtk_after",None)
             if pending is not None:
                 try:

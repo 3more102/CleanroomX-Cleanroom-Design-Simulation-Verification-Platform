@@ -645,6 +645,16 @@ class MultizoneCFDWindow(tk.Toplevel):
             "Leakage path evidence:",
             *(" - "+p+": "+v["basis"]+" — "+v["reference"]
               for p,v in sorted(comparison["path_evidence"].items())),
+            "Open CFD phi versus CLOSED network independent mechanical airflow inputs:",
+            *(
+                f" - {row['room']}: supply CFD={row['open_cfd_supply_m3_h']:.4g}, "
+                f"network={row['closed_network_supply_input_m3_h']:.4g} m³/h; "
+                f"return CFD={row['open_cfd_return_m3_h']:.4g}, "
+                f"network={row['closed_network_return_input_m3_h']:.4g} m³/h; "
+                f"network exhaust={row['closed_network_exhaust_input_m3_h']:.4g} m³/h"
+                for row in comparison["mechanical_airflow_boundary_comparison"]
+            ),
+            "Warning: "+comparison["boundary_comparison_note"],
             "Engineering limitations:",*(
                 " - "+x for x in comparison["limitations"])
         ])

@@ -34,8 +34,7 @@ def _replay_settings(track):
         raise ValueError("Recorded particle initial velocity/gravity must have three components")
     v=tuple(_finite(x,"initial velocity") for x in init)
     g=tuple(_finite(x,"recorded gravity") for x in gravity)
-    if (not math.isclose(math.dist(g,(0,0,0)),min(math.dist(g,(0,0,0)),20),
-                         abs_tol=1e-12) or
+    if (math.dist(g,(0,0,0))>20 or
         type(track["max_steps"]) is not int or
         not 1<=track["max_steps"]<=10000 or
         not math.isclose(_finite(track["slip_mean_free_path_m"],"slip mean free path"),

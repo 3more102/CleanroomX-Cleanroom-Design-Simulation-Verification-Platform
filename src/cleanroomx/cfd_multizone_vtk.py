@@ -8,7 +8,10 @@ VTK is an optional dependency; the core CleanroomX GUI remains usable without it
 from __future__ import annotations
 
 import math
+import queue
+import threading
 
+from .cfd_particle_ensemble import inject_recorded_particle_ensemble
 from .cfd_particle_diagnostics import (
     analyze_particle_trajectories, export_particle_trajectory_diagnostics,
 )
@@ -505,6 +508,11 @@ def open_multizone_vtk_window(parent, report, traces):
     particle_diameter_var = tk.StringVar(value="5")
     particle_density_var = tk.StringVar(value="1000")
     particle_time_var = tk.StringVar(value="2")
+    ensemble_count_var = tk.StringVar(value="4")
+    ensemble_status = tk.StringVar(
+        value="Select a room/layer to seed distinct recorded CFD cells (geometric, not statistical).")
+    ensemble_state = {"busy":False,"poll_id":None}
+    ensemble_events = queue.Queue()
     playback_var = tk.DoubleVar(value=0.)
     playback_status = tk.StringVar(value="Particle playback shows recorded sample vertices only")
     playback_state = {"playing":False, "after_id":None}
@@ -572,6 +580,15 @@ def open_multizone_vtk_window(parent, report, traces):
         ttk.Label(particle_controls,
             text="Gold: air streamlines | Green: inertial particle screening").pack(
             side="right",padx=3)
+        ensemble_controls=ttk.Frame(window,padding=(8,0,8,8))
+        ensemble_controls.pack(fill="x")
+        ttk.Label(ensemble_controls,text="Recorded-cell multi-injection:").pack(side="left")
+        ttk.Label(ensemble_controls,text="New seeds").pack(side="left",padx=(10,3))
+        ttk.Entry(ensemble_controls,textvariable=ensemble_count_var,width=5).pack(
+            side="left")
+        ttk.Label(
+            ensemble_controls,textvariable=ensemble_status,
+            wraplength=700).pack(side="right",padx=8)
         timeline_controls=ttk.Frame(window,padding=(8,0,8,8))
         timeline_controls.pack(fill="x")
         ttk.Label(timeline_controls,text="Particle elapsed time (s):").pack(side="left")
@@ -878,6 +895,73 @@ def open_multizone_vtk_window(parent, report, traces):
             command=open_particle_diagnostics
         ).pack(side="left",padx=5)
 
+        def start_particle_ensemble():
+            """Worker-only numerical integration; all Tk scene edits stay on Tk thread."""
+            if ensemble_state["busy"]:
+                return False
+            try:
+                count=int(ensemble_count_var.get().strip())
+                if count<1 or count>MAX_PARTICLES-len(particles):
+                    raise ValueError("Choose 1 to the remaining 20 particle slots")
+                selection=dict(displayed_selection)
+                recorded_tracks=list(particles)
+                diameter=float(particle_diameter_var.get())
+                density=float(particle_density_var.get())
+                horizon=float(particle_time_var.get())
+            except (ValueError,TypeError) as exc:
+                ensemble_status.set(f"Selection rejected: {exc}")
+                return False
+            ensemble_state["busy"]=True
+            ensemble_button.configure(state="disabled")
+            ensemble_status.set(
+                f"Integrating {count} distinct recorded-cell seeds; this is frozen-U screening.")
+            def work():
+                try:
+                    result=inject_recorded_particle_ensemble(
+                        report, recorded_tracks,count=count,
+                        **selection,diameter_um=diameter,
+                        particle_density_kg_m3=density,max_time_s=horizon,
+                    )
+                    ensemble_events.put(("result",result,selection,recorded_tracks))
+                except Exception as exc:
+                    ensemble_events.put(("error",str(exc),selection,recorded_tracks))
+            threading.Thread(target=work,daemon=True).start()
+            def poll_ensemble():
+                ensemble_state["poll_id"]=None
+                if not window.winfo_exists():
+                    return
+                try:
+                    kind,result,original_selection,old_tracks=ensemble_events.get_nowait()
+                except queue.Empty:
+                    ensemble_state["poll_id"]=window.after(100,poll_ensemble)
+                    return
+                ensemble_state["busy"]=False
+                ensemble_button.configure(state="normal")
+                if kind=="error":
+                    ensemble_status.set(f"Batch rejected: {result}")
+                    return
+                if old_tracks!=particles or original_selection!=displayed_selection:
+                    ensemble_status.set(
+                        "Selection/particles changed during integration; stale batch discarded")
+                    return
+                particles.extend(result["new_tracks"])
+                horizon_recorded=max(
+                    p["points"][-1]["elapsed_particle_s"] for p in particles)
+                slider.configure(to=max(horizon_recorded,.01))
+                playback_var.set(0.)
+                refresh_scene()
+                update_particle_markers()
+                ensemble_status.set(
+                    f"Added {len(result['new_tracks'])} computed-cell seeds; "
+                    f"{len(particles)}/20 screening paths. NOT a probability or concentration.")
+            ensemble_state["poll_id"]=window.after(100,poll_ensemble)
+            return True
+
+        ensemble_button=ttk.Button(
+            ensemble_controls,text="Inject room/plane seeds",
+            command=start_particle_ensemble)
+        ensemble_button.pack(side="left",padx=8)
+
         def seed_display_point(x,y):
             is_particle=particle_mode_var.get()
             if len(particles if is_particle else traces)>=20:
@@ -952,6 +1036,10 @@ def open_multizone_vtk_window(parent, report, traces):
         window._cleanroomx_pause_particle_playback=pause_particle_playback
         window._cleanroomx_export_particles_to_path=export_particles
         window._cleanroomx_analyze_particle_paths=open_particle_diagnostics
+        window._cleanroomx_inject_ensemble=start_particle_ensemble
+        window._cleanroomx_ensemble_count_var=ensemble_count_var
+        window._cleanroomx_ensemble_status=ensemble_status
+        window._cleanroomx_ensemble_state=ensemble_state
         window._cleanroomx_traces=traces
         window._cleanroomx_seed_display_point=seed_display_point
         window._cleanroomx_export_traces_to_path=export_paths
@@ -967,6 +1055,13 @@ def open_multizone_vtk_window(parent, report, traces):
             if event.widget is not window:
                 return
             pause_particle_playback()
+            ensemble_pending=ensemble_state.get("poll_id")
+            if ensemble_pending is not None:
+                try:
+                    window.after_cancel(ensemble_pending)
+                except tk.TclError:
+                    pass
+                ensemble_state["poll_id"]=None
             pending=getattr(window,"_cleanroomx_vtk_after",None)
             if pending is not None:
                 try:

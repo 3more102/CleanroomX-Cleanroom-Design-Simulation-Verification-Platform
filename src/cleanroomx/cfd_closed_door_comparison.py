@@ -31,7 +31,23 @@ def load_closed_door_network_scenario(filename):
         "schema","network","path_evidence"
     } or data["schema"]!=SCENARIO_SCHEMA:
         raise ValueError("Closed-door scenario schema and fields are required")
-    network=pressure_network_from_dict(data["network"])
+    config=data["network"]
+    if not isinstance(config,dict) or not isinstance(config.get("nodes"),list) or not isinstance(config.get("paths"),list):
+        raise ValueError("Closed-door input requires explicit node flows and leakage paths")
+    for node in config["nodes"]:
+        if (not isinstance(node,dict) or
+            any(node.get(field) is None for field in
+                ("supply_m3_h","return_m3_h","exhaust_m3_h"))):
+            raise ValueError("Fill every room's explicit supply/return/exhaust flow before solving")
+    for item in config["paths"]:
+        if not isinstance(item,dict):
+            raise ValueError("Each closed-door leakage path must be an object")
+        fields=(("coefficient_m3_s_pa_n","exponent")
+                if item.get("model")=="power_law"
+                else ("discharge_coefficient","area_m2","air_density_kg_m3"))
+        if any(item.get(field) is None for field in fields):
+            raise ValueError("Fill explicitly sourced leakage coefficients for every door before solving")
+    network=pressure_network_from_dict(config)
     return network,data["path_evidence"],hashlib.sha256(raw).hexdigest()
 
 

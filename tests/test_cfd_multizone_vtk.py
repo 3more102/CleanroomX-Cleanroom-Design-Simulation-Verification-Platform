@@ -173,7 +173,7 @@ def test_recorded_3d_room_filter_preserves_only_selected_room_membership():
 
 def test_3d_point_seed_comes_from_displayed_recorded_cell_only():
     report=_source()
-    trace=seed_streamline_from_displayed_point(report,[],1,
+    trace=seed_streamline_from_displayed_point(report,[],0,
         room_id="r1",plane_axis="x",plane_position_m=1.5)
     assert trace["points"][0]["xyz_m"]==[1.5,.5,.5]
     assert trace["source_iteration"]==report["time_name"]

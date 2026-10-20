@@ -99,10 +99,35 @@ def _face_layout(room: dict, devices: list[dict], rooms: list[dict],
         if not _inside(float(d["z_m"]), height, height):
             raise ValueError(f"FFU not on ceiling: {d['id']}")
     for d in returns:
-        if d.get("wall_side") != "west" or abs(float(d["x_m"]) - float(room["x_m"])) > 1e-8:
-            raise ValueError(f"Return must be explicitly on west wall: {d['id']}")
-        if float(d["z_m"]) + float(d["height_m"]) > height:
-            raise ValueError(f"Return exceeds ceiling: {d['id']}")
+        side = d.get("wall_side")
+        boundaries = {
+            "west": ("x_m", float(room["x_m"])),
+            "east": ("x_m", float(room["x_m"]) + length),
+            "south": ("y_m", float(room["y_m"])),
+            "north": ("y_m", float(room["y_m"]) + depth),
+        }
+        if side not in boundaries:
+            raise ValueError(f"Return needs an explicit wall_side: {d['id']}")
+        axis, wall_position = boundaries[side]
+        if abs(float(d[axis]) - wall_position) > 1e-8:
+            raise ValueError(f"Return is not on its designated {side} wall: {d['id']}")
+        if float(d["z_m"]) < 0 or float(d["z_m"]) + float(d["height_m"]) > height:
+            raise ValueError(f"Return elevation exceeds room boundaries: {d['id']}")
+        along = (float(d["y_m"]) - float(room["y_m"])
+                 if side in ("west", "east")
+                 else float(d["x_m"]) - float(room["x_m"]))
+        half = float(d["width_m"]) / 2.0
+        span = depth if side in ("west", "east") else length
+        if along - half < -1e-8 or along + half > span + 1e-8:
+            raise ValueError(f"Return footprint exceeds selected wall: {d['id']}")
+        for door in regions:
+            if door["side"] != side:
+                continue
+            if (min(along + half, door["u1"]) -
+                    max(along - half, door["u0"]) > 1e-8 and
+                    min(float(d["z_m"]) + float(d["height_m"]), door["z1"]) -
+                    max(float(d["z_m"]), door["z0"]) > 1e-8):
+                raise ValueError(f"Return overlaps closed door panel: {d['id']}")
     for k in range(nz):
         z = (k + 0.5) * dz
         for j in range(ny):
@@ -162,12 +187,20 @@ def _face_layout(room: dict, devices: list[dict], rooms: list[dict],
                         if matched_door:
                             patch = "closedDoors"
                             door_hits[matched_door[0]["door_id"]] += 1
-                        elif side == "west":
+                        else:
                             matched_return = [
                                 item for item in returns
-                                if _inside(
-                                    y, float(item["y_m"]) - float(room["y_m"]) - float(item["width_m"]) / 2,
-                                    float(item["y_m"]) - float(room["y_m"]) + float(item["width_m"]) / 2
+                                if item["wall_side"] == side
+                                and _inside(
+                                    coord,
+                                    (float(item["y_m"]) - float(room["y_m"])
+                                     if side in ("west", "east")
+                                     else float(item["x_m"]) - float(room["x_m"]))
+                                    - float(item["width_m"]) / 2,
+                                    (float(item["y_m"]) - float(room["y_m"])
+                                     if side in ("west", "east")
+                                     else float(item["x_m"]) - float(room["x_m"]))
+                                    + float(item["width_m"]) / 2
                                 )
                                 and _inside(
                                     z, float(item["z_m"]),
@@ -188,7 +221,12 @@ def _face_layout(room: dict, devices: list[dict], rooms: list[dict],
     if not patch_faces["inlet"] or not patch_faces["outlet"]:
         raise ValueError("Missing supply or exhaust boundary faces")
     area_inlet = len(patch_faces["inlet"]) * dx * dy
-    area_outlet = len(patch_faces["outlet"]) * dy * dz
+    outlet_face_areas = {
+        "west": dy * dz, "east": dy * dz,
+        "south": dx * dz, "north": dx * dz,
+    }
+    area_outlet = sum(return_hits[item["id"]] * outlet_face_areas[item["wall_side"]]
+                      for item in returns)
     area_doors = len(patch_faces["closedDoors"]) * dy * dz
     expected = 2 * (nx * ny + ny * nz + nx * nz)
     surfaces = [tuple(sorted(face)) for faces in patch_faces.values() for face in faces]

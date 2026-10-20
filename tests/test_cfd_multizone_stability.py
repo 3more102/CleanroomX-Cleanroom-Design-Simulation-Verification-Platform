@@ -30,11 +30,14 @@ def _snapshot(iteration, pressure, flux, imbalance, *, converged=False):
         "doors":{
             "AB":{"from_room":"A","to_room":"B",
                   "computed_delta_pressure_pa":pressure,
+                  "design_delta_pressure_target_pa":5.,
                   "computed_net_transfer_m3_s":flux,
                   "computed_forward_m3_s":flux+.05,
                   "computed_reverse_m3_s":.05},
         },
         "flow_balance":{
+            "boundary_inflow_m3_s":1.,
+            "boundary_outflow_m3_s":1.,
             "sum_absolute_cell_imbalance_m3_s":abs(imbalance)*5,
             "max_absolute_cell_imbalance_m3_s":abs(imbalance),
         },
@@ -68,6 +71,7 @@ def test_history_does_not_confuse_saved_iterations_with_physical_time():
     assert last["max_absolute_door_delta_change_pa"]==pytest.approx(2.)
     assert last["max_absolute_door_transfer_change_m3_s"]==pytest.approx(.04)
     assert last["sum_absolute_cell_imbalance_change_m3_s"]==pytest.approx(-.45)
+    assert result["door_pressure_direction_changes"]==[]
 
 
 def test_even_flat_converged_snapshots_cannot_prove_closed_door_five_pascal():
@@ -90,12 +94,24 @@ def test_even_flat_converged_snapshots_cannot_prove_closed_door_five_pascal():
     (lambda s:s[1]["rooms"]["A"].update(mean_speed_m_s=math.nan),"finite"),
     (lambda s:s[1].update(scenario="all_doors_closed"),"scenario"),
     (lambda s:s[1]["numerics"].update(selected_iteration_reported_convergence=True),"conflicts"),
+    (lambda s:s[1]["doors"]["AB"].update(to_room="A"),"direction"),
+    (lambda s:s[1]["doors"]["AB"].update(design_delta_pressure_target_pa=4.),"target"),
+    (lambda s:s[1]["flow_balance"].update(boundary_outflow_m3_s=2.),"signed boundary flux"),
 ])
 def test_snapshot_evidence_is_rejected_if_tampered_or_incomparable(broken,part):
     series=_series()
     broken(series)
     with pytest.raises(ValueError,match=part):
         compare_recorded_iterations(series)
+
+
+def test_pressure_direction_flip_is_diagnostic_not_acceptance():
+    source=[_snapshot(25,-2.,.1,.2),_snapshot(100,2.,.1,.01)]
+    result=compare_recorded_iterations(source)
+    assert result["door_pressure_direction_changes"]==[
+        {"iteration":"100","door":"AB"}]
+    assert result["last_saved_snapshot_change"]["doors_with_sign_reversal_since_previous_snapshot"]==["AB"]
+    assert result["engineering_release"]=="HOLD"
 
 
 @pytest.mark.parametrize("bad",[

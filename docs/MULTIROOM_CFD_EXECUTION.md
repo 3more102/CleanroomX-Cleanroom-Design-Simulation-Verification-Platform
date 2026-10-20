@@ -495,3 +495,35 @@ A prior GitHub Actions OpenFOAM failure at commit `06071624` occurred in
 the *runtime installation* step and is not evidence of a CFD numerical
 failure. Later VTK and actual OpenFOAM regression workflow runs must be
 checked by commit SHA before any statement of complete CI success.
+
+## Particle screening diagnostics follow-up (20 October 2026)
+
+A separate, **noncertifying** particle trajectory diagnostics layer is available
+for existing recorded, frozen-U one-way screening paths:
+
+- In **Open real VTK 3D**, choose one-way particle screening and inject up to 20
+  particles at visible real computed fluid cell centres. Choose **Analyze
+  particle paths** to review per-track recorded sample count, elapsed particle
+  integration time, polyline path length (sum of chords), start/end computed
+  room, displacement, first-observed room-label transitions and numerical
+  termination reason.
+- Trajectory samples must match the selected recorded CFD run **manifest SHA-256,
+  receipt SHA-256, solver iteration and occupied-cell recorded U**. Each
+  sampled particle slip Reynolds number is cross-checked against its particle
+  velocity, recorded local carrier-gas U and declared air properties. An
+  impossible jump through an uncomputed/solid CFD voxel fails closed.
+- Intervals labelled with a room belong to the **preceding sample's room**;
+  this does **not** reconstruct an exact aperture crossing instant, measured
+  residence time or exposure. Polyline distance is **not** a true curved
+  inertial arc-length integration.
+- The operator may export non-overwriting diagnostics JSON with run hashes,
+  recorded iteration, per-track metrics and full physical-model disclaimers.
+  No particle concentration, fate fraction, deposition efficiency, aerosol
+  dispersion, temporal CFD results, closed-door cascade or compliance verdict
+  is calculated. **Engineering release remains HOLD.**
+
+Synthetic unit regressions are in `tests/test_cfd_particle_diagnostics.py`.
+The dedicated VTK/Xvfb workflow includes the real interactive diagnostics
+window. The Foundation v10 integration suite uses genuinely computed U fields,
+while synthetic tests are labelled numerical/API checks rather than solver
+evidence.

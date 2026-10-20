@@ -5,6 +5,7 @@ OpenFOAM execution or CFD validation. See test_cfd_multizone_execution.py for
 real solver-field contract tests.
 """
 import tkinter as tk
+import json
 
 import pytest
 
@@ -15,7 +16,7 @@ from test_cfd_multizone_vtk import _source
 from cleanroomx.cfd_streamlines import trace_computed_streamline
 
 
-def test_real_tk_vtk_window_opens_and_updates_selected_field_and_glyphs():
+def test_real_tk_vtk_window_opens_and_updates_selected_field_and_glyphs(tmp_path):
     root = tk.Tk()
     root.geometry("900x700")
     window = None
@@ -64,6 +65,14 @@ def test_real_tk_vtk_window_opens_and_updates_selected_field_and_glyphs():
         assert "NOT particle tracking" in window._cleanroomx_view_status.get()
         assert not window._cleanroomx_seed_display_point(-100,-100)
         assert len(window._cleanroomx_traces)==2
+        exported=tmp_path/"vtk3d-paths.json"
+        assert window._cleanroomx_export_traces_to_path(exported)
+        payload=json.loads(exported.read_text(encoding="utf-8"))
+        assert payload["source_iteration"]=="50"
+        assert len(payload["traces"])==2
+        assert payload["validation"]=="steady_visualization_only_not_particle_transport"
+        assert not window._cleanroomx_export_traces_to_path(exported)
+        assert "Export rejected" in window._cleanroomx_view_status.get()
     finally:
         if window is not None:
             window.destroy()

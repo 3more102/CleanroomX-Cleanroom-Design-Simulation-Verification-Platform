@@ -123,6 +123,7 @@ class MultizoneCFDWindow(tk.Toplevel):
         ttk.Label(traces,textvariable=self.trace_status,wraplength=750).pack(side="left",fill="x",expand=True)
         ttk.Button(traces,text="Clear traces",command=self.clear_traces).pack(side="right",padx=4)
         ttk.Button(traces,text="Export 3D traces",command=self.export_traces).pack(side="right",padx=4)
+        ttk.Button(traces,text="Open real VTK 3D",command=self.open_vtk_3d).pack(side="right",padx=4)
         self.section_canvas=tk.Canvas(fields,background="#101b2b",highlightthickness=0)
         self.section_canvas.pack(fill="both",expand=True)
         self.section_canvas.bind("<Configure>",lambda e:self.draw_section())
@@ -314,6 +315,22 @@ class MultizoneCFDWindow(tk.Toplevel):
             c.create_text(12,y,anchor="w",fill="#d9e7f7",text=r["name"])
             c.create_rectangle(min(center,end),y-9,max(center+1,end),y+9,fill="#22c5d6",outline="",tags="computed-pressure")
             c.create_text(width-20,y,anchor="e",fill="#d9e7f7",text=f"{value:.6g} Pa")
+
+    def open_vtk_3d(self):
+        """Open real 3D computed-cell geometry and recorded steady flow paths."""
+        if not self.report or self.running:
+            self.trace_status.set("Import recorded CFD fields before opening real VTK 3D.")
+            return
+        try:
+            from .cfd_multizone_vtk import open_multizone_vtk_window
+            window=open_multizone_vtk_window(self,self.report,list(self.trace_paths))
+        except (RuntimeError,ImportError,ValueError,tk.TclError) as exc:
+            messagebox.showerror("3D VTK viewer unavailable",str(exc),parent=self)
+            return
+        self.trace_status.set(
+            "Native interactive VTK 3D opened. Colors are computed velocity, "
+            "gold paths are recorded-field steady streamlines; NOT particle motion.")
+        window.lift()
 
     def export_traces(self):
         if not self.trace_paths or self.running:

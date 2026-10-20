@@ -451,6 +451,17 @@ def test_real_openfoam_drives_one_way_particle_screening(computed_report):
     assert from_point["points"][0]["xyz_m"]==samples[0]["center_m"]
     vtk_track=computed_particle_polydata(report,[track])
     assert vtk_track.GetNumberOfPoints()==len(track["points"])
+    # Independent diagnostics ingest ONLY the actual Foundation v10 field
+    # samples used by this particle; these are not physical validation.
+    from cleanroomx.cfd_particle_diagnostics import analyze_particle_trajectories
+    diagnostic=analyze_particle_trajectories(report,[track,from_point])
+    assert diagnostic["number_of_screening_tracks"]==2
+    assert diagnostic["engineering_release"]=="HOLD"
+    assert not diagnostic["validated_particle_transport"]
+    assert diagnostic["source_run_receipt_sha256"]==report["provenance"]["run_receipt_sha256"]
+    assert diagnostic["tracks"][0]["start_room_id"]==fluid["room_id"]
+    assert diagnostic["tracks"][0]["sample_count"]==len(track["points"])
+    assert diagnostic["aggregate"]["sum_polygonal_path_length_m"]>=0
 
 
 def test_true_openfoam_fields_produce_noncertifying_design_pressure_review(computed_report):

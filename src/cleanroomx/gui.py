@@ -2719,6 +2719,7 @@ class CleanroomXApp:
         panes.add(content, weight=5)
 
         self.workspace_panes = ttk.Panedwindow(content, orient="vertical")
+        self.workspace_panes.bind("<Configure>", self._keep_workspace_visible_on_resize)
         self.workspace_panes.pack(fill="both", expand=True)
 
         workspace_host = ttk.Frame(self.workspace_panes)
@@ -2912,6 +2913,18 @@ class CleanroomXApp:
     @staticmethod
     def _paned_contains(paned: ttk.Panedwindow, child: tk.Misc) -> bool:
         return str(child) in {str(item) for item in paned.panes()}
+
+    def _keep_workspace_visible_on_resize(self, event: tk.Event) -> None:
+        """Keep a shrinking window from allocating all space to the output pane.
+
+        This runs on container resizing, not sash dragging. Users can still
+        expand output deliberately; hiding it retains the single-pane layout.
+        """
+        if len(self.workspace_panes.panes()) < 2:
+            return
+        minimum = min(360, max(0, event.height - 120))
+        if self.workspace_panes.sashpos(0) < minimum:
+            self.workspace_panes.sashpos(0, minimum)
 
     @staticmethod
     def _pane_fraction(paned: ttk.Panedwindow, extent: int) -> float | None:

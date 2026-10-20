@@ -1779,13 +1779,17 @@ class SpatialDesignWorkspace(ttk.Frame):
                 command=lambda k=key, v=variable: self._set_view_flag(k, v.get()),
             ).pack(side="left", padx=2)
         ttk.Label(viewbar, textvariable=self._zoom_var).pack(side="left", padx=(10, 2))
+        # Keep door/equipment controls available when the navigator narrows the
+        # workspace. Packing them into viewbar could hide Validate at 1050 px.
+        device_viewbar = ttk.Frame(self, padding=(8, 0, 8, 4))
+        device_viewbar.pack(fill="x")
         for label, variable in (("FFUs", self._show_ffu), ("Returns", self._show_returns)):
-            ttk.Checkbutton(viewbar, text=label, variable=variable, command=self.redraw).pack(side="left", padx=2)
-        ttk.Button(viewbar, text="Toggle door", command=self.toggle_selected_door).pack(side="left", padx=4)
-        ttk.Button(viewbar, text="Validate", command=self.report_validation).pack(
+            ttk.Checkbutton(device_viewbar, text=label, variable=variable, command=self.redraw).pack(side="left", padx=2)
+        ttk.Button(device_viewbar, text="Toggle door", command=self.toggle_selected_door).pack(side="left", padx=4)
+        ttk.Button(device_viewbar, text="Validate", command=self.report_validation).pack(
             side="left", padx=(10, 2)
         )
-        ttk.Label(viewbar, textvariable=self._validation_var).pack(
+        ttk.Label(device_viewbar, textvariable=self._validation_var).pack(
             side="right", padx=(10, 2)
         )
 

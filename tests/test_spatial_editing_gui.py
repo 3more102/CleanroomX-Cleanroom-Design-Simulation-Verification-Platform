@@ -175,6 +175,8 @@ def test_editing_toolbar_controls_remain_visible(app, size):
     app.root.geometry(size)
     app.root.update()
     workspace = app.spatial_workspace
+    assert workspace._body.winfo_ismapped()
+    assert workspace._body.winfo_height() >= 80
     for row in workspace.winfo_children():
         if not isinstance(row, ttk.Frame):
             continue

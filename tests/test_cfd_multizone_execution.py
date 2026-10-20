@@ -91,6 +91,13 @@ def test_actual_fluxes_units_reference_and_door_pressure(computed_report,execute
     assert denser["rooms"]["process"]["design_pressure_relative_to_reference_pa"]==0
     for name,door in denser["doors"].items():
         assert door["computed_delta_pressure_pa"]==pytest.approx(report["doors"][name]["computed_delta_pressure_pa"]*2)
+    balance=report["flow_balance"]
+    assert balance["boundary_inflow_m3_s"]-balance["boundary_outflow_m3_s"]==pytest.approx(-report["global_net_outward_imbalance_m3_s"],abs=1e-12)
+    assert sum(r["sum_absolute_cell_imbalance_m3_s"] for r in rooms.values())==pytest.approx(balance["sum_absolute_cell_imbalance_m3_s"])
+    assert max(r["max_absolute_cell_imbalance_m3_s"] for r in rooms.values())==balance["max_absolute_cell_imbalance_m3_s"]
+    for r in rooms.values():
+        assert r["total_face_outflow_m3_s"]-r["total_face_inflow_m3_s"]==pytest.approx(r["net_outward_imbalance_m3_s"],abs=1e-12)
+        assert r["sum_absolute_cell_imbalance_m3_s"]+1e-12 >= abs(r["net_outward_imbalance_m3_s"])
 
 
 def test_actual_time_sections_and_reproducible_report(executed_case,computed_report,tmp_path):
@@ -105,6 +112,8 @@ def test_actual_time_sections_and_reproducible_report(executed_case,computed_rep
     summary=json.loads((report_dir/"report.json").read_text())
     assert summary["provenance"]==computed_report["provenance"]
     assert len((report_dir/"cells.csv").read_text().splitlines())==13211
+    assert len((report_dir/"room-balances.csv").read_text().splitlines())==5
+    assert summary["numerics"]["selected_iteration"]==100
     assert "Solver reported convergence" in path.read_text()
     with pytest.raises(FileExistsError):
         export_multizone_report(computed_report,report_dir)
@@ -189,6 +198,8 @@ def test_actual_gui_displays_recorded_fields_vectors_and_residuals(computed_repo
         window.tabs.select(2)
         root.update()
         assert len(window.residual_canvas.find_withtag("computed-residual"))==4
+        assert len(window.residual_table.get_children())==4
+        assert len(window.residual_canvas.find_withtag("selected-iteration"))==1
         assert ("NOT CONVERGED" in window.status.get()) != computed_report["solver_reported_convergence"]
         assert errors==[]
     finally:
@@ -202,3 +213,33 @@ def test_real_ascii_field_units_are_required(executed_case):
         read_ascii_field(data,13210,(0,1,-1,0,0,0,0))
     with pytest.raises(ValueError,match="count"):
         read_ascii_field(data,123,(0,2,-2,0,0,0,0))
+
+
+def test_actual_low_flow_convergence_applies_only_to_its_final_fields(tmp_path):
+    """Deliberately reduced supply is a numerical regression, not the design case."""
+    _require_runtime()
+    configured=os.environ.get("CLEANROOMX_CFD_EVIDENCE_DIR")
+    base=Path(configured)/"low-flow" if configured else tmp_path
+    base.mkdir(parents=True,exist_ok=True)
+    raw=json.loads(bundled_demo_project_path().read_text())
+    verification=next(a for a in raw["analyses"] if a["id"]=="verification")
+    for room in verification["input"]["rooms"]:
+        room["supply_airflow_m3_h"]*=.001
+    source=base/"low-flow-project.json"
+    source.write_text(json.dumps(raw))
+    case=base/"case"
+    generate_multizone_open_door_case(source,case,door_mode="open",kinematic_viscosity_m2_s=1.5e-5,
+                                    max_iterations=400,output_interval=50)
+    receipt=run_multizone_open_door_case(case,timeout_seconds=120)
+    assert receipt["status"]=="executed_requires_convergence_review", receipt
+    final=analyze_multizone_case(case,density_kg_m3=1.2,reference_room_id="corridor")
+    assert final["solver_reported_convergence"]
+    assert final["numerics"]["selected_initial_residuals_below_limits"]
+    assert final["numerics"]["solver_convergence_iteration"]==float(final["time_name"]) < 400
+    first=final["available_times"][0]
+    assert float(first)<float(final["time_name"])
+    earlier=analyze_multizone_case(case,density_kg_m3=1.2,reference_room_id="corridor",time_name=first)
+    assert earlier["numerics"]["run_reported_convergence"]
+    assert not earlier["solver_reported_convergence"]
+    assert earlier["numerics"]["selected_iteration"]==float(first)
+    assert earlier["flow_balance"]["sum_absolute_cell_imbalance_m3_s"]>final["flow_balance"]["sum_absolute_cell_imbalance_m3_s"]

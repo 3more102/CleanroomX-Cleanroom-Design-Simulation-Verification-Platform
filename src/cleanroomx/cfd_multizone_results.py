@@ -161,6 +161,81 @@ def _recorded_outputs(root: Path) -> tuple[dict, dict]:
     return manifest, receipt
 
 
+def solver_iteration_diagnostics(log: str, solution: str, time_name: str) -> tuple[list, dict]:
+    """Keep the selected field snapshot distinct from the eventual run verdict.
+
+    Linear-solver final residuals are not SIMPLE convergence criteria. The
+    configured limits shown here apply to initial residuals. Only the actual
+    SIMPLE convergence marker identifies a solver-reported converged snapshot.
+    """
+    history, continuity, convergence = [], {}, []
+    iteration = None
+    for line in log.splitlines():
+        match = re.fullmatch(rf"Time\s*=\s*({NUMBER})s?\s*", line)
+        if match:
+            iteration = float(match[1])
+            if not math.isfinite(iteration) or iteration < 0:
+                raise ValueError("Invalid solver iteration")
+        match = re.search(rf"Solving for (\w+), Initial residual = ({NUMBER}), Final residual = ({NUMBER})", line)
+        if match:
+            values = [float(match[2]), float(match[3])]
+            if iteration is None or any(not math.isfinite(v) or v < 0 for v in values):
+                raise ValueError("Invalid solver residual history")
+            history.append({"iteration": iteration, "field": match[1],
+                            "initial": values[0], "final": values[1]})
+        match = re.search(rf"time step continuity errors\s*:\s*sum local = ({NUMBER}), global = ({NUMBER}), cumulative = ({NUMBER})", line)
+        if match and iteration is not None:
+            values = [float(match[i]) for i in (1, 2, 3)]
+            if not all(math.isfinite(v) for v in values):
+                raise ValueError("Invalid solver continuity history")
+            continuity[iteration] = dict(zip(("sum_local", "global", "cumulative"), values))
+        match = re.search(rf"SIMPLE solution converged in ({NUMBER}) iterations", line)
+        if match:
+            value = float(match[1])
+            if iteration is None or value != iteration or convergence:
+                raise ValueError("Inconsistent SIMPLE convergence marker")
+            convergence.append(value)
+    selected = float(time_name)
+    fields = {}
+    controls = re.search(r"\bresidualControl\s*{([^{}]*)}", solution)
+    limits = {}
+    if controls:
+        for name in ("p", "U"):
+            match = re.search(rf"\b{name}\s+({NUMBER})\s*;", controls[1])
+            if match:
+                limit = float(match[1])
+                if not math.isfinite(limit) or limit <= 0:
+                    raise ValueError("Invalid configured residual limit")
+                limits[name] = limit
+    for name in ("p", "Ux", "Uy", "Uz"):
+        entries = [h for h in history if h["iteration"] == selected and h["field"] == name]
+        if not entries:
+            raise ValueError("Selected fields lack complete pressure and velocity residual histories")
+        limit = limits.get("p" if name == "p" else "U")
+        fields[name] = {
+            "first_initial_residual": entries[0]["initial"],
+            "last_final_linear_residual": entries[-1]["final"],
+            "linear_solve_count": len(entries),
+            "configured_initial_residual_limit": limit,
+            "initial_residual_below_limit": entries[0]["initial"] < limit if limit is not None else None,
+        }
+    convergence_iteration = convergence[0] if convergence else None
+    return history, {
+        "selected_iteration": selected,
+        "last_solved_iteration": max(h["iteration"] for h in history),
+        "run_reported_convergence": bool(convergence),
+        "solver_convergence_iteration": convergence_iteration,
+        "selected_iteration_reported_convergence": convergence_iteration == selected,
+        "selected_initial_residuals_below_limits": (
+            all(f["initial_residual_below_limit"] for f in fields.values())
+            if all(f["configured_initial_residual_limit"] is not None for f in fields.values()) else None),
+        "fields": fields,
+        "selected_log_continuity_errors": continuity.get(selected),
+        "continuity_note": "OpenFOAM log diagnostics; compare face-flux balances separately in m3/s",
+        "residual_note": "Initial residual limits and final linear residuals are distinct; neither establishes physical validation",
+    }
+
+
 def analyze_multizone_case(directory: str | Path, *, density_kg_m3: float,
                             reference_room_id: str, vertical_tolerance_m_s: float = 0.01,
                             time_name: str | None = None) -> dict:
@@ -241,6 +316,7 @@ def analyze_multizone_case(directory: str | Path, *, density_kg_m3: float,
             "downward_volume_fraction": sum(velocity[i][2]<-vertical_tolerance_m_s for i in cells)/len(cells),
             "supply_inflow_m3_s": 0.0, "return_outflow_m3_s": 0.0,
             "boundary_net_outward_m3_s": 0.0, "door_net_outward_m3_s": 0.0,
+            "total_face_inflow_m3_s": 0.0, "total_face_outflow_m3_s": 0.0,
         }
     owners = _labels(_read(root, "constant/polyMesh/owner"))
     neighbors = _labels(_read(root, "constant/polyMesh/neighbour"))
@@ -251,6 +327,8 @@ def analyze_multizone_case(directory: str | Path, *, density_kg_m3: float,
     fluxes = read_ascii_field(phi_text, len(neighbors), (0,3,-1,0,0,0,0))
     patch_fluxes = {}
     boundary_faces = set()
+    cell_net_flux = [0.0] * count
+    global_inflow, global_outflow = 0.0, 0.0
     for name, patch in patches.items():
         match = re.search(rf"\b{re.escape(name)}\s*{{([^{{}}]*)}}", phi_text, re.S)
         if not match or name not in case["boundary_faces"] or patch["count"] != case["boundary_faces"][name]:
@@ -264,6 +342,11 @@ def analyze_multizone_case(directory: str | Path, *, density_kg_m3: float,
                 raise ValueError("Overlapping boundary face ranges")
             boundary_faces.add(face)
             r = measured[membership[owners[face]]]
+            cell_net_flux[owners[face]] += value
+            r["total_face_inflow_m3_s"] += max(-value, 0.0)
+            r["total_face_outflow_m3_s"] += max(value, 0.0)
+            global_inflow += max(-value, 0.0)
+            global_outflow += max(value, 0.0)
             r["boundary_net_outward_m3_s"] += value
             if name.startswith("supply_"):
                 r["supply_inflow_m3_s"] -= value
@@ -277,6 +360,8 @@ def analyze_multizone_case(directory: str | Path, *, density_kg_m3: float,
                     "computed_face_count": 0} for name, d in case["open_doors"].items()}
     for face, (other, flux) in enumerate(zip(neighbors, fluxes)):
         own = owners[face]
+        cell_net_flux[own] += flux
+        cell_net_flux[other] -= flux
         a, b = membership[own], membership[other]
         if a == b:
             continue
@@ -291,6 +376,9 @@ def analyze_multizone_case(directory: str | Path, *, density_kg_m3: float,
         d["computed_face_count"] += 1
         measured[a]["door_net_outward_m3_s"] += flux
         measured[b]["door_net_outward_m3_s"] -= flux
+        for rid, outward in ((a, flux), (b, -flux)):
+            measured[rid]["total_face_inflow_m3_s"] += max(-outward, 0.0)
+            measured[rid]["total_face_outflow_m3_s"] += max(outward, 0.0)
     for d in doors.values():
         if d["computed_face_count"] != d["open_face_count"]:
             raise ValueError("Computed door aperture differs from generated connectivity")
@@ -298,21 +386,16 @@ def analyze_multizone_case(directory: str | Path, *, density_kg_m3: float,
         d["computed_delta_pressure_pa"] = density_kg_m3*(means[a]-means[b])
         pa,pb = rooms[a].get("pressure_pa"),rooms[b].get("pressure_pa")
         d["design_delta_pressure_target_pa"] = pa-pb if pa is not None and pb is not None else None
-    for r in measured.values():
+    for rid, r in measured.items():
         r["net_outward_imbalance_m3_s"] = r["boundary_net_outward_m3_s"]+r["door_net_outward_m3_s"]
-    log = _read(root,"simpleFoam.log")
-    history = []
-    iteration = None
-    for line in log.splitlines():
-        t = re.match(rf"Time\s*=\s*({NUMBER})s?\s*$",line)
-        if t:
-            iteration = float(t[1])
-        m = re.search(rf"Solving for (\w+), Initial residual = ({NUMBER}), Final residual = ({NUMBER})",line)
-        if m:
-            history.append({"iteration":iteration,"field":m[1],"initial":float(m[2]),"final":float(m[3])})
-    if not {"p","Ux","Uy","Uz"}.issubset({h["field"] for h in history}):
-        raise ValueError("Solver log lacks pressure and velocity residual histories")
-    converged = bool(re.search(r"SIMPLE solution converged",log))
+        throughflow = (r["total_face_inflow_m3_s"] + r["total_face_outflow_m3_s"]) / 2
+        r["net_imbalance_fraction_of_throughflow"] = abs(r["net_outward_imbalance_m3_s"])/throughflow if throughflow > 0 else None
+        r["sum_absolute_cell_imbalance_m3_s"] = math.fsum(abs(cell_net_flux[i]) for i in grouped[rid])
+        r["max_absolute_cell_imbalance_m3_s"] = max(abs(cell_net_flux[i]) for i in grouped[rid])
+    history, numerics = solver_iteration_diagnostics(
+        _read(root, "simpleFoam.log"), _read(root, "system/fvSolution"), selected)
+    global_net = math.fsum(patch_fluxes.values())
+    throughflow = (global_inflow + global_outflow) / 2
     samples = [{"room_id":membership[i],"center_m":centers[i],"velocity_m_s":velocity[i],
                 "pressure_pa_relative_to_reference":density_kg_m3*(pressure[i]-reference)} for i in range(count)]
     return {
@@ -326,8 +409,17 @@ def analyze_multizone_case(directory: str | Path, *, density_kg_m3: float,
                       "project_source_sha256":manifest["project_source_sha256"],
                       "output_sha256":receipt["outputs"],"runtime":receipt["runtime"]},
         "mesh":mesh,"rooms":measured,"doors":doors,"patch_flux_m3_s":patch_fluxes,
-        "global_net_outward_imbalance_m3_s":sum(patch_fluxes.values()),
-        "solver_reported_convergence":converged,"residual_history":history,
+        "global_net_outward_imbalance_m3_s":global_net,
+        "flow_balance": {
+            "boundary_inflow_m3_s": global_inflow, "boundary_outflow_m3_s": global_outflow,
+            "relative_boundary_imbalance": abs(global_net)/throughflow if throughflow > 0 else None,
+            "sum_absolute_cell_imbalance_m3_s": math.fsum(abs(v) for v in cell_net_flux),
+            "max_absolute_cell_imbalance_m3_s": max(abs(v) for v in cell_net_flux),
+            "method": "Signed solved phi on every owner/neighbour and boundary face; room throughflow is half the sum of incoming and outgoing flow",
+            "note": "Numerical diagnostics only; no acceptance tolerance or cleanroom compliance is inferred",
+        },
+        "solver_reported_convergence":numerics["selected_iteration_reported_convergence"],
+        "numerics":numerics,"residual_history":history,
         "geometry":case["rooms"],"voxel_pitch_m":pitch,"cells":samples,
         "limitations":[
             "Open doors only; no closed-door leakage CFD, pressure controller or imposed 5 Pa cascade",
@@ -359,11 +451,29 @@ def export_multizone_report(report: dict, directory: str | Path) -> Path:
             writer=csv.DictWriter(stream,fieldnames=["iteration","field","initial","final"])
             writer.writeheader()
             writer.writerows(report["residual_history"])
+        with (root/"room-balances.csv").open("w",newline="",encoding="utf-8") as stream:
+            keys = ["total_face_inflow_m3_s", "total_face_outflow_m3_s", "net_outward_imbalance_m3_s",
+                    "net_imbalance_fraction_of_throughflow", "sum_absolute_cell_imbalance_m3_s",
+                    "max_absolute_cell_imbalance_m3_s"]
+            writer=csv.DictWriter(stream,fieldnames=["room_id",*keys])
+            writer.writeheader()
+            for rid,room in report["rooms"].items():
+                writer.writerow({"room_id":rid,**{key:room[key] for key in keys}})
         rows="".join(f"<tr><td>{html.escape(r['name'])}</td><td>{r['mean_pressure_pa_relative_to_reference']:.6g}</td>"
                      f"<td>{r['mean_speed_m_s']:.6g}</td><td>{r['supply_inflow_m3_s']:.6g}</td>"
                      f"<td>{r['return_outflow_m3_s']:.6g}</td><td>{r['net_outward_imbalance_m3_s']:.4g}</td></tr>"
                      for r in report["rooms"].values())
         notes="".join(f"<li>{html.escape(item)}</li>" for item in report["limitations"])
+        numerics=report["numerics"]
+        residual_rows=""
+        for name,field in numerics["fields"].items():
+            limit=field["configured_initial_residual_limit"]
+            limit_text="unknown" if limit is None else f"{limit:.5g}"
+            residual_rows+=(f"<tr><td>{html.escape(name)}</td><td>{field['first_initial_residual']:.5g}</td>"
+                            f"<td>{field['last_final_linear_residual']:.5g}</td><td>{limit_text}</td></tr>")
+        run_verdict=(f"converged at iteration {numerics['solver_convergence_iteration']:g}"
+                     if numerics["run_reported_convergence"] else "did not report convergence")
+        balance=report["flow_balance"]
         (root/"report.html").write_text(
             '<!doctype html><html lang="en"><meta charset="utf-8"><title>CleanroomX computed CFD report</title>'
             '<style>body{font:16px system-ui;margin:3em;background:#101b2b;color:#e7eef7}table{border-collapse:collapse;width:100%}td,th{padding:12px;border-bottom:1px solid #456}th{text-align:left}code{word-break:break-all}</style>'
@@ -373,9 +483,16 @@ def export_multizone_report(report: dict, directory: str | Path) -> Path:
             f'<p>Density: {report["density_kg_m3"]} kg/m³. Pressure relative to computed mean in '
             f'{html.escape(report["pressure_reference"]["room_id"])}.</p>'
             '<table><tr><th>Room</th><th>Pressure (Pa)</th><th>Mean speed (m/s)</th><th>Supply (m³/s)</th><th>Return (m³/s)</th><th>Net imbalance (m³/s)</th></tr>'
-            +rows+'</table><h2>Scope and limitations</h2><ul>'+notes+'</ul>'
+            +rows+'</table><h2>Selected iteration numerical review</h2>'
+            +f'<p>Full run {run_verdict}. The convergence flag above applies only to the selected field iteration.</p>'
+            +'<table><tr><th>Field</th><th>First initial residual</th><th>Last linear final residual</th><th>Configured initial limit</th></tr>'
+            +residual_rows+'</table><p>Linear final residuals are distinct from the SIMPLE initial residual criteria.</p>'
+            +f'<p>Sum of absolute cell flow imbalances: {balance["sum_absolute_cell_imbalance_m3_s"]:.6g} m³/s. '
+            +f'Largest cell imbalance: {balance["max_absolute_cell_imbalance_m3_s"]:.6g} m³/s. '
+            +'No flow-balance acceptance tolerance is assumed.</p>'
+            +'<h2>Scope and limitations</h2><ul>'+notes+'</ul>'
             +'<p>Input manifest SHA-256: <code>'+html.escape(report['provenance']['manifest_sha256'])+'</code></p>'
-            +'<p>Full provenance and mesh statistics: report.json. Computed fields: cells.csv. Residual history: residuals.csv.</p></html>',
+            +'<p>Full provenance and numerical diagnostics: report.json. Computed fields: cells.csv. Full run residuals: residuals.csv. Room face-flux conservation: room-balances.csv.</p></html>',
             encoding="utf-8")
     except BaseException:
         shutil.rmtree(root)

@@ -83,13 +83,13 @@ class MultizoneCFDWindow(tk.Toplevel):
         diagnostics=ttk.Frame(self.tabs,padding=8)
         for tab,label in ((summary,"Room comparison"),(fields,"Computed sections"),(residuals,"Residual histories"),(logs,"Solver logs"),(diagnostics,"Diagnostics / provenance")):
             self.tabs.add(tab,text=label)
-        columns=("name","target","pressure","speed","supply","returns","imbalance","upward")
+        columns=("name","target","pressure","speed","supply","returns","imbalance","balance_pct","upward")
         self.room_table=ttk.Treeview(summary,columns=columns,show="headings",height=5)
-        for key,label,width in zip(columns,("Room","Target Pa","Computed Pa*","Mean m/s","Supply m³/h","Return m³/h","Imbalance m³/s","Upward %"),(165,80,105,90,100,100,130,90)):
+        for key,label,width in zip(columns,("Room","Target Pa","Computed Pa*","Mean m/s","Supply m³/h","Return m³/h","Imbalance m³/s","Imbalance %†","Upward %"),(140,75,100,85,95,95,120,100,85)):
             self.room_table.heading(key,text=label)
             self.room_table.column(key,width=width,minwidth=60)
         self.room_table.pack(fill="x")
-        ttk.Label(summary,text="*Computed pressure is relative to the selected room's computed mean. Targets are design inputs, not imposed CFD results.",wraplength=1100).pack(anchor="w",pady=6)
+        ttk.Label(summary,text="*Pressure relative to the selected room's computed mean. Targets are design inputs. †Absolute net imbalance / mean incoming and outgoing face flow; no acceptance limit is assumed.",wraplength=1100).pack(anchor="w",pady=6)
         self.pressure_canvas=tk.Canvas(summary,background="#101b2b",highlightthickness=0,height=220)
         self.pressure_canvas.pack(fill="both",expand=True,pady=8)
         self.pressure_canvas.bind("<Configure>",lambda e:self.draw_pressure())
@@ -117,10 +117,17 @@ class MultizoneCFDWindow(tk.Toplevel):
         self.section_canvas.pack(fill="both",expand=True)
         self.section_canvas.bind("<Configure>",lambda e:self.draw_section())
         ttk.Label(fields,text="Actual cell values at the selected layer. Arrows show projected computed velocity; no manufactured streamlines or filled gaps.").pack(anchor="w",pady=5)
+        self.numerical_status=tk.StringVar()
+        ttk.Label(residuals,textvariable=self.numerical_status,wraplength=1100).pack(anchor="w",pady=(0,6))
+        self.residual_table=ttk.Treeview(residuals,columns=("field","initial","final","limit","below"),show="headings",height=4)
+        for key,label in (("field","Selected iteration field"),("initial","First initial residual"),("final","Last linear final residual"),("limit","Configured initial limit"),("below","Initial below limit")):
+            self.residual_table.heading(key,text=label)
+            self.residual_table.column(key,width=210)
+        self.residual_table.pack(fill="x",pady=(0,8))
         self.residual_canvas=tk.Canvas(residuals,background="#101b2b",highlightthickness=0)
         self.residual_canvas.pack(fill="both",expand=True)
         self.residual_canvas.bind("<Configure>",lambda e:self.draw_residuals())
-        ttk.Label(residuals,text="Initial linear residuals on a log₁₀ scale. SIMPLE iteration is not physical transient time.").pack(anchor="w",pady=5)
+        ttk.Label(residuals,text="Full run initial residuals on a log₁₀ scale; the white marker selects the displayed fields. Linear final residuals do not establish SIMPLE convergence.",wraplength=1100).pack(anchor="w",pady=5)
         self.log_text=tk.Text(logs,background="#101b2b",foreground="#d9e7f7",wrap="none",font=("TkFixedFont",10))
         self.log_text.pack(fill="both",expand=True)
         self.diagnostics=tk.Text(diagnostics,wrap="word",font=("TkFixedFont",10))
@@ -222,8 +229,10 @@ class MultizoneCFDWindow(tk.Toplevel):
                 self.log_text.see("end")
 
     def _clear_results(self):
-        for table in (self.room_table,self.door_table):
+        for table in (self.room_table,self.door_table,self.residual_table):
             table.delete(*table.get_children())
+        self.numerical_status.set("")
+        self.diagnostics.delete("1.0","end")
         for canvas in (self.section_canvas,self.residual_canvas,self.pressure_canvas):
             canvas.delete("all")
 
@@ -237,7 +246,9 @@ class MultizoneCFDWindow(tk.Toplevel):
             self.room_table.insert("","end",iid=rid,values=(r["name"],"—" if target is None else f"{target:g}",
                 f"{r['mean_pressure_pa_relative_to_reference']:.5g}",f"{r['mean_speed_m_s']:.4g}",
                 f"{r['supply_inflow_m3_s']*3600:.4g}",f"{r['return_outflow_m3_s']*3600:.4g}",
-                f"{r['net_outward_imbalance_m3_s']:.3g}",f"{r['upward_volume_fraction']*100:.1f}"))
+                f"{r['net_outward_imbalance_m3_s']:.3g}",
+                "—" if r['net_imbalance_fraction_of_throughflow'] is None else f"{r['net_imbalance_fraction_of_throughflow']*100:.3g}",
+                f"{r['upward_volume_fraction']*100:.1f}"))
         for name,d in report["doors"].items():
             self.door_table.insert("","end",values=(name,f"{d['computed_delta_pressure_pa']:.5g}",
                 d["design_delta_pressure_target_pa"],f"{d['computed_net_transfer_m3_s']*3600:.5g}",
@@ -249,6 +260,20 @@ class MultizoneCFDWindow(tk.Toplevel):
         self.status.set(f"COMPUTED • {report['mesh']['cells']:.0f} cells • iteration {report['time_name']} • "
                         +("solver reported convergence" if report["solver_reported_convergence"] else "NOT CONVERGED")
                         +f" • pressure relative to computed mean in {reference}. Engineering review required.")
+        numerics=report["numerics"]
+        final_verdict=(f"converged at iteration {numerics['solver_convergence_iteration']:g}"
+                       if numerics["run_reported_convergence"] else "did not report convergence")
+        balance=report["flow_balance"]
+        self.numerical_status.set(
+            f"Selected fields: iteration {report['time_name']}. Full run {final_verdict}. "
+            f"Sum of absolute cell flow imbalances: {balance['sum_absolute_cell_imbalance_m3_s']:.5g} m³/s; "
+            f"largest cell: {balance['max_absolute_cell_imbalance_m3_s']:.5g} m³/s.")
+        for field,data in numerics["fields"].items():
+            limit=data["configured_initial_residual_limit"]
+            below=data["initial_residual_below_limit"]
+            self.residual_table.insert("","end",iid=field,values=(field,
+                f"{data['first_initial_residual']:.5g}",f"{data['last_final_linear_residual']:.5g}",
+                "—" if limit is None else f"{limit:.5g}","unknown" if below is None else ("yes" if below else "no")))
         summary={k:v for k,v in report.items() if k not in ("cells","residual_history")}
         self.diagnostics.delete("1.0","end")
         self.diagnostics.insert("1.0",json.dumps(summary,indent=2,sort_keys=True,allow_nan=False))
@@ -337,6 +362,10 @@ class MultizoneCFDWindow(tk.Toplevel):
                 c.create_line(*points,fill=color,width=1.5,tags="computed-residual")
             index=("p","Ux","Uy","Uz").index(field)
             c.create_text(90+index*100,height-20,text=field,fill=color)
+        selected=float(self.report["time_name"])
+        x=65+selected/max_time*(width-90)
+        c.create_line(x,35,x,height-45,fill="#ffffff",dash=(4,3),tags="selected-iteration")
+        c.create_text(min(x,width-100),18,anchor="w",fill="#ffffff",text=f"Selected: {selected:g}")
 
     def export_report(self):
         if not self.report or self.running:

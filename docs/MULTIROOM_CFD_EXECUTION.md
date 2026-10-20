@@ -115,3 +115,72 @@ The final complete suite with both Foundation v10 and a real Tk display passed
 
 Foundation references: [v10 installation](https://openfoam.org/download/10-ubuntu/)
 and [momentumTransport dictionary](https://doc.cfd.direct/openfoam/user-guide-v10/turbulence).
+
+## Numerical review follow-up (20 October 2026)
+
+The **Residual histories** tab now lists the selected iteration's first initial
+residual, last linear-solver final residual and configured initial-residual
+limit for p/Ux/Uy/Uz. A white cursor marks the selected saved fields on the full
+run history. The run's eventual convergence verdict is reported separately.
+Selecting an earlier iteration cannot inherit a later SIMPLE convergence flag.
+Small final linear residuals alone cannot produce a convergence verdict.
+
+The room table includes the absolute net flow imbalance as a percentage of
+mean incoming/outgoing flow. Every computed `phi` contributes with its actual
+owner/neighbour sign. In addition to room net balances, the importer sums
+absolute cell flow imbalances and reports the largest cell imbalance. This
+avoids hiding local continuity errors behind cancellation in the global net.
+These metrics have units of m³/s; no commissioning tolerance is assumed. The
+OpenFOAM log's continuity diagnostics are retained separately, without
+reinterpreting their units as volumetric flow.
+
+HTML/JSON reports include these diagnostics. `room-balances.csv` exports room
+incoming/outgoing flow, net imbalance, relative imbalance and cell-balance
+statistics. `residuals.csv` retains the complete run history; `numerics` in the
+JSON identifies the exact selected iteration and full run convergence iteration.
+
+The actual numerical regression reduces the demo's supply inputs by **1/1000**
+(Process 2.7, Preparation 1.2, Ante 0.72 m³/h), retaining the geometry and explicit
+air-property assumptions. This deliberately reduced-flow case tests the
+convergence/snapshot contract. It is not evidence for the design airflow,
+closed-door leakage, cleanroom performance or a 5 Pa cascade. On the local
+Foundation v10 runtime it converged at iteration **163**; its saved iteration
+50 remains unconverged in both the API and the real Tk review panel.
+
+Actual manifests, execution receipts, losslessly compressed logs, computed
+summaries and real Tk screenshots are in `reports/multiroom-numerics-20261020/`.
+The low-flow input project is retained there; complete output fields can be
+regenerated with `multizone-generate` using 400 iterations and output interval
+50. Runtime-dependent hashes and convergence iteration can vary by environment.
+The ordinary design-airflow 600-iteration scenario is retained separately.
+
+The dedicated OpenFOAM workflow now uses `scripts/with_openfoam10.sh`.
+Foundation v10's optional interactive startup probes can exit a `bash -e`
+shell before pytest starts. The wrapper temporarily disables errexit for that
+initialization, restores fail-fast behavior, verifies all four executables and
+the actual Foundation v10 identity, then executes the requested command. A
+missing or unusable runtime still fails. For example, from the repository:
+
+```bash
+bash scripts/with_openfoam10.sh cleanroomx-gui --demo
+bash scripts/with_openfoam10.sh xvfb-run -a python -m pytest -q \
+  tests/test_cfd_multizone_execution.py tests/test_cfd_multizone_results.py
+```
+
+The startup correction passed the dedicated GitHub workflow (run 3); new
+convergence and conservation checks passed locally with actual Foundation v10
+and real Tk widgets. Parser-only synthetic fixtures are explicitly separated
+from the actual solver executions.
+
+The full GUI regression also exposed toolbar overflow at 1050×680: the added
+FFU/return/door controls could hide **Validate**. Those controls and validation
+now occupy a separate compact row. All 57 spatial editing GUI checks passed
+after the correction, including both supported test window sizes.
+Resizing also protects workspace height against an oversized output pane;
+the minimum-size check requires the design body itself to remain visible.
+All GUI modules plus spatial editing passed **232 checks** with real Tk 8.6
+after this resizing correction.
+The final complete suite with actual Foundation v10 and real Tk 8.6 passed
+**2,439 tests, 0 failed, 1 skipped** (optional native IfcOpenShell) in 160.20 s.
+The exact log, source hashes and validation summary are retained in the new
+report folder as `full-suite.log` and `validation.json`.

@@ -181,6 +181,7 @@ class MultizoneCFDWindow(tk.Toplevel):
         diagnostics=ttk.Frame(self.tabs,padding=8)
         engineering=ttk.Frame(self.tabs,padding=10)
         history_tab=ttk.Frame(self.tabs,padding=10)
+        self.history_tab=history_tab
         closed_tab=ttk.Frame(self.tabs,padding=10)
         for tab,label in ((summary,"Room comparison"),(fields,"Computed sections"),(residuals,"Residual histories"),(logs,"Solver logs"),(diagnostics,"Diagnostics / provenance"),(engineering,"Engineering review"),(history_tab,"Iteration stability"),(closed_tab,"Closed-door network")):
             self.tabs.add(tab,text=label)
@@ -652,7 +653,7 @@ class MultizoneCFDWindow(tk.Toplevel):
               else "latest NOT CONVERGED")
             +" | does NOT prove a 5 Pa closed-door cascade")
         self.draw_iteration_history()
-        self.tabs.select(self.tabs.index("end")-1)
+        self.tabs.select(self.history_tab)
 
     def draw_iteration_history(self):
         """Chart only genuine saved iteration points, never estimated CFD values."""

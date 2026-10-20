@@ -160,3 +160,16 @@ def test_new_json_export_is_noncertifying_and_refuses_overwrite(tmp_path):
     corrupted["validated_particle_transport"]=True
     with pytest.raises(ValueError,match="noncertifying"):
         export_particle_timestep_refinement(corrupted,tmp_path/"fake.json")
+    forged=copy.deepcopy(study)
+    forged["actual_timestep_refinement_observed"]=False
+    forged["screening_status"]="bounded_endpoint_change_under_tolerance"
+    with pytest.raises(ValueError,match="contradicts"):
+        export_particle_timestep_refinement(forged,tmp_path/"forged.json")
+    forged=copy.deepcopy(study)
+    forged["source_manifest_sha256"]="invalid"
+    with pytest.raises(ValueError,match="SHA-256"):
+        export_particle_timestep_refinement(forged,tmp_path/"nohash.json")
+    forged=copy.deepcopy(study)
+    forged["runs"][0]["endpoint_xyz_m"][0]=float("nan")
+    with pytest.raises(ValueError,match="finite"):
+        export_particle_timestep_refinement(forged,tmp_path/"nan.json")

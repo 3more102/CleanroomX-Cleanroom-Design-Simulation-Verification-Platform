@@ -1161,3 +1161,97 @@ def test_gui_cfd_export_requires_explicit_viscosity_and_supports_cancel(
     assert called == []
     assert not (tmp_path / "cleanroomx-cfd-rooms").exists()
     assert not any(path.name.startswith("room_") for path in tmp_path.iterdir())
+
+
+
+def test_connected_open_door_gui_requires_explicit_approval_and_saved_bytes(
+    app, tmp_path, monkeypatch
+):
+    import cleanroomx.gui as gui_module
+
+    calls = []
+    monkeypatch.setattr(
+        gui_module.messagebox, "askyesno",
+        lambda *a, **kw: calls.append("confirm") or True,
+    )
+    monkeypatch.setattr(
+        gui_module.simpledialog, "askfloat",
+        lambda *a, **kw: calls.append("viscosity") or 1.5e-5,
+    )
+    monkeypatch.setattr(
+        gui_module.filedialog, "askdirectory",
+        lambda *a, **kw: str(tmp_path),
+    )
+    monkeypatch.setattr(
+        gui_module.simpledialog, "askstring",
+        lambda *a, **kw: "one_connected_case",
+    )
+    notices = []
+    monkeypatch.setattr(
+        gui_module.messagebox, "showinfo",
+        lambda *a, **kw: notices.append(a),
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox, "showerror",
+        lambda *a, **kw: pytest.fail(str(a)),
+    )
+    initial_bytes = app.project_path.read_bytes()
+
+    def fake_export(project, directory, **kwargs):
+        calls.append(("export", project, directory, kwargs))
+        return {"case": {"fluid_block_count": 14000,
+                         "open_doors": {"a": {}, "b": {}, "c": {}}}}
+
+    monkeypatch.setattr(gui_module, "generate_multizone_open_door_case", fake_export)
+    app.export_connected_open_door_case()
+    assert calls[:2] == ["confirm", "viscosity"]
+    assert calls[2][0] == "export"
+    assert calls[2][1] == app.project_path
+    assert calls[2][2] == tmp_path / "one_connected_case"
+    assert calls[2][3] == {
+        "door_mode": "open", "kinematic_viscosity_m2_s": 1.5e-5,
+    }
+    assert notices and "No OpenFOAM solver was launched" in notices[-1][1]
+    assert app.project_path.read_bytes() == initial_bytes
+    assert not (tmp_path / "one_connected_case").exists()
+
+
+def test_connected_open_door_gui_decline_prevents_export(
+    app, monkeypatch
+):
+    import cleanroomx.gui as gui_module
+
+    calls = []
+    monkeypatch.setattr(
+        gui_module.messagebox, "askyesno",
+        lambda *a, **kw: calls.append("declined") or False,
+    )
+    monkeypatch.setattr(
+        gui_module.simpledialog, "askfloat",
+        lambda *a, **kw: pytest.fail("No viscosity prompt after declining"),
+    )
+    monkeypatch.setattr(
+        gui_module, "generate_multizone_open_door_case",
+        lambda *a, **kw: pytest.fail("No case generation after declining"),
+    )
+    app.export_connected_open_door_case()
+    assert calls == ["declined"]
+
+
+def test_connected_open_door_gui_blocks_unsaved_before_confirmation(
+    app, monkeypatch
+):
+    import cleanroomx.gui as gui_module
+
+    monkeypatch.setattr(
+        gui_module.messagebox, "askyesno",
+        lambda *a, **kw: pytest.fail("Cannot confirm unsaved geometry"),
+    )
+    notices = []
+    monkeypatch.setattr(
+        gui_module.messagebox, "showinfo",
+        lambda *a, **kw: notices.append(a),
+    )
+    app.description_var.set("unsaved CFD input")
+    app.export_connected_open_door_case()
+    assert notices and notices[-1][0] == "Save project first"

@@ -40,6 +40,14 @@ def app(tmp_path):
         root.destroy()
 
 
+
+def test_bundled_demo_renders_design_intent_ceiling_downflow_arrows(app):
+    workspace = app.spatial_workspace
+    app.notebook.select(workspace)
+    app.root.update()
+    assert len(workspace.canvas_3d.find_withtag("design-downflow")) == 12
+
+
 def test_duplicate_edit_undo_redo_save_reopen_and_analysis(app, tmp_path):
     workspace = app.spatial_workspace
     room = workspace.layout["rooms"][0]

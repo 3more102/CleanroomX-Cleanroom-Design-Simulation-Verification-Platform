@@ -296,7 +296,10 @@ The selected cell's *recorded* coordinates seed a bounded steady-streamline
 integration using the same OpenFOAM cell-centred U values and source iteration.
 The implementation refuses stale/mixed-source traces, missing/invalid fluid
 cells and more than 20 paths. Clicking off the real field displays a clear
-rejection message; **Clear 3D traces** removes only paths in the 3D viewer.
+rejection message; **Clear 3D traces** removes only paths in the 3D viewer. **Export 3D traces** writes a provenance-tagged JSON collection containing
+the selected OpenFOAM iteration, manifest/receipt SHA-256 identifiers, source
+units and all currently displayed 3D streamline coordinates. Existing files
+are never overwritten; a failed export is reported in the GUI status.
 Rotation/zoom retain the existing VTK camera and the selected fluid scene.
 The 3D control status labels each new path's point count and termination
 reason. Colors/room shapes remain a review visualization only.

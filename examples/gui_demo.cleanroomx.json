@@ -261,38 +261,41 @@
           {
             "id": "return-process",
             "type": "return",
-            "name": "process low-wall return (design)",
+            "name": "process west-wall low return (design)",
             "room_id": "process",
-            "x_m": 0.25,
+            "x_m": 0,
             "y_m": 2.5,
             "z_m": 0.3,
             "width_m": 0.5,
             "height_m": 0.3,
-            "orientation_deg": 0
+            "orientation_deg": 0,
+            "wall_side": "west"
           },
           {
             "id": "return-preparation",
             "type": "return",
-            "name": "preparation low-wall return (design)",
+            "name": "preparation west-wall low return (design)",
             "room_id": "preparation",
-            "x_m": 6.25,
+            "x_m": 6,
             "y_m": 2,
             "z_m": 0.3,
             "width_m": 0.5,
             "height_m": 0.3,
-            "orientation_deg": 0
+            "orientation_deg": 0,
+            "wall_side": "west"
           },
           {
             "id": "return-ante",
             "type": "return",
-            "name": "ante low-wall return (design)",
+            "name": "ante west-wall low return (design)",
             "room_id": "ante",
-            "x_m": 11.25,
+            "x_m": 11,
             "y_m": 1.5,
             "z_m": 0.3,
             "width_m": 0.5,
             "height_m": 0.3,
-            "orientation_deg": 0
+            "orientation_deg": 0,
+            "wall_side": "west"
           },
           {
             "id": "equipment-process",

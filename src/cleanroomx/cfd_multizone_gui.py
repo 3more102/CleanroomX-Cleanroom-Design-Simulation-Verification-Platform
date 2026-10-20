@@ -13,6 +13,10 @@ from .cfd_multizone import run_multizone_open_door_case, verify_multizone_inputs
 from .cfd_multizone_results import analyze_multizone_case, export_multizone_report
 from .cfd_streamlines import trace_computed_streamline, export_computed_streamlines
 from .cfd_multizone_review import review_recorded_multizone, export_engineering_review
+from .cfd_closed_door_comparison import (
+    load_closed_door_network_scenario, compare_closed_network_with_open_cfd,
+    export_closed_door_comparison,
+)
 from .cfd_multizone_stability import (
     SCHEMA as HISTORY_SCHEMA, analyze_recorded_iteration_history,
     export_recorded_iteration_history,
@@ -40,6 +44,7 @@ class MultizoneCFDWindow(tk.Toplevel):
         self.report = None
         self.engineering_review = None
         self.iteration_history = None
+        self.closed_door_comparison = None
         self.running = False
         self.events = queue.Queue()
         self.case_path = tk.StringVar(value=str(directory or ""))
@@ -95,7 +100,8 @@ class MultizoneCFDWindow(tk.Toplevel):
         diagnostics=ttk.Frame(self.tabs,padding=8)
         engineering=ttk.Frame(self.tabs,padding=10)
         history_tab=ttk.Frame(self.tabs,padding=10)
-        for tab,label in ((summary,"Room comparison"),(fields,"Computed sections"),(residuals,"Residual histories"),(logs,"Solver logs"),(diagnostics,"Diagnostics / provenance"),(engineering,"Engineering review"),(history_tab,"Iteration stability")):
+        closed_tab=ttk.Frame(self.tabs,padding=10)
+        for tab,label in ((summary,"Room comparison"),(fields,"Computed sections"),(residuals,"Residual histories"),(logs,"Solver logs"),(diagnostics,"Diagnostics / provenance"),(engineering,"Engineering review"),(history_tab,"Iteration stability"),(closed_tab,"Closed-door network")):
             self.tabs.add(tab,text=label)
         columns=("name","target","pressure","speed","supply","returns","imbalance","balance_pct","upward")
         self.room_table=ttk.Treeview(summary,columns=columns,show="headings",height=5)
@@ -165,6 +171,33 @@ class MultizoneCFDWindow(tk.Toplevel):
         ttk.Label(history_tab,
             text="Every marker is a saved OpenFOAM SIMPLE iteration. Connecting lines are visual guides ONLY; they do not create intermediate CFD results or represent seconds. Engineering decision remains HOLD.",
             wraplength=1050).pack(anchor="w",pady=5)
+        closed_head=ttk.Frame(closed_tab)
+        closed_head.pack(fill="x",pady=5)
+        self.closed_door_status=tk.StringVar(
+            value="Engineering HOLD | Import recorded OPEN-door CFD and independently specified CLOSED-door leakage inputs.")
+        ttk.Label(closed_head,textvariable=self.closed_door_status,
+                  wraplength=760).pack(side="left",fill="x",expand=True)
+        ttk.Button(closed_head,text="Load leakage scenario JSON",
+                   command=self.import_closed_door_network).pack(side="right",padx=5)
+        ttk.Button(closed_head,text="Export comparison JSON",
+                   command=self.export_closed_door_comparison_file).pack(side="right",padx=5)
+        ttk.Label(closed_tab,text="This comparison uses the existing room-pressure network solver, NOT a second CFD run. Enter measured/manufacturer/explicit engineering-assumption leakage coefficients and independent supply/return values in JSON. It never certifies 5 Pa.",wraplength=1100).pack(anchor="w",pady=8)
+        self.closed_door_table=ttk.Treeview(
+            closed_tab,columns=("door","target","open_p","network_p","difference",
+                                "network_flow","basis","nominal"),
+            show="headings",height=5)
+        for key,label in (
+            ("door","Door"),("target","Target Δp Pa"),
+            ("open_p","Open CFD Δp Pa"),("network_p","Closed network Δp Pa"),
+            ("difference","Closed − open Pa"),("network_flow","Closed flow m³/h"),
+            ("basis","Leakage source"),("nominal","Nominal network target"),
+        ):
+            self.closed_door_table.heading(key,text=label)
+            self.closed_door_table.column(key,width=145,minwidth=75)
+        self.closed_door_table.pack(fill="x",pady=8)
+        self.closed_door_details=tk.Text(
+            closed_tab,wrap="word",font=("TkFixedFont",10),height=14)
+        self.closed_door_details.pack(fill="both",expand=True)
         self.pressure_canvas=tk.Canvas(summary,background="#101b2b",highlightthickness=0,height=220)
         self.pressure_canvas.pack(fill="both",expand=True,pady=8)
         self.pressure_canvas.bind("<Configure>",lambda e:self.draw_pressure())
@@ -319,6 +352,10 @@ class MultizoneCFDWindow(tk.Toplevel):
         self.trace_status.set("Click a computed fluid cell to trace its steady 3D streamline.")
         self.engineering_review = None
         self.iteration_history = None
+        self.closed_door_comparison = None
+        self.closed_door_status.set("Engineering HOLD | Closed leakage scenario not loaded")
+        self.closed_door_table.delete(*self.closed_door_table.get_children())
+        self.closed_door_details.delete("1.0","end")
         self.history_status.set("Analyze saved OpenFOAM iterations; not physical time.")
         self.history_table.delete(*self.history_table.get_children())
         self.history_pressure_canvas.delete("all")
@@ -539,6 +576,78 @@ class MultizoneCFDWindow(tk.Toplevel):
             c.create_text(12,y,anchor="w",fill="#d9e7f7",text=r["name"])
             c.create_rectangle(min(center,end),y-9,max(center+1,end),y+9,fill="#22c5d6",outline="",tags="computed-pressure")
             c.create_text(width-20,y,anchor="e",fill="#d9e7f7",text=f"{value:.6g} Pa")
+
+    def import_closed_door_network(self):
+        """Read explicit leakage source JSON; never infer closed leakage from open CFD."""
+        if not self.report or self.running:
+            self.closed_door_status.set("Import verified open-door OpenFOAM results first.")
+            return
+        path=filedialog.askopenfilename(
+            parent=self,title="Select independently sourced closed-door leakage scenario",
+            filetypes=(("JSON","*.json"),))
+        if not path:
+            return
+        try:
+            model,evidence,sha=load_closed_door_network_scenario(path)
+            comparison=compare_closed_network_with_open_cfd(
+                self.report,model,evidence,scenario_sha256=sha)
+            self.load_closed_door_comparison(comparison)
+        except (ValueError,RuntimeError,OSError) as exc:
+            self.closed_door_status.set(f"Closed-door comparison rejected: {exc}")
+            messagebox.showerror("Closed-door leakage scenario rejected",str(exc),parent=self)
+
+    def load_closed_door_comparison(self,comparison):
+        if (comparison.get("engineering_release")!="HOLD" or
+            comparison.get("closed_door_5pa_cfd_demonstrated") is not False or
+            (self.report and
+             comparison["open_cfd_provenance"]["run_receipt_sha256"]!=
+             self.report["provenance"]["run_receipt_sha256"])):
+            raise ValueError("Closed-door comparison is invalid or from another CFD run")
+        self.closed_door_comparison=comparison
+        self.closed_door_table.delete(*self.closed_door_table.get_children())
+        for d in comparison["door_comparison"]:
+            self.closed_door_table.insert("","end",values=(
+                d["door"],f"{d['design_target_pa']:.5g}",
+                f"{d['open_door_cfd_delta_pa']:.5g}",
+                f"{d['closed_door_network_delta_pa']:.5g}",
+                f"{d['closed_network_minus_open_cfd_delta_pa']:+.5g}",
+                f"{d['closed_door_network_flow_m3_h']:.5g}",
+                d["leakage_source_basis"],
+                "model yes" if d["closed_network_meets_nominal_target"] else "model no"))
+        note="\n".join([
+            "ENGINEERING HOLD — TWO DIFFERENT MODELS; NO CLOSED-DOOR CFD",
+            "Open-field source iteration: "+
+            comparison["open_cfd_provenance"]["selected_iteration"],
+            "Network result: "+comparison["network_solver_result"]["status"],
+            "Network nominal targets: "+
+            ("all met" if comparison["network_nominal_targets_met"] else "at least one missed"),
+            "Leakage path evidence:",
+            *(" - "+p+": "+v["basis"]+" — "+v["reference"]
+              for p,v in sorted(comparison["path_evidence"].items())),
+            "Engineering limitations:",*(
+                " - "+x for x in comparison["limitations"])
+        ])
+        self.closed_door_details.delete("1.0","end")
+        self.closed_door_details.insert("1.0",note)
+        self.closed_door_status.set(
+            "ENGINEERING HOLD | compared recorded OPEN-door CFD with independently "
+            "specified CLOSED-door leakage NETWORK; NOT closed-door CFD")
+        self.tabs.select(self.tabs.index("end")-1)
+
+    def export_closed_door_comparison_file(self):
+        if not self.closed_door_comparison or self.running:
+            return
+        filename=filedialog.asksaveasfilename(
+            parent=self,title="Export source-linked two-model comparison (HOLD only)",
+            defaultextension=".json",filetypes=(("JSON","*.json"),))
+        if not filename:
+            return
+        try:
+            saved=export_closed_door_comparison(self.closed_door_comparison,filename)
+        except (ValueError,OSError) as exc:
+            messagebox.showerror("Closed-door comparison export rejected",str(exc),parent=self)
+            return
+        self.closed_door_status.set(f"ENGINEERING HOLD | Saved: {saved}")
 
     def export_engineering_review_file(self):
         if not self.engineering_review or self.running:

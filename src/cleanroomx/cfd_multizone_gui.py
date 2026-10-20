@@ -220,6 +220,11 @@ class MultizoneCFDWindow(tk.Toplevel):
             self.closed_sweep_table.heading(key,text=label)
             self.closed_sweep_table.column(key,width=180,minwidth=95)
         self.closed_sweep_table.pack(fill="x",pady=(4,8))
+        self.closed_sweep_canvas=tk.Canvas(
+            closed_tab,height=175,background="#101b2b",highlightthickness=0)
+        self.closed_sweep_canvas.pack(fill="x",pady=4)
+        self.closed_sweep_canvas.bind(
+            "<Configure>",lambda _event:self.draw_closed_leakage_sensitivity())
         self.closed_door_details=tk.Text(
             closed_tab,wrap="word",font=("TkFixedFont",10),height=14)
         self.closed_door_details.pack(fill="both",expand=True)
@@ -383,6 +388,7 @@ class MultizoneCFDWindow(tk.Toplevel):
         self.closed_door_scenario_sha = None
         self.closed_door_sensitivity = None
         self.closed_sweep_table.delete(*self.closed_sweep_table.get_children())
+        self.closed_sweep_canvas.delete("all")
         self.closed_door_status.set("Engineering HOLD | Closed leakage scenario not loaded")
         self.closed_door_table.delete(*self.closed_door_table.get_children())
         self.closed_door_details.delete("1.0","end")
@@ -663,6 +669,7 @@ class MultizoneCFDWindow(tk.Toplevel):
         self.closed_door_comparison=comparison
         self.closed_door_sensitivity=None
         self.closed_sweep_table.delete(*self.closed_sweep_table.get_children())
+        self.closed_sweep_canvas.delete("all")
         self.closed_door_table.delete(*self.closed_door_table.get_children())
         for d in comparison["door_comparison"]:
             self.closed_door_table.insert("","end",values=(
@@ -727,9 +734,66 @@ class MultizoneCFDWindow(tk.Toplevel):
                     door["door"],
                     f"{door['computed_closed_network_delta_pa']:.5g}",
                     "model yes" if door["nominal_target_met"] else "model no"))
+        self.draw_closed_leakage_sensitivity()
         self.closed_door_status.set(
             "ENGINEERING HOLD | Hypothetical leakage sensitivity 0.5×/1×/2×. "
             "Not measured uncertainty, CFD or proof of 5 Pa.")
+
+    def draw_closed_leakage_sensitivity(self):
+        """Plot ONLY actually solved network factors; joining lines are guides."""
+        canvas=self.closed_sweep_canvas
+        canvas.delete("all")
+        sweep=self.closed_door_sensitivity
+        if not sweep:
+            return
+        series=sweep["factor_results"]
+        width=max(canvas.winfo_width(),700)
+        height=max(canvas.winfo_height(),175)
+        left,right,top,bottom=70,width-22,36,height-28
+        factors=[float(item["leakage_multiplier"]) for item in series]
+        names=sorted({d["door"] for d in series[0]["door_results"]})
+        all_values=[
+            d["computed_closed_network_delta_pa"]
+            for item in series for d in item["door_results"]]
+        all_values.extend(
+            d["nominal_design_delta_pa"] for d in series[0]["door_results"])
+        low,high=min(all_values),max(all_values)
+        stretch=max(high-low,max(abs(low),abs(high),1.)*.04)
+        low-=stretch*.08
+        high+=stretch*.08
+        canvas.create_text(12,15,anchor="w",fill="#e4f0fa",
+            text="Closed NETWORK Δp vs illustrative leakage multiplier — NOT CFD")
+        canvas.create_line(left,top,left,bottom,fill="#72829e")
+        canvas.create_line(left,bottom,right,bottom,fill="#72829e")
+        canvas.create_text(8,top,anchor="w",fill="#9cb5ce",text=f"{high:.4g} Pa")
+        canvas.create_text(8,bottom,anchor="w",fill="#9cb5ce",text=f"{low:.4g} Pa")
+        def xp(factor):
+            return left+(factor-factors[0])/(factors[-1]-factors[0])*(right-left)
+        def yp(value):
+            return bottom-(value-low)/(high-low)*(bottom-top)
+        for factor in factors:
+            canvas.create_text(xp(factor),bottom+13,fill="#a8bcd4",
+                text=f"{factor:g}×",tags="leakage-factor-marker")
+        palette=("#22c5d6","#f6bb69","#9ade9f","#bc9aff","#f99aba")
+        for i,name in enumerate(names):
+            color=palette[i%len(palette)]
+            per_factor=[
+                next(d for d in item["door_results"] if d["door"]==name)
+                for item in series]
+            target=per_factor[0]["nominal_design_delta_pa"]
+            ytarget=yp(target)
+            canvas.create_line(left,ytarget,right,ytarget,fill=color,
+                dash=(3,5),tags="leakage-design-target")
+            points=[(xp(f),yp(d["computed_closed_network_delta_pa"]))
+                    for f,d in zip(factors,per_factor)]
+            for a,b in zip(points,points[1:]):
+                canvas.create_line(*a,*b,fill=color,width=2,
+                    tags="leakage-snapshot-guide")
+            for x,y in points:
+                canvas.create_oval(x-4,y-4,x+4,y+4,fill=color,
+                    outline="#101b2b",tags="leakage-solved-point")
+            canvas.create_text(right-5,top+15*i,anchor="ne",fill=color,
+                text=name+" (dashed=design target)",tags="leakage-legend")
 
     def export_closed_leakage_sensitivity_file(self):
         if self.closed_door_sensitivity is None or self.running:

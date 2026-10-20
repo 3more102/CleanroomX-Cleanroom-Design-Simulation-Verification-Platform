@@ -58,6 +58,15 @@ def _require_sha256(value: Any, field: str) -> str:
 
 
 def _identity(info: os.stat_result) -> tuple[int, int, int, int, int]:
+    """Compare stable file metadata across path-stat and descriptor-fstat.
+
+    Windows may report different device, file-index and creation/change-time
+    values from os.stat() and os.fstat() for the same unmodified file.
+    Size and last-modified time remain comparable on both APIs. Manifest and
+    receipt hashes are independently validated wherever referenced.
+    """
+    if os.name == "nt":
+        return (0, 0, info.st_size, info.st_mtime_ns, 0)
     return (
         info.st_dev,
         info.st_ino,

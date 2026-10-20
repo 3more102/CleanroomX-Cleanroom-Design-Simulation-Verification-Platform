@@ -1,279 +1,10 @@
 {
-  "schema": "cleanroomx.project",
-  "schema_version": 1,
-  "application_version": "0.102.1",
-  "project": {
-    "name": "CleanroomX GUI Demonstration",
-    "description": "End-to-end project exercising verification, HVAC, fan operating point, nonlinear loop, uncertainty, consistency, and dossier workflows.",
-    "metadata": {
-      "purpose": "GUI and application-service demonstration",
-      "spatial_layout": {
-        "version": 1,
-        "floor": {
-          "id": "floor-1",
-          "name": "Main Cleanroom Floor",
-          "elevation_m": 0,
-          "default_ceiling_height_m": 3,
-          "units": "m"
-        },
-        "grid_m": 0.5,
-        "rooms": [
-          {
-            "id": "process",
-            "name": "Process",
-            "analysis_room_name": "Process",
-            "x_m": 0,
-            "y_m": 0,
-            "length_m": 6,
-            "width_m": 5,
-            "height_m": 3,
-            "floor_elevation_m": 0,
-            "pressure_pa": 30,
-            "classification": "Demo process suite"
-          },
-          {
-            "id": "preparation",
-            "name": "Preparation",
-            "analysis_room_name": "Preparation",
-            "x_m": 7,
-            "y_m": 0,
-            "length_m": 5,
-            "width_m": 4,
-            "height_m": 3,
-            "floor_elevation_m": 0,
-            "pressure_pa": 16,
-            "classification": "Demo preparation suite"
-          },
-          {
-            "id": "ante",
-            "name": "Ante / Airlock",
-            "analysis_room_name": "Ante",
-            "x_m": 13,
-            "y_m": 0,
-            "length_m": 4,
-            "width_m": 3,
-            "height_m": 3,
-            "floor_elevation_m": 0,
-            "pressure_pa": 8,
-            "classification": "Demo transition suite"
-          }
-        ],
-        "devices": [
-          {
-            "id": "door-process",
-            "type": "door",
-            "name": "Process Door",
-            "room_id": "process",
-            "x_m": 3,
-            "y_m": 0,
-            "z_m": 0,
-            "width_m": 1,
-            "height_m": 2.1,
-            "orientation_deg": 0,
-            "wall_side": "south",
-            "swing": "left"
-          },
-          {
-            "id": "supply-process",
-            "type": "supply",
-            "name": "Process Supply",
-            "room_id": "process",
-            "x_m": 1.5,
-            "y_m": 2,
-            "z_m": 3,
-            "width_m": 0.4,
-            "height_m": 0.2,
-            "orientation_deg": 0
-          },
-          {
-            "id": "ffu-process",
-            "type": "ffu",
-            "name": "Process FFU",
-            "room_id": "process",
-            "x_m": 4.5,
-            "y_m": 3,
-            "z_m": 3,
-            "width_m": 0.4,
-            "height_m": 0.2,
-            "orientation_deg": 0
-          },
-          {
-            "id": "return-process",
-            "type": "return",
-            "name": "Process Return",
-            "room_id": "process",
-            "x_m": 5.5,
-            "y_m": 2,
-            "z_m": 3,
-            "width_m": 0.4,
-            "height_m": 0.2,
-            "orientation_deg": 0
-          },
-          {
-            "id": "equipment-process",
-            "type": "equipment",
-            "name": "Process Tool",
-            "room_id": "process",
-            "x_m": 3,
-            "y_m": 3.5,
-            "z_m": 0,
-            "width_m": 1,
-            "height_m": 1.2,
-            "orientation_deg": 0
-          },
-          {
-            "id": "door-preparation",
-            "type": "door",
-            "name": "Preparation Door",
-            "room_id": "preparation",
-            "x_m": 9.5,
-            "y_m": 0,
-            "z_m": 0,
-            "width_m": 0.9,
-            "height_m": 2.1,
-            "orientation_deg": 0,
-            "wall_side": "south",
-            "swing": "right"
-          },
-          {
-            "id": "supply-preparation",
-            "type": "supply",
-            "name": "Preparation Supply",
-            "room_id": "preparation",
-            "x_m": 9,
-            "y_m": 2,
-            "z_m": 3,
-            "width_m": 0.4,
-            "height_m": 0.2,
-            "orientation_deg": 0
-          },
-          {
-            "id": "return-preparation",
-            "type": "return",
-            "name": "Preparation Return",
-            "room_id": "preparation",
-            "x_m": 11,
-            "y_m": 2,
-            "z_m": 3,
-            "width_m": 0.4,
-            "height_m": 0.2,
-            "orientation_deg": 0
-          },
-          {
-            "id": "door-ante",
-            "type": "door",
-            "name": "Ante Door",
-            "room_id": "ante",
-            "x_m": 15,
-            "y_m": 0,
-            "z_m": 0,
-            "width_m": 0.9,
-            "height_m": 2.1,
-            "orientation_deg": 0,
-            "wall_side": "south",
-            "swing": "left"
-          },
-          {
-            "id": "transfer-ante",
-            "type": "transfer",
-            "name": "Ante Transfer",
-            "room_id": "ante",
-            "x_m": 16,
-            "y_m": 3,
-            "z_m": 1,
-            "width_m": 0.6,
-            "height_m": 0.4,
-            "orientation_deg": 0,
-            "wall_side": "north"
-          }
-        ],
-        "view": {
-          "zoom_2d": 1,
-          "pan_x": 0,
-          "pan_y": 0,
-          "azimuth_deg": 35,
-          "elevation_deg": 28,
-          "zoom_3d": 1,
-          "pan_3d_x": 0,
-          "pan_3d_y": 0,
-          "snap_to_grid": true,
-          "show_pressure": true,
-          "show_labels": true,
-          "show_devices": true,
-          "show_relationships": true
-        },
-        "engineering_sync": {
-          "analysis_id": "verification",
-          "rooms": [
-            {
-              "room_id": "process",
-              "analysis_room_name": "Process",
-              "length_m": 6,
-              "width_m": 5,
-              "height_m": 3
-            },
-            {
-              "room_id": "preparation",
-              "analysis_room_name": "Preparation",
-              "length_m": 5,
-              "width_m": 4,
-              "height_m": 3
-            },
-            {
-              "room_id": "ante",
-              "analysis_room_name": "Ante",
-              "length_m": 4,
-              "width_m": 3,
-              "height_m": 3
-            }
-          ]
-        }
-      }
-    }
-  },
+  "active_analysis_id": "verification",
   "analyses": [
     {
       "id": "verification",
-      "name": "Facility verification",
-      "kind": "project_verification",
       "input": {
         "name": "Pilot cleanroom suite",
-        "rooms": [
-          {
-            "name": "Process",
-            "length_m": 6,
-            "width_m": 5,
-            "height_m": 3,
-            "supply_airflow_m3_h": 2700,
-            "min_ach": 25,
-            "observed_pressure_pa": 30,
-            "particle_requirements": [
-              {
-                "size_um": 0.5,
-                "max_concentration_per_m3": 400000,
-                "observed_concentration_per_m3": 120000
-              }
-            ]
-          },
-          {
-            "name": "Preparation",
-            "length_m": 5,
-            "width_m": 4,
-            "height_m": 3,
-            "supply_airflow_m3_h": 1200,
-            "min_ach": 20,
-            "observed_pressure_pa": 16
-          },
-          {
-            "name": "Ante",
-            "length_m": 4,
-            "width_m": 3,
-            "height_m": 3,
-            "supply_airflow_m3_h": 720,
-            "min_ach": 20,
-            "observed_pressure_pa": 8
-          }
-        ],
         "pressure_cascade": [
           {
             "higher_pressure_room": "Process",
@@ -285,46 +16,73 @@
             "lower_pressure_room": "Ante",
             "min_delta_pa": 5
           }
+        ],
+        "rooms": [
+          {
+            "height_m": 3,
+            "length_m": 6,
+            "min_ach": 25,
+            "name": "Process",
+            "observed_pressure_pa": 30,
+            "particle_requirements": [
+              {
+                "max_concentration_per_m3": 400000,
+                "observed_concentration_per_m3": 120000,
+                "size_um": 0.5
+              }
+            ],
+            "supply_airflow_m3_h": 2700,
+            "width_m": 5
+          },
+          {
+            "height_m": 3,
+            "length_m": 5,
+            "min_ach": 20,
+            "name": "Preparation",
+            "observed_pressure_pa": 16,
+            "supply_airflow_m3_h": 1200,
+            "width_m": 4
+          },
+          {
+            "height_m": 3,
+            "length_m": 4,
+            "min_ach": 20,
+            "name": "Ante",
+            "observed_pressure_pa": 8,
+            "supply_airflow_m3_h": 720,
+            "width_m": 3
+          }
         ]
-      }
+      },
+      "kind": "project_verification",
+      "name": "Facility verification"
     },
     {
       "id": "hvac",
-      "name": "HVAC and duct screening",
-      "kind": "hvac",
       "input": {
-        "name": "Duct Critical Path Demo",
-        "fan_system": {
-          "name": "Supply AHU",
-          "duct_pressure_drop_pa": 0,
-          "coil_pressure_drop_pa": 180,
-          "other_pressure_drop_pa": 90,
-          "fan_efficiency": 0.68,
-          "motor_efficiency": 0.92
-        },
         "duct_network": {
           "paths": [
             {
               "name": "Process Bay Path",
               "sections": [
                 {
-                  "name": "Main rectangular trunk",
-                  "length_m": 18,
+                  "air_density_kg_m3": 1.2,
                   "airflow_m3_h": 5400,
                   "friction_factor": 0.02,
-                  "air_density_kg_m3": 1.2,
+                  "height_m": 0.45,
+                  "length_m": 18,
                   "local_loss_coefficient": 1.8,
-                  "width_m": 0.8,
-                  "height_m": 0.45
+                  "name": "Main rectangular trunk",
+                  "width_m": 0.8
                 },
                 {
-                  "name": "Process branch",
-                  "length_m": 12,
-                  "airflow_m3_h": 3600,
-                  "friction_factor": 0.021,
                   "air_density_kg_m3": 1.2,
+                  "airflow_m3_h": 3600,
+                  "diameter_m": 0.5,
+                  "friction_factor": 0.021,
+                  "length_m": 12,
                   "local_loss_coefficient": 2.4,
-                  "diameter_m": 0.5
+                  "name": "Process branch"
                 }
               ]
             },
@@ -332,43 +90,51 @@
               "name": "Gowning Path",
               "sections": [
                 {
-                  "name": "Gowning branch",
-                  "length_m": 10,
+                  "air_density_kg_m3": 1.2,
                   "airflow_m3_h": 900,
                   "friction_factor": 0.021,
-                  "air_density_kg_m3": 1.2,
+                  "height_m": 0.25,
+                  "length_m": 10,
                   "local_loss_coefficient": 2,
-                  "width_m": 0.4,
-                  "height_m": 0.25
+                  "name": "Gowning branch",
+                  "width_m": 0.4
                 }
               ]
             }
           ]
         },
+        "fan_system": {
+          "coil_pressure_drop_pa": 180,
+          "duct_pressure_drop_pa": 0,
+          "fan_efficiency": 0.68,
+          "motor_efficiency": 0.92,
+          "name": "Supply AHU",
+          "other_pressure_drop_pa": 90
+        },
+        "name": "Duct Critical Path Demo",
         "rooms": [
           {
-            "name": "Process Bay",
             "cleanroom_airflow_m3_h": 3600,
+            "name": "Process Bay",
             "thermal_design": {
+              "loads": {
+                "equipment_w": 4000
+              },
               "room_air": {
                 "dry_bulb_c": 22,
                 "relative_humidity_percent": 45
-              },
-              "loads": {
-                "equipment_w": 4000
               },
               "supply_air_temp_c": 16
             }
           }
         ]
-      }
+      },
+      "kind": "hvac",
+      "name": "HVAC and duct screening"
     },
     {
       "id": "fan-point",
-      "name": "Fan/system operating point",
-      "kind": "fan_operating_point",
       "input": {
-        "name": "Supply fan operating-point demo",
         "fan_curve": {
           "name": "Example manufacturer fan curve",
           "points": [
@@ -390,133 +156,135 @@
             }
           ]
         },
+        "name": "Supply fan operating-point demo",
         "system_curve": {
-          "name": "Example duct system",
           "fixed_pressure_pa": 80,
+          "name": "Example duct system",
           "resistance_pa_per_m3_s_squared": 100
         }
-      }
+      },
+      "kind": "fan_operating_point",
+      "name": "Fan/system operating point"
     },
     {
       "id": "nonlinear-loop",
-      "name": "Fan variable-friction loop",
-      "kind": "fan_variable_friction_loop",
       "input": {
-        "name": "Fan-driven variable-friction two-path loop",
+        "fan_curve": {
+          "name": "Variable-friction demo fan",
+          "points": [
+            {
+              "airflow_m3_h": 0,
+              "pressure_pa": 800
+            },
+            {
+              "airflow_m3_h": 5400,
+              "pressure_pa": 350
+            },
+            {
+              "airflow_m3_h": 9000,
+              "pressure_pa": 0
+            }
+          ]
+        },
         "fan_discharge_node": "Supply",
         "fan_suction_node": "Return",
         "fixed_pressure_pa": 20,
-        "fan_curve": {
-          "name": "Variable-friction demo fan",
-          "points": [
-            {
-              "airflow_m3_h": 0,
-              "pressure_pa": 800
-            },
-            {
-              "airflow_m3_h": 5400,
-              "pressure_pa": 350
-            },
-            {
-              "airflow_m3_h": 9000,
-              "pressure_pa": 0
-            }
-          ]
-        },
         "loop_network": {
-          "name": "Variable-friction two-path loop",
-          "reference_node": "Supply",
-          "node_injections_m3_h": {
-            "Supply": 5400,
-            "Mid": 0,
-            "Return": -5400
-          },
           "edges": [
             {
-              "name": "Direct",
-              "start_node": "Supply",
-              "end_node": "Return",
               "duct_geometry": {
-                "length_m": 18,
+                "absolute_roughness_m": 0.00015,
                 "air_density_kg_m3": 1.2,
-                "local_loss_coefficient": 1.3,
                 "diameter_m": 0.45,
-                "absolute_roughness_m": 0.00015,
-                "kinematic_viscosity_m2_s": 0.000015,
+                "kinematic_viscosity_m2_s": 1.5e-05,
+                "length_m": 18,
+                "local_loss_coefficient": 1.3,
                 "reference_airflow_m3_h": 2700
-              }
-            },
-            {
-              "name": "Upper 1",
-              "start_node": "Supply",
-              "end_node": "Mid",
-              "duct_geometry": {
-                "length_m": 10,
-                "air_density_kg_m3": 1.2,
-                "local_loss_coefficient": 0.6,
-                "diameter_m": 0.35,
-                "absolute_roughness_m": 0.00015,
-                "kinematic_viscosity_m2_s": 0.000015,
-                "reference_airflow_m3_h": 2700
-              }
-            },
-            {
-              "name": "Upper 2",
-              "start_node": "Mid",
+              },
               "end_node": "Return",
+              "name": "Direct",
+              "start_node": "Supply"
+            },
+            {
               "duct_geometry": {
-                "length_m": 10,
-                "air_density_kg_m3": 1.2,
-                "local_loss_coefficient": 0.6,
-                "diameter_m": 0.35,
                 "absolute_roughness_m": 0.00015,
-                "kinematic_viscosity_m2_s": 0.000015,
+                "air_density_kg_m3": 1.2,
+                "diameter_m": 0.35,
+                "kinematic_viscosity_m2_s": 1.5e-05,
+                "length_m": 10,
+                "local_loss_coefficient": 0.6,
                 "reference_airflow_m3_h": 2700
-              }
+              },
+              "end_node": "Mid",
+              "name": "Upper 1",
+              "start_node": "Supply"
+            },
+            {
+              "duct_geometry": {
+                "absolute_roughness_m": 0.00015,
+                "air_density_kg_m3": 1.2,
+                "diameter_m": 0.35,
+                "kinematic_viscosity_m2_s": 1.5e-05,
+                "length_m": 10,
+                "local_loss_coefficient": 0.6,
+                "reference_airflow_m3_h": 2700
+              },
+              "end_node": "Return",
+              "name": "Upper 2",
+              "start_node": "Mid"
             }
-          ]
+          ],
+          "name": "Variable-friction two-path loop",
+          "node_injections_m3_h": {
+            "Mid": 0,
+            "Return": -5400,
+            "Supply": 5400
+          },
+          "reference_node": "Supply"
         },
-        "solver": {
-          "resistance_relative_tolerance": 0.000001,
-          "relaxation": 0.7,
-          "near_zero_airflow_m3_h": 0.000001,
-          "max_outer_iterations": 50,
-          "mass_balance_tolerance_m3_h": 0.000001,
-          "max_newton_iterations": 100,
-          "operating_pressure_tolerance_pa": 0.000001,
-          "max_operating_iterations": 80
-        },
+        "name": "Fan-driven variable-friction two-path loop",
         "power_efficiencies": {
           "fan_efficiency": 0.72,
           "motor_efficiency": 0.93,
           "vfd_efficiency": 0.97
+        },
+        "solver": {
+          "mass_balance_tolerance_m3_h": 1e-06,
+          "max_newton_iterations": 100,
+          "max_operating_iterations": 80,
+          "max_outer_iterations": 50,
+          "near_zero_airflow_m3_h": 1e-06,
+          "operating_pressure_tolerance_pa": 1e-06,
+          "relaxation": 0.7,
+          "resistance_relative_tolerance": 1e-06
         }
-      }
+      },
+      "kind": "fan_variable_friction_loop",
+      "name": "Fan variable-friction loop"
     },
     {
       "id": "nonlinear-uncertainty",
-      "name": "Nonlinear bounded uncertainty",
-      "kind": "fan_variable_friction_uncertainty",
       "input": {
-        "name": "Variable-friction fan-loop bounded uncertainty",
-        "fan_discharge_node": "Supply",
-        "fan_suction_node": "Return",
-        "fixed_pressure_pa": {
-          "value": 20,
-          "uncertainty_abs": 5,
-          "provenance": {
-            "source_type": "design_basis",
-            "source_name": "Demo fixed-pressure allowance",
-            "uncertainty_basis": "Illustrative absolute engineering bound"
+        "edge_local_loss_uncertainty": {
+          "Direct": {
+            "provenance": {
+              "source_name": "Direct-path fitting allowance",
+              "source_type": "design_basis",
+              "uncertainty_basis": "Illustrative absolute K bound"
+            },
+            "uncertainty_abs": 0.2
+          },
+          "Upper 1": {
+            "provenance": {
+              "source_name": "Upper-path fitting allowance",
+              "source_type": "design_basis",
+              "uncertainty_basis": "Illustrative absolute K bound"
+            },
+            "uncertainty_abs": 0.1
           }
         },
         "fan_curve": {
           "name": "Variable-friction demo fan",
-          "provenance": {
-            "source_type": "manufacturer_data",
-            "source_name": "Illustrative supplied fan curve",
-            "reference": "Demo only"
-          },
           "points": [
             {
               "airflow_m3_h": 0,
@@ -530,121 +298,1250 @@
               "airflow_m3_h": 9000,
               "pressure_pa": 0
             }
-          ]
-        },
-        "loop_network": {
-          "name": "Variable-friction two-path loop",
-          "reference_node": "Supply",
-          "node_injections_m3_h": {
-            "Supply": 5400,
-            "Mid": 0,
-            "Return": -5400
-          },
-          "edges": [
-            {
-              "name": "Direct",
-              "start_node": "Supply",
-              "end_node": "Return",
-              "duct_geometry": {
-                "length_m": 18,
-                "air_density_kg_m3": 1.2,
-                "local_loss_coefficient": 1.3,
-                "diameter_m": 0.45,
-                "absolute_roughness_m": 0.00015,
-                "kinematic_viscosity_m2_s": 0.000015,
-                "reference_airflow_m3_h": 2700
-              }
-            },
-            {
-              "name": "Upper 1",
-              "start_node": "Supply",
-              "end_node": "Mid",
-              "duct_geometry": {
-                "length_m": 10,
-                "air_density_kg_m3": 1.2,
-                "local_loss_coefficient": 0.6,
-                "diameter_m": 0.35,
-                "absolute_roughness_m": 0.00015,
-                "kinematic_viscosity_m2_s": 0.000015,
-                "reference_airflow_m3_h": 2700
-              }
-            },
-            {
-              "name": "Upper 2",
-              "start_node": "Mid",
-              "end_node": "Return",
-              "duct_geometry": {
-                "length_m": 10,
-                "air_density_kg_m3": 1.2,
-                "local_loss_coefficient": 0.6,
-                "diameter_m": 0.35,
-                "absolute_roughness_m": 0.00015,
-                "kinematic_viscosity_m2_s": 0.000015,
-                "reference_airflow_m3_h": 2700
-              }
-            }
-          ]
-        },
-        "edge_local_loss_uncertainty": {
-          "Direct": {
-            "uncertainty_abs": 0.2,
-            "provenance": {
-              "source_type": "design_basis",
-              "source_name": "Direct-path fitting allowance",
-              "uncertainty_basis": "Illustrative absolute K bound"
-            }
-          },
-          "Upper 1": {
-            "uncertainty_abs": 0.1,
-            "provenance": {
-              "source_type": "design_basis",
-              "source_name": "Upper-path fitting allowance",
-              "uncertainty_basis": "Illustrative absolute K bound"
-            }
+          ],
+          "provenance": {
+            "reference": "Demo only",
+            "source_name": "Illustrative supplied fan curve",
+            "source_type": "manufacturer_data"
           }
         },
-        "max_corner_cases": 32,
-        "solver": {
-          "resistance_relative_tolerance": 0.000001,
-          "relaxation": 0.7,
-          "near_zero_airflow_m3_h": 0.000001,
-          "max_outer_iterations": 50,
-          "mass_balance_tolerance_m3_h": 0.000001,
-          "max_newton_iterations": 100,
-          "operating_pressure_tolerance_pa": 0.000001,
-          "max_operating_iterations": 80
+        "fan_discharge_node": "Supply",
+        "fan_suction_node": "Return",
+        "fixed_pressure_pa": {
+          "provenance": {
+            "source_name": "Demo fixed-pressure allowance",
+            "source_type": "design_basis",
+            "uncertainty_basis": "Illustrative absolute engineering bound"
+          },
+          "uncertainty_abs": 5,
+          "value": 20
         },
+        "loop_network": {
+          "edges": [
+            {
+              "duct_geometry": {
+                "absolute_roughness_m": 0.00015,
+                "air_density_kg_m3": 1.2,
+                "diameter_m": 0.45,
+                "kinematic_viscosity_m2_s": 1.5e-05,
+                "length_m": 18,
+                "local_loss_coefficient": 1.3,
+                "reference_airflow_m3_h": 2700
+              },
+              "end_node": "Return",
+              "name": "Direct",
+              "start_node": "Supply"
+            },
+            {
+              "duct_geometry": {
+                "absolute_roughness_m": 0.00015,
+                "air_density_kg_m3": 1.2,
+                "diameter_m": 0.35,
+                "kinematic_viscosity_m2_s": 1.5e-05,
+                "length_m": 10,
+                "local_loss_coefficient": 0.6,
+                "reference_airflow_m3_h": 2700
+              },
+              "end_node": "Mid",
+              "name": "Upper 1",
+              "start_node": "Supply"
+            },
+            {
+              "duct_geometry": {
+                "absolute_roughness_m": 0.00015,
+                "air_density_kg_m3": 1.2,
+                "diameter_m": 0.35,
+                "kinematic_viscosity_m2_s": 1.5e-05,
+                "length_m": 10,
+                "local_loss_coefficient": 0.6,
+                "reference_airflow_m3_h": 2700
+              },
+              "end_node": "Return",
+              "name": "Upper 2",
+              "start_node": "Mid"
+            }
+          ],
+          "name": "Variable-friction two-path loop",
+          "node_injections_m3_h": {
+            "Mid": 0,
+            "Return": -5400,
+            "Supply": 5400
+          },
+          "reference_node": "Supply"
+        },
+        "max_corner_cases": 32,
+        "name": "Variable-friction fan-loop bounded uncertainty",
         "power_efficiencies": {
           "fan_efficiency": 0.72,
           "motor_efficiency": 0.93,
           "vfd_efficiency": 0.97
+        },
+        "solver": {
+          "mass_balance_tolerance_m3_h": 1e-06,
+          "max_newton_iterations": 100,
+          "max_operating_iterations": 80,
+          "max_outer_iterations": 50,
+          "near_zero_airflow_m3_h": 1e-06,
+          "operating_pressure_tolerance_pa": 1e-06,
+          "relaxation": 0.7,
+          "resistance_relative_tolerance": 1e-06
         }
-      }
+      },
+      "kind": "fan_variable_friction_uncertainty",
+      "name": "Nonlinear bounded uncertainty"
     },
     {
       "id": "consistency",
-      "name": "Verification/HVAC consistency",
-      "kind": "consistency",
       "input": {
-        "verification_project": "facility_project.json",
         "hvac_project": "consistency_hvac_demo.json",
+        "require_same_room_set": true,
         "room_airflow_abs_tolerance_m3_h": 0,
-        "require_same_room_set": true
-      }
+        "verification_project": "facility_project.json"
+      },
+      "kind": "consistency",
+      "name": "Verification/HVAC consistency"
     },
     {
       "id": "dossier",
-      "name": "Engineering dossier",
-      "kind": "dossier",
       "input": {
-        "name": "Nonlinear Fan-Loop Uncertainty Engineering Dossier",
-        "project_reference": "CRX-V038",
-        "revision": "A",
         "fan_variable_friction_uncertainty_analyses": [
           "fan_variable_friction_uncertainty_demo.json"
-        ]
-      }
+        ],
+        "name": "Nonlinear Fan-Loop Uncertainty Engineering Dossier",
+        "project_reference": "CRX-V038",
+        "revision": "A"
+      },
+      "kind": "dossier",
+      "name": "Engineering dossier"
     }
   ],
-  "active_analysis_id": "verification"
+  "application_version": "0.103.0.dev0",
+  "project": {
+    "description": "End-to-end project exercising verification, HVAC, fan operating point, nonlinear loop, uncertainty, consistency, and dossier workflows.",
+    "metadata": {
+      "cleanroomx.analysis_run_history": {
+        "anchor_record_sha256": null,
+        "record_canonicalization": "json-sort-keys-compact-utf8-v1",
+        "records": [
+          {
+            "analysis_id": "verification",
+            "analysis_kind": "project_verification",
+            "analysis_name": "Facility verification",
+            "cleanroomx_version": "0.103.0.dev0",
+            "completed_at_utc": "2026-10-17T15:30:32.678623Z",
+            "diagnostics": {
+              "application_execution_provenance": {
+                "analysis_kind": "project_verification",
+                "cleanroomx_version": "0.103.0.dev0",
+                "code_revision": {
+                  "algorithm": "sha256-python-source-tree-v1",
+                  "sha256_after": "7b70a20c437cfc69d56898333ddacd1ff4f12fe8c1e8bc8213147594eec25dc7",
+                  "sha256_before": "7b70a20c437cfc69d56898333ddacd1ff4f12fe8c1e8bc8213147594eec25dc7",
+                  "source_file_count_after": 218,
+                  "source_file_count_before": 218,
+                  "stable_during_run": true
+                },
+                "execution_binding": {
+                  "custom_adapter": null,
+                  "parser": "cleanroomx.io:project_from_dict",
+                  "reporter": "cleanroomx.application:_fallback_markdown",
+                  "runner": "cleanroomx.project_verification:verify_project"
+                },
+                "external_dependencies": [],
+                "external_dependencies_stable": true,
+                "external_dependency_count": 0,
+                "external_dependency_execution_mode": "not_applicable",
+                "implementation": {
+                  "cleanroomx_version": "0.103.0.dev0",
+                  "source": "builtin"
+                },
+                "input_canonicalization": "json-sort-keys-compact-utf8-v1",
+                "input_execution_policy": "isolated-copy-single-parse-sha256-guard-v1",
+                "input_sha256": "6d54a287172a493cd14c212e9a7d403bef4d2392b73b46280022a4dd2f798c0d",
+                "runtime_environment": {
+                  "byteorder": "little",
+                  "float_mant_dig": 53,
+                  "float_radix": 2,
+                  "platform_machine": "AMD64",
+                  "platform_release": "11",
+                  "platform_system": "Windows",
+                  "python_cache_tag": "cpython-312",
+                  "python_implementation": "CPython",
+                  "python_version": "3.12.10"
+                },
+                "schema": "cleanroomx.application-execution-provenance",
+                "schema_version": 1
+              }
+            },
+            "diagnostics_sha256": "f52521f27fe1d61ef1862fde7631e0256dcebde1b11dfd5ee90020f87c785ab7",
+            "execution_provenance": {
+              "analysis_kind": "project_verification",
+              "cleanroomx_version": "0.103.0.dev0",
+              "code_revision": {
+                "algorithm": "sha256-python-source-tree-v1",
+                "sha256_after": "7b70a20c437cfc69d56898333ddacd1ff4f12fe8c1e8bc8213147594eec25dc7",
+                "sha256_before": "7b70a20c437cfc69d56898333ddacd1ff4f12fe8c1e8bc8213147594eec25dc7",
+                "source_file_count_after": 218,
+                "source_file_count_before": 218,
+                "stable_during_run": true
+              },
+              "execution_binding": {
+                "custom_adapter": null,
+                "parser": "cleanroomx.io:project_from_dict",
+                "reporter": "cleanroomx.application:_fallback_markdown",
+                "runner": "cleanroomx.project_verification:verify_project"
+              },
+              "external_dependencies": [],
+              "external_dependencies_stable": true,
+              "external_dependency_count": 0,
+              "external_dependency_execution_mode": "not_applicable",
+              "implementation": {
+                "cleanroomx_version": "0.103.0.dev0",
+                "source": "builtin"
+              },
+              "input_canonicalization": "json-sort-keys-compact-utf8-v1",
+              "input_execution_policy": "isolated-copy-single-parse-sha256-guard-v1",
+              "input_sha256": "6d54a287172a493cd14c212e9a7d403bef4d2392b73b46280022a4dd2f798c0d",
+              "runtime_environment": {
+                "byteorder": "little",
+                "float_mant_dig": 53,
+                "float_radix": 2,
+                "platform_machine": "AMD64",
+                "platform_release": "11",
+                "platform_system": "Windows",
+                "python_cache_tag": "cpython-312",
+                "python_implementation": "CPython",
+                "python_version": "3.12.10"
+              },
+              "schema": "cleanroomx.application-execution-provenance",
+              "schema_version": 1
+            },
+            "input_canonicalization": "json-sort-keys-compact-utf8-v1",
+            "input_sha256": "6d54a287172a493cd14c212e9a7d403bef4d2392b73b46280022a4dd2f798c0d",
+            "input_snapshot": {
+              "name": "Pilot cleanroom suite",
+              "pressure_cascade": [
+                {
+                  "higher_pressure_room": "Process",
+                  "lower_pressure_room": "Preparation",
+                  "min_delta_pa": 10
+                },
+                {
+                  "higher_pressure_room": "Preparation",
+                  "lower_pressure_room": "Ante",
+                  "min_delta_pa": 5
+                }
+              ],
+              "rooms": [
+                {
+                  "height_m": 3,
+                  "length_m": 6,
+                  "min_ach": 25,
+                  "name": "Process",
+                  "observed_pressure_pa": 30,
+                  "particle_requirements": [
+                    {
+                      "max_concentration_per_m3": 400000,
+                      "observed_concentration_per_m3": 120000,
+                      "size_um": 0.5
+                    }
+                  ],
+                  "supply_airflow_m3_h": 2700,
+                  "width_m": 5
+                },
+                {
+                  "height_m": 3,
+                  "length_m": 5,
+                  "min_ach": 20,
+                  "name": "Preparation",
+                  "observed_pressure_pa": 16,
+                  "supply_airflow_m3_h": 1200,
+                  "width_m": 4
+                },
+                {
+                  "height_m": 3,
+                  "length_m": 4,
+                  "min_ach": 20,
+                  "name": "Ante",
+                  "observed_pressure_pa": 8,
+                  "supply_airflow_m3_h": 720,
+                  "width_m": 3
+                }
+              ]
+            },
+            "plot": null,
+            "plot_sha256": null,
+            "previous_record_sha256": null,
+            "record_sha256": "c8e5302f4bfb0f8b470db3883760aaa0addb33fbd175e15f85474b2da375adca",
+            "report_markdown": "# Multi-room project verification\n\nStatus: **pass_with_unchecked**\n\nJSON result:\n\n    {\n      \"complete\": false,\n      \"no_failures_detected\": true,\n      \"passed\": true,\n      \"pressure_cascade\": [\n        {\n          \"actual_delta_pa\": 14.0,\n          \"code\": \"PRESSURE_CASCADE\",\n          \"higher_pressure_room\": \"Process\",\n          \"limit_pa\": 10.0,\n          \"lower_pressure_room\": \"Preparation\",\n          \"message\": \"Observed room-to-room pressure cascade meets the configured project requirement.\",\n          \"status\": \"pass\"\n        },\n        {\n          \"actual_delta_pa\": 8.0,\n          \"code\": \"PRESSURE_CASCADE\",\n          \"higher_pressure_room\": \"Preparation\",\n          \"limit_pa\": 5.0,\n          \"lower_pressure_room\": \"Ante\",\n          \"message\": \"Observed room-to-room pressure cascade meets the configured project requirement.\",\n          \"status\": \"pass\"\n        }\n      ],\n      \"project\": \"Pilot cleanroom suite\",\n      \"rooms\": [\n        {\n          \"ach\": 30.0,\n          \"complete\": false,\n          \"findings\": [\n            {\n              \"actual\": 30.0,\n              \"code\": \"ACH\",\n              \"limit\": 25.0,\n              \"message\": \"Nominal supply ACH meets the configured project requirement.\",\n              \"status\": \"pass\",\n              \"unit\": \"1/h\"\n            },\n            {\n              \"actual\": null,\n              \"code\": \"PRESSURE\",\n              \"limit\": null,\n              \"message\": \"Pressure requirement or observed value is not configured.\",\n              \"status\": \"not_checked\",\n              \"unit\": \"Pa\"\n            },\n            {\n              \"actual\": 120000.0,\n              \"code\": \"PARTICLES_0.5UM\",\n              \"limit\": 400000.0,\n              \"message\": \"Observed particle concentration meets the configured limit.\",\n              \"status\": \"pass\",\n              \"unit\": \"particles/m^3\"\n            }\n          ],\n          \"no_failures_detected\": true,\n          \"passed\": true,\n          \"room\": \"Process\",\n          \"status\": \"pass_with_unchecked\",\n          \"verified\": false,\n          \"volume_m3\": 90.0\n        },\n        {\n          \"ach\": 20.0,\n          \"complete\": false,\n          \"findings\": [\n            {\n              \"actual\": 20.0,\n              \"code\": \"ACH\",\n              \"limit\": 20.0,\n              \"message\": \"Nominal supply ACH meets the configured project requirement.\",\n              \"status\": \"pass\",\n              \"unit\": \"1/h\"\n            },\n            {\n              \"actual\": null,\n              \"code\": \"PRESSURE\",\n              \"limit\": null,\n              \"message\": \"Pressure requirement or observed value is not configured.\",\n              \"status\": \"not_checked\",\n              \"unit\": \"Pa\"\n            },\n            {\n              \"actual\": null,\n              \"code\": \"PARTICLES\",\n              \"limit\": null,\n              \"message\": \"No particle-concentration requirements configured.\",\n              \"status\": \"not_checked\",\n              \"unit\": null\n            }\n          ],\n          \"no_failures_detected\": true,\n          \"passed\": true,\n          \"room\": \"Preparation\",\n          \"status\": \"pass_with_unchecked\",\n          \"verified\": false,\n          \"volume_m3\": 60.0\n        },\n        {\n          \"ach\": 20.0,\n          \"complete\": false,\n          \"findings\": [\n            {\n              \"actual\": 20.0,\n              \"code\": \"ACH\",\n              \"limit\": 20.0,\n              \"message\": \"Nominal supply ACH meets the configured project requirement.\",\n              \"status\": \"pass\",\n              \"unit\": \"1/h\"\n            },\n            {\n              \"actual\": null,\n              \"code\": \"PRESSURE\",\n              \"limit\": null,\n              \"message\": \"Pressure requirement or observed value is not configured.\",\n              \"status\": \"not_checked\",\n              \"unit\": \"Pa\"\n            },\n            {\n              \"actual\": null,\n              \"code\": \"PARTICLES\",\n              \"limit\": null,\n              \"message\": \"No particle-concentration requirements configured.\",\n              \"status\": \"not_checked\",\n              \"unit\": null\n            }\n          ],\n          \"no_failures_detected\": true,\n          \"passed\": true,\n          \"room\": \"Ante\",\n          \"status\": \"pass_with_unchecked\",\n          \"verified\": false,\n          \"volume_m3\": 36.0\n        }\n      ],\n      \"status\": \"pass_with_unchecked\",\n      \"verified\": false\n    }\n",
+            "report_sha256": "d0aaa1bce7afb19a6862152c7dbe0f71a2c80f8279186157d9a0954732bb9928",
+            "result": {
+              "complete": false,
+              "no_failures_detected": true,
+              "passed": true,
+              "pressure_cascade": [
+                {
+                  "actual_delta_pa": 14.0,
+                  "code": "PRESSURE_CASCADE",
+                  "higher_pressure_room": "Process",
+                  "limit_pa": 10.0,
+                  "lower_pressure_room": "Preparation",
+                  "message": "Observed room-to-room pressure cascade meets the configured project requirement.",
+                  "status": "pass"
+                },
+                {
+                  "actual_delta_pa": 8.0,
+                  "code": "PRESSURE_CASCADE",
+                  "higher_pressure_room": "Preparation",
+                  "limit_pa": 5.0,
+                  "lower_pressure_room": "Ante",
+                  "message": "Observed room-to-room pressure cascade meets the configured project requirement.",
+                  "status": "pass"
+                }
+              ],
+              "project": "Pilot cleanroom suite",
+              "rooms": [
+                {
+                  "ach": 30.0,
+                  "complete": false,
+                  "findings": [
+                    {
+                      "actual": 30.0,
+                      "code": "ACH",
+                      "limit": 25.0,
+                      "message": "Nominal supply ACH meets the configured project requirement.",
+                      "status": "pass",
+                      "unit": "1/h"
+                    },
+                    {
+                      "actual": null,
+                      "code": "PRESSURE",
+                      "limit": null,
+                      "message": "Pressure requirement or observed value is not configured.",
+                      "status": "not_checked",
+                      "unit": "Pa"
+                    },
+                    {
+                      "actual": 120000.0,
+                      "code": "PARTICLES_0.5UM",
+                      "limit": 400000.0,
+                      "message": "Observed particle concentration meets the configured limit.",
+                      "status": "pass",
+                      "unit": "particles/m^3"
+                    }
+                  ],
+                  "no_failures_detected": true,
+                  "passed": true,
+                  "room": "Process",
+                  "status": "pass_with_unchecked",
+                  "verified": false,
+                  "volume_m3": 90.0
+                },
+                {
+                  "ach": 20.0,
+                  "complete": false,
+                  "findings": [
+                    {
+                      "actual": 20.0,
+                      "code": "ACH",
+                      "limit": 20.0,
+                      "message": "Nominal supply ACH meets the configured project requirement.",
+                      "status": "pass",
+                      "unit": "1/h"
+                    },
+                    {
+                      "actual": null,
+                      "code": "PRESSURE",
+                      "limit": null,
+                      "message": "Pressure requirement or observed value is not configured.",
+                      "status": "not_checked",
+                      "unit": "Pa"
+                    },
+                    {
+                      "actual": null,
+                      "code": "PARTICLES",
+                      "limit": null,
+                      "message": "No particle-concentration requirements configured.",
+                      "status": "not_checked",
+                      "unit": null
+                    }
+                  ],
+                  "no_failures_detected": true,
+                  "passed": true,
+                  "room": "Preparation",
+                  "status": "pass_with_unchecked",
+                  "verified": false,
+                  "volume_m3": 60.0
+                },
+                {
+                  "ach": 20.0,
+                  "complete": false,
+                  "findings": [
+                    {
+                      "actual": 20.0,
+                      "code": "ACH",
+                      "limit": 20.0,
+                      "message": "Nominal supply ACH meets the configured project requirement.",
+                      "status": "pass",
+                      "unit": "1/h"
+                    },
+                    {
+                      "actual": null,
+                      "code": "PRESSURE",
+                      "limit": null,
+                      "message": "Pressure requirement or observed value is not configured.",
+                      "status": "not_checked",
+                      "unit": "Pa"
+                    },
+                    {
+                      "actual": null,
+                      "code": "PARTICLES",
+                      "limit": null,
+                      "message": "No particle-concentration requirements configured.",
+                      "status": "not_checked",
+                      "unit": null
+                    }
+                  ],
+                  "no_failures_detected": true,
+                  "passed": true,
+                  "room": "Ante",
+                  "status": "pass_with_unchecked",
+                  "verified": false,
+                  "volume_m3": 36.0
+                }
+              ],
+              "status": "pass_with_unchecked",
+              "verified": false
+            },
+            "result_sha256": "e9bf34b717a71f4d9f74a2979dd6534db04c5d2ef2c88b209f557a579504e152",
+            "run_title": "Multi-room project verification",
+            "sequence": 1,
+            "status": "pass_with_unchecked"
+          },
+          {
+            "analysis_id": "verification",
+            "analysis_kind": "project_verification",
+            "analysis_name": "Facility verification",
+            "cleanroomx_version": "0.103.0.dev0",
+            "completed_at_utc": "2026-10-18T20:45:58.355998Z",
+            "diagnostics": {
+              "application_execution_provenance": {
+                "analysis_kind": "project_verification",
+                "cleanroomx_version": "0.103.0.dev0",
+                "code_revision": {
+                  "algorithm": "sha256-python-source-tree-v1",
+                  "sha256_after": "7b70a20c437cfc69d56898333ddacd1ff4f12fe8c1e8bc8213147594eec25dc7",
+                  "sha256_before": "7b70a20c437cfc69d56898333ddacd1ff4f12fe8c1e8bc8213147594eec25dc7",
+                  "source_file_count_after": 218,
+                  "source_file_count_before": 218,
+                  "stable_during_run": true
+                },
+                "execution_binding": {
+                  "custom_adapter": null,
+                  "parser": "cleanroomx.io:project_from_dict",
+                  "reporter": "cleanroomx.application:_fallback_markdown",
+                  "runner": "cleanroomx.project_verification:verify_project"
+                },
+                "external_dependencies": [],
+                "external_dependencies_stable": true,
+                "external_dependency_count": 0,
+                "external_dependency_execution_mode": "not_applicable",
+                "implementation": {
+                  "cleanroomx_version": "0.103.0.dev0",
+                  "source": "builtin"
+                },
+                "input_canonicalization": "json-sort-keys-compact-utf8-v1",
+                "input_execution_policy": "isolated-copy-single-parse-sha256-guard-v1",
+                "input_sha256": "6d54a287172a493cd14c212e9a7d403bef4d2392b73b46280022a4dd2f798c0d",
+                "runtime_environment": {
+                  "byteorder": "little",
+                  "float_mant_dig": 53,
+                  "float_radix": 2,
+                  "platform_machine": "AMD64",
+                  "platform_release": "11",
+                  "platform_system": "Windows",
+                  "python_cache_tag": "cpython-312",
+                  "python_implementation": "CPython",
+                  "python_version": "3.12.10"
+                },
+                "schema": "cleanroomx.application-execution-provenance",
+                "schema_version": 1
+              }
+            },
+            "diagnostics_sha256": "f52521f27fe1d61ef1862fde7631e0256dcebde1b11dfd5ee90020f87c785ab7",
+            "execution_provenance": {
+              "analysis_kind": "project_verification",
+              "cleanroomx_version": "0.103.0.dev0",
+              "code_revision": {
+                "algorithm": "sha256-python-source-tree-v1",
+                "sha256_after": "7b70a20c437cfc69d56898333ddacd1ff4f12fe8c1e8bc8213147594eec25dc7",
+                "sha256_before": "7b70a20c437cfc69d56898333ddacd1ff4f12fe8c1e8bc8213147594eec25dc7",
+                "source_file_count_after": 218,
+                "source_file_count_before": 218,
+                "stable_during_run": true
+              },
+              "execution_binding": {
+                "custom_adapter": null,
+                "parser": "cleanroomx.io:project_from_dict",
+                "reporter": "cleanroomx.application:_fallback_markdown",
+                "runner": "cleanroomx.project_verification:verify_project"
+              },
+              "external_dependencies": [],
+              "external_dependencies_stable": true,
+              "external_dependency_count": 0,
+              "external_dependency_execution_mode": "not_applicable",
+              "implementation": {
+                "cleanroomx_version": "0.103.0.dev0",
+                "source": "builtin"
+              },
+              "input_canonicalization": "json-sort-keys-compact-utf8-v1",
+              "input_execution_policy": "isolated-copy-single-parse-sha256-guard-v1",
+              "input_sha256": "6d54a287172a493cd14c212e9a7d403bef4d2392b73b46280022a4dd2f798c0d",
+              "runtime_environment": {
+                "byteorder": "little",
+                "float_mant_dig": 53,
+                "float_radix": 2,
+                "platform_machine": "AMD64",
+                "platform_release": "11",
+                "platform_system": "Windows",
+                "python_cache_tag": "cpython-312",
+                "python_implementation": "CPython",
+                "python_version": "3.12.10"
+              },
+              "schema": "cleanroomx.application-execution-provenance",
+              "schema_version": 1
+            },
+            "input_canonicalization": "json-sort-keys-compact-utf8-v1",
+            "input_sha256": "6d54a287172a493cd14c212e9a7d403bef4d2392b73b46280022a4dd2f798c0d",
+            "input_snapshot": {
+              "name": "Pilot cleanroom suite",
+              "pressure_cascade": [
+                {
+                  "higher_pressure_room": "Process",
+                  "lower_pressure_room": "Preparation",
+                  "min_delta_pa": 10
+                },
+                {
+                  "higher_pressure_room": "Preparation",
+                  "lower_pressure_room": "Ante",
+                  "min_delta_pa": 5
+                }
+              ],
+              "rooms": [
+                {
+                  "height_m": 3,
+                  "length_m": 6,
+                  "min_ach": 25,
+                  "name": "Process",
+                  "observed_pressure_pa": 30,
+                  "particle_requirements": [
+                    {
+                      "max_concentration_per_m3": 400000,
+                      "observed_concentration_per_m3": 120000,
+                      "size_um": 0.5
+                    }
+                  ],
+                  "supply_airflow_m3_h": 2700,
+                  "width_m": 5
+                },
+                {
+                  "height_m": 3,
+                  "length_m": 5,
+                  "min_ach": 20,
+                  "name": "Preparation",
+                  "observed_pressure_pa": 16,
+                  "supply_airflow_m3_h": 1200,
+                  "width_m": 4
+                },
+                {
+                  "height_m": 3,
+                  "length_m": 4,
+                  "min_ach": 20,
+                  "name": "Ante",
+                  "observed_pressure_pa": 8,
+                  "supply_airflow_m3_h": 720,
+                  "width_m": 3
+                }
+              ]
+            },
+            "plot": null,
+            "plot_sha256": null,
+            "previous_record_sha256": "c8e5302f4bfb0f8b470db3883760aaa0addb33fbd175e15f85474b2da375adca",
+            "record_sha256": "92156b6fcbaa388ea407cfc1a50cbd01093e8a132351785375478b692e197b9e",
+            "report_markdown": "# Multi-room project verification\n\nStatus: **pass_with_unchecked**\n\nJSON result:\n\n    {\n      \"complete\": false,\n      \"no_failures_detected\": true,\n      \"passed\": true,\n      \"pressure_cascade\": [\n        {\n          \"actual_delta_pa\": 14.0,\n          \"code\": \"PRESSURE_CASCADE\",\n          \"higher_pressure_room\": \"Process\",\n          \"limit_pa\": 10.0,\n          \"lower_pressure_room\": \"Preparation\",\n          \"message\": \"Observed room-to-room pressure cascade meets the configured project requirement.\",\n          \"status\": \"pass\"\n        },\n        {\n          \"actual_delta_pa\": 8.0,\n          \"code\": \"PRESSURE_CASCADE\",\n          \"higher_pressure_room\": \"Preparation\",\n          \"limit_pa\": 5.0,\n          \"lower_pressure_room\": \"Ante\",\n          \"message\": \"Observed room-to-room pressure cascade meets the configured project requirement.\",\n          \"status\": \"pass\"\n        }\n      ],\n      \"project\": \"Pilot cleanroom suite\",\n      \"rooms\": [\n        {\n          \"ach\": 30.0,\n          \"complete\": false,\n          \"findings\": [\n            {\n              \"actual\": 30.0,\n              \"code\": \"ACH\",\n              \"limit\": 25.0,\n              \"message\": \"Nominal supply ACH meets the configured project requirement.\",\n              \"status\": \"pass\",\n              \"unit\": \"1/h\"\n            },\n            {\n              \"actual\": null,\n              \"code\": \"PRESSURE\",\n              \"limit\": null,\n              \"message\": \"Pressure requirement or observed value is not configured.\",\n              \"status\": \"not_checked\",\n              \"unit\": \"Pa\"\n            },\n            {\n              \"actual\": 120000.0,\n              \"code\": \"PARTICLES_0.5UM\",\n              \"limit\": 400000.0,\n              \"message\": \"Observed particle concentration meets the configured limit.\",\n              \"status\": \"pass\",\n              \"unit\": \"particles/m^3\"\n            }\n          ],\n          \"no_failures_detected\": true,\n          \"passed\": true,\n          \"room\": \"Process\",\n          \"status\": \"pass_with_unchecked\",\n          \"verified\": false,\n          \"volume_m3\": 90.0\n        },\n        {\n          \"ach\": 20.0,\n          \"complete\": false,\n          \"findings\": [\n            {\n              \"actual\": 20.0,\n              \"code\": \"ACH\",\n              \"limit\": 20.0,\n              \"message\": \"Nominal supply ACH meets the configured project requirement.\",\n              \"status\": \"pass\",\n              \"unit\": \"1/h\"\n            },\n            {\n              \"actual\": null,\n              \"code\": \"PRESSURE\",\n              \"limit\": null,\n              \"message\": \"Pressure requirement or observed value is not configured.\",\n              \"status\": \"not_checked\",\n              \"unit\": \"Pa\"\n            },\n            {\n              \"actual\": null,\n              \"code\": \"PARTICLES\",\n              \"limit\": null,\n              \"message\": \"No particle-concentration requirements configured.\",\n              \"status\": \"not_checked\",\n              \"unit\": null\n            }\n          ],\n          \"no_failures_detected\": true,\n          \"passed\": true,\n          \"room\": \"Preparation\",\n          \"status\": \"pass_with_unchecked\",\n          \"verified\": false,\n          \"volume_m3\": 60.0\n        },\n        {\n          \"ach\": 20.0,\n          \"complete\": false,\n          \"findings\": [\n            {\n              \"actual\": 20.0,\n              \"code\": \"ACH\",\n              \"limit\": 20.0,\n              \"message\": \"Nominal supply ACH meets the configured project requirement.\",\n              \"status\": \"pass\",\n              \"unit\": \"1/h\"\n            },\n            {\n              \"actual\": null,\n              \"code\": \"PRESSURE\",\n              \"limit\": null,\n              \"message\": \"Pressure requirement or observed value is not configured.\",\n              \"status\": \"not_checked\",\n              \"unit\": \"Pa\"\n            },\n            {\n              \"actual\": null,\n              \"code\": \"PARTICLES\",\n              \"limit\": null,\n              \"message\": \"No particle-concentration requirements configured.\",\n              \"status\": \"not_checked\",\n              \"unit\": null\n            }\n          ],\n          \"no_failures_detected\": true,\n          \"passed\": true,\n          \"room\": \"Ante\",\n          \"status\": \"pass_with_unchecked\",\n          \"verified\": false,\n          \"volume_m3\": 36.0\n        }\n      ],\n      \"status\": \"pass_with_unchecked\",\n      \"verified\": false\n    }\n",
+            "report_sha256": "d0aaa1bce7afb19a6862152c7dbe0f71a2c80f8279186157d9a0954732bb9928",
+            "result": {
+              "complete": false,
+              "no_failures_detected": true,
+              "passed": true,
+              "pressure_cascade": [
+                {
+                  "actual_delta_pa": 14.0,
+                  "code": "PRESSURE_CASCADE",
+                  "higher_pressure_room": "Process",
+                  "limit_pa": 10.0,
+                  "lower_pressure_room": "Preparation",
+                  "message": "Observed room-to-room pressure cascade meets the configured project requirement.",
+                  "status": "pass"
+                },
+                {
+                  "actual_delta_pa": 8.0,
+                  "code": "PRESSURE_CASCADE",
+                  "higher_pressure_room": "Preparation",
+                  "limit_pa": 5.0,
+                  "lower_pressure_room": "Ante",
+                  "message": "Observed room-to-room pressure cascade meets the configured project requirement.",
+                  "status": "pass"
+                }
+              ],
+              "project": "Pilot cleanroom suite",
+              "rooms": [
+                {
+                  "ach": 30.0,
+                  "complete": false,
+                  "findings": [
+                    {
+                      "actual": 30.0,
+                      "code": "ACH",
+                      "limit": 25.0,
+                      "message": "Nominal supply ACH meets the configured project requirement.",
+                      "status": "pass",
+                      "unit": "1/h"
+                    },
+                    {
+                      "actual": null,
+                      "code": "PRESSURE",
+                      "limit": null,
+                      "message": "Pressure requirement or observed value is not configured.",
+                      "status": "not_checked",
+                      "unit": "Pa"
+                    },
+                    {
+                      "actual": 120000.0,
+                      "code": "PARTICLES_0.5UM",
+                      "limit": 400000.0,
+                      "message": "Observed particle concentration meets the configured limit.",
+                      "status": "pass",
+                      "unit": "particles/m^3"
+                    }
+                  ],
+                  "no_failures_detected": true,
+                  "passed": true,
+                  "room": "Process",
+                  "status": "pass_with_unchecked",
+                  "verified": false,
+                  "volume_m3": 90.0
+                },
+                {
+                  "ach": 20.0,
+                  "complete": false,
+                  "findings": [
+                    {
+                      "actual": 20.0,
+                      "code": "ACH",
+                      "limit": 20.0,
+                      "message": "Nominal supply ACH meets the configured project requirement.",
+                      "status": "pass",
+                      "unit": "1/h"
+                    },
+                    {
+                      "actual": null,
+                      "code": "PRESSURE",
+                      "limit": null,
+                      "message": "Pressure requirement or observed value is not configured.",
+                      "status": "not_checked",
+                      "unit": "Pa"
+                    },
+                    {
+                      "actual": null,
+                      "code": "PARTICLES",
+                      "limit": null,
+                      "message": "No particle-concentration requirements configured.",
+                      "status": "not_checked",
+                      "unit": null
+                    }
+                  ],
+                  "no_failures_detected": true,
+                  "passed": true,
+                  "room": "Preparation",
+                  "status": "pass_with_unchecked",
+                  "verified": false,
+                  "volume_m3": 60.0
+                },
+                {
+                  "ach": 20.0,
+                  "complete": false,
+                  "findings": [
+                    {
+                      "actual": 20.0,
+                      "code": "ACH",
+                      "limit": 20.0,
+                      "message": "Nominal supply ACH meets the configured project requirement.",
+                      "status": "pass",
+                      "unit": "1/h"
+                    },
+                    {
+                      "actual": null,
+                      "code": "PRESSURE",
+                      "limit": null,
+                      "message": "Pressure requirement or observed value is not configured.",
+                      "status": "not_checked",
+                      "unit": "Pa"
+                    },
+                    {
+                      "actual": null,
+                      "code": "PARTICLES",
+                      "limit": null,
+                      "message": "No particle-concentration requirements configured.",
+                      "status": "not_checked",
+                      "unit": null
+                    }
+                  ],
+                  "no_failures_detected": true,
+                  "passed": true,
+                  "room": "Ante",
+                  "status": "pass_with_unchecked",
+                  "verified": false,
+                  "volume_m3": 36.0
+                }
+              ],
+              "status": "pass_with_unchecked",
+              "verified": false
+            },
+            "result_sha256": "e9bf34b717a71f4d9f74a2979dd6534db04c5d2ef2c88b209f557a579504e152",
+            "run_title": "Multi-room project verification",
+            "sequence": 2,
+            "status": "pass_with_unchecked"
+          },
+          {
+            "analysis_id": "verification",
+            "analysis_kind": "project_verification",
+            "analysis_name": "Facility verification",
+            "cleanroomx_version": "0.103.0.dev0",
+            "completed_at_utc": "2026-10-18T20:45:59.957317Z",
+            "diagnostics": {
+              "application_execution_provenance": {
+                "analysis_kind": "project_verification",
+                "cleanroomx_version": "0.103.0.dev0",
+                "code_revision": {
+                  "algorithm": "sha256-python-source-tree-v1",
+                  "sha256_after": "7b70a20c437cfc69d56898333ddacd1ff4f12fe8c1e8bc8213147594eec25dc7",
+                  "sha256_before": "7b70a20c437cfc69d56898333ddacd1ff4f12fe8c1e8bc8213147594eec25dc7",
+                  "source_file_count_after": 218,
+                  "source_file_count_before": 218,
+                  "stable_during_run": true
+                },
+                "execution_binding": {
+                  "custom_adapter": null,
+                  "parser": "cleanroomx.io:project_from_dict",
+                  "reporter": "cleanroomx.application:_fallback_markdown",
+                  "runner": "cleanroomx.project_verification:verify_project"
+                },
+                "external_dependencies": [],
+                "external_dependencies_stable": true,
+                "external_dependency_count": 0,
+                "external_dependency_execution_mode": "not_applicable",
+                "implementation": {
+                  "cleanroomx_version": "0.103.0.dev0",
+                  "source": "builtin"
+                },
+                "input_canonicalization": "json-sort-keys-compact-utf8-v1",
+                "input_execution_policy": "isolated-copy-single-parse-sha256-guard-v1",
+                "input_sha256": "6d54a287172a493cd14c212e9a7d403bef4d2392b73b46280022a4dd2f798c0d",
+                "runtime_environment": {
+                  "byteorder": "little",
+                  "float_mant_dig": 53,
+                  "float_radix": 2,
+                  "platform_machine": "AMD64",
+                  "platform_release": "11",
+                  "platform_system": "Windows",
+                  "python_cache_tag": "cpython-312",
+                  "python_implementation": "CPython",
+                  "python_version": "3.12.10"
+                },
+                "schema": "cleanroomx.application-execution-provenance",
+                "schema_version": 1
+              }
+            },
+            "diagnostics_sha256": "f52521f27fe1d61ef1862fde7631e0256dcebde1b11dfd5ee90020f87c785ab7",
+            "execution_provenance": {
+              "analysis_kind": "project_verification",
+              "cleanroomx_version": "0.103.0.dev0",
+              "code_revision": {
+                "algorithm": "sha256-python-source-tree-v1",
+                "sha256_after": "7b70a20c437cfc69d56898333ddacd1ff4f12fe8c1e8bc8213147594eec25dc7",
+                "sha256_before": "7b70a20c437cfc69d56898333ddacd1ff4f12fe8c1e8bc8213147594eec25dc7",
+                "source_file_count_after": 218,
+                "source_file_count_before": 218,
+                "stable_during_run": true
+              },
+              "execution_binding": {
+                "custom_adapter": null,
+                "parser": "cleanroomx.io:project_from_dict",
+                "reporter": "cleanroomx.application:_fallback_markdown",
+                "runner": "cleanroomx.project_verification:verify_project"
+              },
+              "external_dependencies": [],
+              "external_dependencies_stable": true,
+              "external_dependency_count": 0,
+              "external_dependency_execution_mode": "not_applicable",
+              "implementation": {
+                "cleanroomx_version": "0.103.0.dev0",
+                "source": "builtin"
+              },
+              "input_canonicalization": "json-sort-keys-compact-utf8-v1",
+              "input_execution_policy": "isolated-copy-single-parse-sha256-guard-v1",
+              "input_sha256": "6d54a287172a493cd14c212e9a7d403bef4d2392b73b46280022a4dd2f798c0d",
+              "runtime_environment": {
+                "byteorder": "little",
+                "float_mant_dig": 53,
+                "float_radix": 2,
+                "platform_machine": "AMD64",
+                "platform_release": "11",
+                "platform_system": "Windows",
+                "python_cache_tag": "cpython-312",
+                "python_implementation": "CPython",
+                "python_version": "3.12.10"
+              },
+              "schema": "cleanroomx.application-execution-provenance",
+              "schema_version": 1
+            },
+            "input_canonicalization": "json-sort-keys-compact-utf8-v1",
+            "input_sha256": "6d54a287172a493cd14c212e9a7d403bef4d2392b73b46280022a4dd2f798c0d",
+            "input_snapshot": {
+              "name": "Pilot cleanroom suite",
+              "pressure_cascade": [
+                {
+                  "higher_pressure_room": "Process",
+                  "lower_pressure_room": "Preparation",
+                  "min_delta_pa": 10
+                },
+                {
+                  "higher_pressure_room": "Preparation",
+                  "lower_pressure_room": "Ante",
+                  "min_delta_pa": 5
+                }
+              ],
+              "rooms": [
+                {
+                  "height_m": 3,
+                  "length_m": 6,
+                  "min_ach": 25,
+                  "name": "Process",
+                  "observed_pressure_pa": 30,
+                  "particle_requirements": [
+                    {
+                      "max_concentration_per_m3": 400000,
+                      "observed_concentration_per_m3": 120000,
+                      "size_um": 0.5
+                    }
+                  ],
+                  "supply_airflow_m3_h": 2700,
+                  "width_m": 5
+                },
+                {
+                  "height_m": 3,
+                  "length_m": 5,
+                  "min_ach": 20,
+                  "name": "Preparation",
+                  "observed_pressure_pa": 16,
+                  "supply_airflow_m3_h": 1200,
+                  "width_m": 4
+                },
+                {
+                  "height_m": 3,
+                  "length_m": 4,
+                  "min_ach": 20,
+                  "name": "Ante",
+                  "observed_pressure_pa": 8,
+                  "supply_airflow_m3_h": 720,
+                  "width_m": 3
+                }
+              ]
+            },
+            "plot": null,
+            "plot_sha256": null,
+            "previous_record_sha256": "92156b6fcbaa388ea407cfc1a50cbd01093e8a132351785375478b692e197b9e",
+            "record_sha256": "10a2b9608c4fdfd5c80aa584d69bc1d07ac136ce72e1148d15aabe411fc198e4",
+            "report_markdown": "# Multi-room project verification\n\nStatus: **pass_with_unchecked**\n\nJSON result:\n\n    {\n      \"complete\": false,\n      \"no_failures_detected\": true,\n      \"passed\": true,\n      \"pressure_cascade\": [\n        {\n          \"actual_delta_pa\": 14.0,\n          \"code\": \"PRESSURE_CASCADE\",\n          \"higher_pressure_room\": \"Process\",\n          \"limit_pa\": 10.0,\n          \"lower_pressure_room\": \"Preparation\",\n          \"message\": \"Observed room-to-room pressure cascade meets the configured project requirement.\",\n          \"status\": \"pass\"\n        },\n        {\n          \"actual_delta_pa\": 8.0,\n          \"code\": \"PRESSURE_CASCADE\",\n          \"higher_pressure_room\": \"Preparation\",\n          \"limit_pa\": 5.0,\n          \"lower_pressure_room\": \"Ante\",\n          \"message\": \"Observed room-to-room pressure cascade meets the configured project requirement.\",\n          \"status\": \"pass\"\n        }\n      ],\n      \"project\": \"Pilot cleanroom suite\",\n      \"rooms\": [\n        {\n          \"ach\": 30.0,\n          \"complete\": false,\n          \"findings\": [\n            {\n              \"actual\": 30.0,\n              \"code\": \"ACH\",\n              \"limit\": 25.0,\n              \"message\": \"Nominal supply ACH meets the configured project requirement.\",\n              \"status\": \"pass\",\n              \"unit\": \"1/h\"\n            },\n            {\n              \"actual\": null,\n              \"code\": \"PRESSURE\",\n              \"limit\": null,\n              \"message\": \"Pressure requirement or observed value is not configured.\",\n              \"status\": \"not_checked\",\n              \"unit\": \"Pa\"\n            },\n            {\n              \"actual\": 120000.0,\n              \"code\": \"PARTICLES_0.5UM\",\n              \"limit\": 400000.0,\n              \"message\": \"Observed particle concentration meets the configured limit.\",\n              \"status\": \"pass\",\n              \"unit\": \"particles/m^3\"\n            }\n          ],\n          \"no_failures_detected\": true,\n          \"passed\": true,\n          \"room\": \"Process\",\n          \"status\": \"pass_with_unchecked\",\n          \"verified\": false,\n          \"volume_m3\": 90.0\n        },\n        {\n          \"ach\": 20.0,\n          \"complete\": false,\n          \"findings\": [\n            {\n              \"actual\": 20.0,\n              \"code\": \"ACH\",\n              \"limit\": 20.0,\n              \"message\": \"Nominal supply ACH meets the configured project requirement.\",\n              \"status\": \"pass\",\n              \"unit\": \"1/h\"\n            },\n            {\n              \"actual\": null,\n              \"code\": \"PRESSURE\",\n              \"limit\": null,\n              \"message\": \"Pressure requirement or observed value is not configured.\",\n              \"status\": \"not_checked\",\n              \"unit\": \"Pa\"\n            },\n            {\n              \"actual\": null,\n              \"code\": \"PARTICLES\",\n              \"limit\": null,\n              \"message\": \"No particle-concentration requirements configured.\",\n              \"status\": \"not_checked\",\n              \"unit\": null\n            }\n          ],\n          \"no_failures_detected\": true,\n          \"passed\": true,\n          \"room\": \"Preparation\",\n          \"status\": \"pass_with_unchecked\",\n          \"verified\": false,\n          \"volume_m3\": 60.0\n        },\n        {\n          \"ach\": 20.0,\n          \"complete\": false,\n          \"findings\": [\n            {\n              \"actual\": 20.0,\n              \"code\": \"ACH\",\n              \"limit\": 20.0,\n              \"message\": \"Nominal supply ACH meets the configured project requirement.\",\n              \"status\": \"pass\",\n              \"unit\": \"1/h\"\n            },\n            {\n              \"actual\": null,\n              \"code\": \"PRESSURE\",\n              \"limit\": null,\n              \"message\": \"Pressure requirement or observed value is not configured.\",\n              \"status\": \"not_checked\",\n              \"unit\": \"Pa\"\n            },\n            {\n              \"actual\": null,\n              \"code\": \"PARTICLES\",\n              \"limit\": null,\n              \"message\": \"No particle-concentration requirements configured.\",\n              \"status\": \"not_checked\",\n              \"unit\": null\n            }\n          ],\n          \"no_failures_detected\": true,\n          \"passed\": true,\n          \"room\": \"Ante\",\n          \"status\": \"pass_with_unchecked\",\n          \"verified\": false,\n          \"volume_m3\": 36.0\n        }\n      ],\n      \"status\": \"pass_with_unchecked\",\n      \"verified\": false\n    }\n",
+            "report_sha256": "d0aaa1bce7afb19a6862152c7dbe0f71a2c80f8279186157d9a0954732bb9928",
+            "result": {
+              "complete": false,
+              "no_failures_detected": true,
+              "passed": true,
+              "pressure_cascade": [
+                {
+                  "actual_delta_pa": 14.0,
+                  "code": "PRESSURE_CASCADE",
+                  "higher_pressure_room": "Process",
+                  "limit_pa": 10.0,
+                  "lower_pressure_room": "Preparation",
+                  "message": "Observed room-to-room pressure cascade meets the configured project requirement.",
+                  "status": "pass"
+                },
+                {
+                  "actual_delta_pa": 8.0,
+                  "code": "PRESSURE_CASCADE",
+                  "higher_pressure_room": "Preparation",
+                  "limit_pa": 5.0,
+                  "lower_pressure_room": "Ante",
+                  "message": "Observed room-to-room pressure cascade meets the configured project requirement.",
+                  "status": "pass"
+                }
+              ],
+              "project": "Pilot cleanroom suite",
+              "rooms": [
+                {
+                  "ach": 30.0,
+                  "complete": false,
+                  "findings": [
+                    {
+                      "actual": 30.0,
+                      "code": "ACH",
+                      "limit": 25.0,
+                      "message": "Nominal supply ACH meets the configured project requirement.",
+                      "status": "pass",
+                      "unit": "1/h"
+                    },
+                    {
+                      "actual": null,
+                      "code": "PRESSURE",
+                      "limit": null,
+                      "message": "Pressure requirement or observed value is not configured.",
+                      "status": "not_checked",
+                      "unit": "Pa"
+                    },
+                    {
+                      "actual": 120000.0,
+                      "code": "PARTICLES_0.5UM",
+                      "limit": 400000.0,
+                      "message": "Observed particle concentration meets the configured limit.",
+                      "status": "pass",
+                      "unit": "particles/m^3"
+                    }
+                  ],
+                  "no_failures_detected": true,
+                  "passed": true,
+                  "room": "Process",
+                  "status": "pass_with_unchecked",
+                  "verified": false,
+                  "volume_m3": 90.0
+                },
+                {
+                  "ach": 20.0,
+                  "complete": false,
+                  "findings": [
+                    {
+                      "actual": 20.0,
+                      "code": "ACH",
+                      "limit": 20.0,
+                      "message": "Nominal supply ACH meets the configured project requirement.",
+                      "status": "pass",
+                      "unit": "1/h"
+                    },
+                    {
+                      "actual": null,
+                      "code": "PRESSURE",
+                      "limit": null,
+                      "message": "Pressure requirement or observed value is not configured.",
+                      "status": "not_checked",
+                      "unit": "Pa"
+                    },
+                    {
+                      "actual": null,
+                      "code": "PARTICLES",
+                      "limit": null,
+                      "message": "No particle-concentration requirements configured.",
+                      "status": "not_checked",
+                      "unit": null
+                    }
+                  ],
+                  "no_failures_detected": true,
+                  "passed": true,
+                  "room": "Preparation",
+                  "status": "pass_with_unchecked",
+                  "verified": false,
+                  "volume_m3": 60.0
+                },
+                {
+                  "ach": 20.0,
+                  "complete": false,
+                  "findings": [
+                    {
+                      "actual": 20.0,
+                      "code": "ACH",
+                      "limit": 20.0,
+                      "message": "Nominal supply ACH meets the configured project requirement.",
+                      "status": "pass",
+                      "unit": "1/h"
+                    },
+                    {
+                      "actual": null,
+                      "code": "PRESSURE",
+                      "limit": null,
+                      "message": "Pressure requirement or observed value is not configured.",
+                      "status": "not_checked",
+                      "unit": "Pa"
+                    },
+                    {
+                      "actual": null,
+                      "code": "PARTICLES",
+                      "limit": null,
+                      "message": "No particle-concentration requirements configured.",
+                      "status": "not_checked",
+                      "unit": null
+                    }
+                  ],
+                  "no_failures_detected": true,
+                  "passed": true,
+                  "room": "Ante",
+                  "status": "pass_with_unchecked",
+                  "verified": false,
+                  "volume_m3": 36.0
+                }
+              ],
+              "status": "pass_with_unchecked",
+              "verified": false
+            },
+            "result_sha256": "e9bf34b717a71f4d9f74a2979dd6534db04c5d2ef2c88b209f557a579504e152",
+            "run_title": "Multi-room project verification",
+            "sequence": 3,
+            "status": "pass_with_unchecked"
+          }
+        ],
+        "schema": "cleanroomx.analysis-run-history",
+        "schema_version": 1
+      },
+      "purpose": "GUI and application-service demonstration",
+      "spatial_layout": {
+        "devices": [
+          {
+            "height_m": 2.1,
+            "id": "door-process",
+            "name": "Process Door",
+            "orientation_deg": 0.0,
+            "room_id": "process",
+            "swing": "left",
+            "type": "door",
+            "wall_side": "south",
+            "width_m": 1.0,
+            "x_m": 3.0,
+            "y_m": 0.0,
+            "z_m": 0.0
+          },
+          {
+            "height_m": 0.2,
+            "id": "supply-process",
+            "name": "Process Supply",
+            "orientation_deg": 0.0,
+            "room_id": "process",
+            "type": "supply",
+            "width_m": 0.4,
+            "x_m": 1.5,
+            "y_m": 2.0,
+            "z_m": 3.0
+          },
+          {
+            "height_m": 0.2,
+            "id": "ffu-process",
+            "name": "Process FFU",
+            "orientation_deg": 0.0,
+            "room_id": "process",
+            "type": "ffu",
+            "width_m": 0.4,
+            "x_m": 4.5,
+            "y_m": 3.0,
+            "z_m": 3.0
+          },
+          {
+            "height_m": 0.2,
+            "id": "return-process",
+            "name": "Process Return",
+            "orientation_deg": 0.0,
+            "room_id": "process",
+            "type": "return",
+            "width_m": 0.4,
+            "x_m": 5.5,
+            "y_m": 2.0,
+            "z_m": 3.0
+          },
+          {
+            "height_m": 1.2,
+            "id": "equipment-process",
+            "name": "Process Tool",
+            "orientation_deg": 0.0,
+            "room_id": "process",
+            "type": "equipment",
+            "width_m": 1.0,
+            "x_m": 3.0,
+            "y_m": 3.5,
+            "z_m": 0.0
+          },
+          {
+            "height_m": 2.1,
+            "id": "door-preparation",
+            "name": "Preparation Door",
+            "orientation_deg": 0.0,
+            "room_id": "preparation",
+            "swing": "right",
+            "type": "door",
+            "wall_side": "south",
+            "width_m": 0.9,
+            "x_m": 9.5,
+            "y_m": 0.0,
+            "z_m": 0.0
+          },
+          {
+            "height_m": 0.2,
+            "id": "supply-preparation",
+            "name": "Preparation Supply",
+            "orientation_deg": 0.0,
+            "room_id": "preparation",
+            "type": "supply",
+            "width_m": 0.4,
+            "x_m": 9.0,
+            "y_m": 2.0,
+            "z_m": 3.0
+          },
+          {
+            "height_m": 0.2,
+            "id": "return-preparation",
+            "name": "Preparation Return",
+            "orientation_deg": 0.0,
+            "room_id": "preparation",
+            "type": "return",
+            "width_m": 0.4,
+            "x_m": 11.0,
+            "y_m": 2.0,
+            "z_m": 3.0
+          },
+          {
+            "height_m": 2.1,
+            "id": "door-ante",
+            "name": "Ante Door",
+            "orientation_deg": 0.0,
+            "room_id": "ante",
+            "swing": "left",
+            "type": "door",
+            "wall_side": "south",
+            "width_m": 0.9,
+            "x_m": 15.0,
+            "y_m": 0.0,
+            "z_m": 0.0
+          },
+          {
+            "height_m": 0.4,
+            "id": "transfer-ante",
+            "name": "Ante Transfer",
+            "orientation_deg": 0.0,
+            "room_id": "ante",
+            "type": "transfer",
+            "wall_side": "north",
+            "width_m": 0.6,
+            "x_m": 16.0,
+            "y_m": 3.0,
+            "z_m": 1.0
+          }
+        ],
+        "engineering_sync": {
+          "analysis_id": "verification",
+          "rooms": [
+            {
+              "analysis_room_name": "Process",
+              "height_m": 3.0,
+              "length_m": 6.0,
+              "room_id": "process",
+              "width_m": 5.0
+            },
+            {
+              "analysis_room_name": "Preparation",
+              "height_m": 3.0,
+              "length_m": 5.0,
+              "room_id": "preparation",
+              "width_m": 4.0
+            },
+            {
+              "analysis_room_name": "Ante",
+              "height_m": 3.0,
+              "length_m": 4.0,
+              "room_id": "ante",
+              "width_m": 3.0
+            }
+          ]
+        },
+        "floor": {
+          "default_ceiling_height_m": 3.0,
+          "elevation_m": 0.0,
+          "id": "floor-1",
+          "name": "Main Cleanroom Floor",
+          "units": "m"
+        },
+        "grid_m": 0.5,
+        "rooms": [
+          {
+            "analysis_room_name": "Process",
+            "classification": "Demo process suite",
+            "floor_elevation_m": 0.0,
+            "height_m": 3.0,
+            "id": "process",
+            "length_m": 6.0,
+            "name": "Process",
+            "pressure_pa": 30.0,
+            "width_m": 5.0,
+            "x_m": 0.0,
+            "y_m": 0.0
+          },
+          {
+            "analysis_room_name": "Preparation",
+            "classification": "Demo preparation suite",
+            "floor_elevation_m": 0.0,
+            "height_m": 3.0,
+            "id": "preparation",
+            "length_m": 5.0,
+            "name": "Preparation",
+            "pressure_pa": 16.0,
+            "width_m": 4.0,
+            "x_m": 7.0,
+            "y_m": 0.0
+          },
+          {
+            "analysis_room_name": "Ante",
+            "classification": "Demo transition suite",
+            "floor_elevation_m": 0.0,
+            "height_m": 3.0,
+            "id": "ante",
+            "length_m": 4.0,
+            "name": "Ante / Airlock",
+            "pressure_pa": 8.0,
+            "width_m": 3.0,
+            "x_m": 13.0,
+            "y_m": 0.0
+          }
+        ],
+        "version": 1,
+        "view": {
+          "azimuth_deg": 35.0,
+          "elevation_deg": 28.0,
+          "overlay_mode": "pressure",
+          "pan_3d_x": 0.0,
+          "pan_3d_y": 0.0,
+          "pan_x": -42.37805594931967,
+          "pan_y": -93.14764557722748,
+          "projection_mode": "orthographic",
+          "section_enabled": false,
+          "section_height_m": 2.4,
+          "show_devices": true,
+          "show_labels": true,
+          "show_pressure": true,
+          "show_relationships": true,
+          "snap_to_grid": true,
+          "zoom_2d": 0.6276856753442004,
+          "zoom_3d": 0.7513148009015777
+        }
+      }
+    },
+    "name": "CleanroomX GUI Demonstration"
+  },
+  "schema": "cleanroomx.project",
+  "schema_version": 1
 }

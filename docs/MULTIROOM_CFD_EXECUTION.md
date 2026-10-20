@@ -233,6 +233,10 @@ actual OpenFOAM fields when Foundation v10 is available.
 
 The **Open real VTK 3D** control in the *Computed sections* tab opens
 an interactive window after a successful import of recorded CFD fields.
+When the installed VTK wheel does not contain `libvtkRenderingTk`, CleanroomX
+opens a separate native VTK graphics window and keeps its controls in Tk. This
+fallback deliberately avoids declaring missing VTK/Tk embedding support a
+solver error.
 Install optional dependencies (`python -m pip install -e ".[cfd]"`) and
 launch the CleanroomX desktop in the graphical Linux environment in which
 the recorded OpenFOAM Foundation v10 case is accessible. Mouse drag rotates,

@@ -19,6 +19,7 @@ import pytest
 from cleanroomx.cfd_multizone import generate_multizone_open_door_case, run_multizone_open_door_case
 from cleanroomx.cfd_multizone_gui import MultizoneCFDWindow, slice_samples
 from cleanroomx.cfd_multizone_results import analyze_multizone_case, export_multizone_report, read_ascii_field
+from cleanroomx.cfd_multizone_review import review_recorded_multizone
 from cleanroomx.cfd_streamlines import ComputedVelocityGrid, trace_computed_streamline
 from cleanroomx.gui import bundled_demo_project_path
 
@@ -116,6 +117,13 @@ def test_actual_time_sections_and_reproducible_report(executed_case,computed_rep
     assert len((report_dir/"room-balances.csv").read_text().splitlines())==5
     assert summary["numerics"]["selected_iteration"]==100
     assert "Solver reported convergence" in path.read_text()
+    assert "Engineering decision: HOLD" in path.read_text()
+    engineering=json.loads((report_dir/"engineering-review.json").read_text())
+    assert engineering["engineering_release"]=="HOLD"
+    assert engineering["source_iteration"]==computed_report["time_name"]
+    assert engineering["source_manifest_sha256"]==computed_report["provenance"]["manifest_sha256"]
+    assert len(engineering["doors"])==3
+    assert not engineering["closed_door_5pa_demonstrated"]
     with pytest.raises(FileExistsError):
         export_multizone_report(computed_report,report_dir)
     with pytest.raises(FileExistsError,match="already"):
@@ -190,6 +198,10 @@ def test_actual_gui_displays_recorded_fields_vectors_and_residuals(computed_repo
         root.update()
         assert len(window.room_table.get_children())==4
         assert len(window.door_table.get_children())==3
+        assert window.engineering_review["engineering_release"]=="HOLD"
+        assert len(window.engineering_table.get_children())==3
+        assert "5 Pa CLOSED-DOOR PERFORMANCE NOT DEMONSTRATED" in window.engineering_verdict.get()
+        assert "OPEN_DOOR_SCENARIO" in window.engineering_text.get("1.0","end")
         assert len(window.pressure_canvas.find_withtag("computed-pressure"))==4
         window.tabs.select(1)
         root.update()
@@ -358,3 +370,23 @@ def test_real_openfoam_drives_one_way_particle_screening(computed_report):
     assert from_point["points"][0]["xyz_m"]==samples[0]["center_m"]
     vtk_track=computed_particle_polydata(report,[track])
     assert vtk_track.GetNumberOfPoints()==len(track["points"])
+
+
+def test_true_openfoam_fields_produce_noncertifying_design_pressure_review(computed_report):
+    """No claim that computed open-door 5 Pa design targets are verified."""
+    actual=computed_report
+    review=review_recorded_multizone(actual)
+    assert review["engineering_release"]=="HOLD"
+    assert not review["closed_door_5pa_demonstrated"]
+    assert review["source_iteration"]==actual["time_name"]
+    assert review["source_run_receipt_sha256"]==actual["provenance"]["run_receipt_sha256"]
+    assert review["numerical_convergence_at_selected_iteration"] is actual["solver_reported_convergence"]
+    assert len(review["doors"])==len(actual["doors"])==3
+    for door in review["doors"]:
+        source=actual["doors"][door["door"]]
+        expected=source["computed_delta_pressure_pa"]-source["design_delta_pressure_target_pa"]
+        assert door["delta_minus_target_pa"]==pytest.approx(expected)
+        assert door["computed_forward_m3_s"]==pytest.approx(source["computed_forward_m3_s"])
+        assert door["computed_reverse_m3_s"]==pytest.approx(source["computed_reverse_m3_s"])
+    assert all(door["target_delta_pa"]==5. for door in review["doors"])
+    assert "OPEN_DOOR_SCENARIO" in {item["code"] for item in review["reasons"]}

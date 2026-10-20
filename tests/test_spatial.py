@@ -710,7 +710,7 @@ def test_packaged_gui_demo_contains_explicit_spatial_design():
         "Process",
         "Preparation",
         "Ante",
-        None,  # Reference corridor is not included in cleanroom verification.
+        "Corridor",  # Synthetic reference zone remains explicitly synchronized.
     ]
     assert [room["pressure_pa"] for room in layout["rooms"]] == [15.0, 10.0, 5.0, 0.0]
     device_types = {device["type"] for device in layout["devices"]}

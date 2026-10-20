@@ -74,3 +74,70 @@ cascade values and downflow uniformity require independent validation.
 
 See `docs/PRESSURE_NETWORK.md` for the supported screening method and
 limitations, including the underlying NIST CONTAM reference.
+
+
+## New: room-resolved OpenFOAM case preparation (separate room solves)
+
+Unlike the 2D/3D demonstration overlay, the following command generates real
+OpenFOAM Foundation v10 `blockMeshDict`, `0/U` and `0/p` solver input files
+for each FFU-supplied room (Process, Preparation, Ante). Use the checked-out
+feature branch of CleanroomX:
+
+```powershell
+python -m cleanroomx.cfd_pipeline_cli project-rooms-generate examples/gui_demo.cleanroomx.json cfd_5pa_rooms --kinematic-viscosity-m2-s 1.5e-5 --mesh-cells 24 24 12
+```
+
+Or use `cleanroomx-cfd-pipeline` if its console script is installed.
+
+The kinematic-viscosity value above is an illustrative air-property input,
+**not a measurement**. Replace it with a value suited to the actual operating
+temperature. The CFD converter does **not** invent this physical parameter.
+It requires one explicitly.
+
+For each exported room, the mesh boundaries classify:
+
+- `inlet`: discrete ceiling rectangles derived from actual FFU locations in
+  the spatial layout; downward velocity is calculated from the configured
+  supply flow divided by mesh-resolved inlet area
+- `outlet`: discrete low west-wall return grille faces, with a local numerical
+  pressure reference
+- `closedDoors`: door-shaped **noSlip solid wall** regions on *both sides* of
+  each shared wall, covering exactly the same nominal physical doorway
+- `walls`: all remaining no-slip building-envelope faces
+
+These are discrete boundary-face approximations. The manifest reports
+face counts, resolved areas, door positions, FFU counts, and SHA-256 hashes
+for all input files. The exported directory is never overwritten.
+
+OpenFOAM must be installed in Linux/WSL to opt into execution:
+
+```powershell
+python -m cleanroomx.cfd_pipeline_cli project-rooms-run cfd_5pa_rooms --timeout-seconds 3600
+```
+
+The command invokes `blockMesh`, `checkMesh` and `simpleFoam` per room
+and records the output logs. It **does not** execute OpenFOAM during
+generation or infer convergence merely from successful process exit.
+
+### Critical physical separation
+
+A closed door does **not** provide an open fluid connection in these room
+CFD cases. The 5 Pa corridor/airlock/process pressure cascade remains a
+**separate, steady, lumped leakage-network calculation** under synthetic
+leakage assumptions. It is *not* applied as a pressure boundary condition
+to these independent room CFD cases. The pressure field written to `0/p`
+uses OpenFOAM kinematic pressure units, and a local zero reference at each
+return; it is **not** the displayed absolute 15/10/5/0 Pa gauge cascade.
+
+Consequently, the nominal network leakage mass balance (e.g., Process
+36 m³/h net transfer at 5 Pa) is not reproduced by the isolated CFD model:
+each room's unconstrained outlet flows the volume required to balance its
+inlet. The two models must not be combined or represented as coupled physics.
+
+For actual coupled airflow through an **open door**, or leakage through a
+physical closed-door gap, a separate conformal multiroom mesh with
+appropriate apertures/gap conductance and physically specified boundary
+conditions is needed. The single-room generator does not construct that
+coupling. The same applies to unverified claims of uniform laminar
+downflow and the real ceiling FFU operating speed.
+

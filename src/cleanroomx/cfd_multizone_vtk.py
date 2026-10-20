@@ -10,7 +10,7 @@ from __future__ import annotations
 import math
 
 from .cfd_streamlines import (
-    ComputedVelocityGrid, SOURCE_SCHEMA, TRACE_SCHEMA,
+    ComputedVelocityGrid, SOURCE_SCHEMA, TRACE_SCHEMA, trace_computed_streamline,
 )
 
 MAX_3D_CELLS = 100_000
@@ -72,6 +72,72 @@ def select_recorded_cells(report, *, room_id="all", plane_axis="all",
     if not selected:
         raise ValueError("No computed cells on the selected room/plane layer")
     return selected
+
+
+def seed_streamline_from_displayed_point(
+    report, traces, point_id, *, room_id="all", plane_axis="all",
+    plane_position_m=None, max_integration_s=20.0,
+):
+    """Seed only at an actual *displayed* solver-cell centre.
+
+    No arbitrary screen/world location becomes a fluid seed. Existing
+    trajectories must match the same run receipt and selected iteration.
+    Returns a new provenance-tagged steady streamline without mutating input.
+    """
+    if type(point_id) is not int:
+        raise ValueError("Recorded point ID must be an integer")
+    if not isinstance(traces, list) or len(traces) >= MAX_3D_TRACES:
+        raise ValueError("At most 20 recorded steady traces may be displayed")
+    # Reject stale/mixed-source trajectories before adding another one.
+    if traces:
+        computed_trace_polydata(report, traces)
+    samples=select_recorded_cells(
+        report,room_id=room_id,plane_axis=plane_axis,
+        plane_position_m=plane_position_m)
+    if not 0 <= point_id < len(samples):
+        raise ValueError("Picked point is not in the displayed computed field")
+    return trace_computed_streamline(
+        report,samples[point_id]["center_m"],
+        max_integration_s=max_integration_s)
+
+
+def _recorded_cell_actor(renderer):
+    """Find the ONLY rendered actor with recorded solver U point arrays."""
+    collection=renderer.GetActors()
+    collection.InitTraversal()
+    found=None
+    for _ in range(collection.GetNumberOfItems()):
+        actor=collection.GetNextActor()
+        mapper=actor.GetMapper() if actor else None
+        data=mapper.GetInput() if mapper else None
+        if data is None or not data.IsA("vtkPolyData"):
+            continue
+        if data.GetPointData().GetArray("Computed U (m/s)") is not None:
+            if found is not None:
+                raise ValueError("Multiple ambiguous computed CFD point actors")
+            found=actor
+    if found is None:
+        raise ValueError("Computed CFD point actor is unavailable")
+    return found
+
+
+def pick_recorded_solver_point(renderer, display_x, display_y):
+    """VTK point-pick strictly from colored cell-centre actor, not CAD/wires."""
+    vtk=_vtk()
+    if (type(display_x) not in (int,float) or
+        type(display_y) not in (int,float) or
+        not math.isfinite(display_x) or not math.isfinite(display_y)):
+        raise ValueError("VTK display coordinates must be finite")
+    actor=_recorded_cell_actor(renderer)
+    picker=vtk.vtkPointPicker()
+    picker.PickFromListOn()
+    picker.AddPickList(actor)
+    picker.SetTolerance(0.02)
+    picked=picker.Pick(float(display_x),float(display_y),0,renderer)
+    point_id=picker.GetPointId()
+    if not picked or point_id < 0:
+        raise ValueError("Click directly on a colored recorded fluid-cell centre")
+    return int(point_id)
 
 
 def computed_field_polydata(report, *, room_id="all", plane_axis="all",

@@ -32,7 +32,7 @@ jobs:
           echo "deb [signed-by=/usr/share/keyrings/openfoam.gpg] http://dl.openfoam.org/ubuntu jammy main" | sudo tee /etc/apt/sources.list.d/openfoam.list
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends openfoam10 xvfb python3-tk
-          python -m pip install -e ".[dev]"
+          python -m pip install -e ".[dev,cfd]"
       - name: Execute connected mesh, solver, field import, failure and GUI checks
         env:
           CLEANROOMX_REQUIRE_OPENFOAM: "1"

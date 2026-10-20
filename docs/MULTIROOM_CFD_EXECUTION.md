@@ -281,3 +281,29 @@ recorded selected iteration (not from the VTK renderer). These capabilities
 do not create CFD calculations, pressure control, particle transport or
 validated physical results. Unit tests use expressly artificial sample values,
 and GUI tests exercise the native VTK window under a real Xvfb display.
+
+
+## 3D click-to-seed recorded-field streamlines (20 October 2026)
+
+In **Open real VTK 3D** enable **Pick fluid seed in 3D** and click
+directly on a visible colored computed cell centre. A vtkPointPicker
+restricted to the recorded CFD point actor selects an actual solved-fluid
+cell, never a room wireframe, vector arrow, wall, free-space location,
+or synthetic interpolated sample. Room and plane filtering affect which
+cells are selectable. Existing paths remain visible as whole 3D routes.
+
+The selected cell's *recorded* coordinates seed a bounded steady-streamline
+integration using the same OpenFOAM cell-centred U values and source iteration.
+The implementation refuses stale/mixed-source traces, missing/invalid fluid
+cells and more than 20 paths. Clicking off the real field displays a clear
+rejection message; **Clear 3D traces** removes only paths in the 3D viewer.
+Rotation/zoom retain the existing VTK camera and the selected fluid scene.
+The 3D control status labels each new path's point count and termination
+reason. Colors/room shapes remain a review visualization only.
+
+**Physics limitation:** These are *streamlines* from a recorded steady U
+field, not transient Lagrangian particle tracking. They do not include
+particle diameter, inertia, Brownian diffusion, gravity, deposition,
+collisions or a solved transient particle concentration field. Unit cases
+are synthetic and only the dedicated OpenFOAM execution job provides
+solver-derived CFD provenance checks.

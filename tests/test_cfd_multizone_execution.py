@@ -317,3 +317,44 @@ def test_real_solver_computed_fields_feed_true_vtk_3d(computed_report):
     assert picked["source_iteration"]==actual["time_name"]
     assert picked["source_run_receipt_sha256"]==actual["provenance"]["run_receipt_sha256"]
     assert not picked["validated_particle_tracking"]
+
+
+def test_real_openfoam_drives_one_way_particle_screening(computed_report):
+    """Actual computed OpenFOAM U controls an inertial screening particle.
+
+    One-way frozen-field integration only. This does NOT validate turbulent
+    dispersion, cleanroom contamination risk or deposited particle fractions.
+    """
+    from cleanroomx.cfd_particles import trace_screening_particle
+    from cleanroomx.cfd_multizone_vtk import (
+        seed_particle_from_displayed_point, computed_particle_polydata,
+        select_recorded_cells,
+    )
+    report=computed_report
+    fluid=report["cells"][len(report["cells"])//2]
+    seed=fluid["center_m"]
+    track=trace_screening_particle(report,seed,
+        diameter_um=5.,max_time_s=.1)
+    assert track["source_iteration"]==report["time_name"]
+    assert track["source_run_receipt_sha256"]==report["provenance"]["run_receipt_sha256"]
+    assert 1<=len(track["points"])<=4001
+    assert track["validated_particle_transport"] is False
+    assert track["frozen_steady_velocity_no_solver_transient"]
+    lookup=ComputedVelocityGrid(report)
+    for item in track["points"]:
+        actual=lookup.cell_at(item["xyz_m"])
+        assert actual is not None
+        assert item["recorded_gas_velocity_m_s"]==pytest.approx(actual[0])
+        assert all(math.isfinite(v) for v in item["particle_velocity_m_s"])
+    assert track["termination"] in (
+        "max_particle_time","fluid_boundary_contact_unresolved","max_steps")
+    axis_position=fluid["center_m"][2]
+    samples=select_recorded_cells(
+        report,room_id=fluid["room_id"],plane_axis="z",
+        plane_position_m=axis_position)
+    from_point=seed_particle_from_displayed_point(
+        report,[],0,room_id=fluid["room_id"],plane_axis="z",
+        plane_position_m=axis_position,max_time_s=.05)
+    assert from_point["points"][0]["xyz_m"]==samples[0]["center_m"]
+    vtk_track=computed_particle_polydata(report,[track])
+    assert vtk_track.GetNumberOfPoints()==len(track["points"])

@@ -147,3 +147,42 @@ rectangular ceiling **X-by-Y patch footprint** when classifying mesh faces.
 This is a visualization/export convention for the synthetic demo, not an
 independently verified manufacturer FFU footprint. Project-specific FFU
 physical dimensions and supply areas must be reviewed before a real run.
+
+
+
+## Desktop GUI: project-native case export
+
+The desktop app now includes **Analyze → Generate OpenFOAM Room Cases…**.
+The action refuses unsaved or externally changed projects, asks for a
+kinematic viscosity explicitly, then asks for the parent directory and a
+**new** output folder name. It will not overwrite an existing folder.
+
+The export creates SHA-256-bound input files for each FFU-supplied room and
+reports the case count. **Generation never runs a solver**. Review the
+generated `manifest.json`, including the per-device inlet, outlet and door
+face areas; these face-centered mesh footprints differ from exact design
+dimensions. The GUI does not claim that the closed door leakage network
+has been coupled to the three CFD room models.
+
+## Independent CFD numerical log screening
+
+After separately running actual OpenFOAM Foundation v10 cases, optionally
+audit the solver logs with explicit, project-chosen numerical criteria:
+
+```powershell
+python -m cleanroomx.cfd_pipeline_cli project-rooms-audit cfd_5pa_rooms --fields p Ux Uy Uz --max-initial-residual 1e-4 --max-final-residual 1e-5 --max-global-continuity 1e-5 --window 3
+```
+
+All numerical thresholds in this example are **illustrative**, not
+standards requirements or project acceptance criteria. The screening
+requires `blockMesh.log` and `checkMesh.log` terminal markers, the
+`Mesh OK` marker from `checkMesh`, solver residuals for every requested
+field, and a terminal marker in the `simpleFoam.log`. The audit rejects
+missing logs, symlinked logs and changed hashed solver inputs. It records
+per-case log hashes and separates `numerically_screened_requires_engineering_review`
+from `incomplete_or_failed`. It **does not establish** actual convergence,
+mesh independence, equipment performance, door-gap mass balance or
+standards compliance without subsequent engineering checks.
+
+The generated cases cannot reproduce the nominal 5 Pa inter-room pressure
+differences: there is no fluid coupling through their closed doors.

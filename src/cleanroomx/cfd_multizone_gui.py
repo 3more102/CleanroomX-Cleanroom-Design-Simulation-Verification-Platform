@@ -649,12 +649,17 @@ class MultizoneCFDWindow(tk.Toplevel):
             messagebox.showerror("Closed-door leakage scenario rejected",str(exc),parent=self)
 
     def load_closed_door_comparison(self,comparison):
-        if (comparison.get("engineering_release")!="HOLD" or
-            comparison.get("closed_door_5pa_cfd_demonstrated") is not False or
-            (self.report and
-             comparison["open_cfd_provenance"]["run_receipt_sha256"]!=
-             self.report["provenance"]["run_receipt_sha256"])):
-            raise ValueError("Closed-door comparison is invalid or from another CFD run")
+        if (comparison.get("schema")!="cleanroomx.open-cfd-vs-closed-network.v1"
+            or comparison.get("engineering_release")!="HOLD"
+            or comparison.get("closed_door_5pa_cfd_demonstrated") is not False
+            or (self.report and (
+                comparison["open_cfd_provenance"]["run_receipt_sha256"]!=
+                    self.report["provenance"]["run_receipt_sha256"]
+                or comparison["open_cfd_provenance"]["manifest_sha256"]!=
+                    self.report["provenance"]["manifest_sha256"]
+                or comparison["open_cfd_provenance"]["selected_iteration"]!=
+                    self.report["time_name"]))):
+            raise ValueError("Closed-door comparison is invalid or from another CFD run/iteration")
         self.closed_door_comparison=comparison
         self.closed_door_sensitivity=None
         self.closed_sweep_table.delete(*self.closed_sweep_table.get_children())

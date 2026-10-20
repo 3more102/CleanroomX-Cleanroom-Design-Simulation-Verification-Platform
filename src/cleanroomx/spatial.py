@@ -10,6 +10,7 @@ from typing import Any, Callable
 import tkinter as tk
 from tkinter import messagebox, ttk
 
+from .door_geometry import door_aperture, opening_corners, solid_wall_panels, wall_point
 from .gui_theme import theme_palette
 from .spatial_editing import duplicate_spatial_item, update_spatial_properties
 
@@ -3508,12 +3509,78 @@ class SpatialDesignWorkspace(ttk.Frame):
                     else:
                         p0 = self._world_to_canvas(device["x_m"], device["y_m"] - half)
                         p1 = self._world_to_canvas(device["x_m"], device["y_m"] + half)
-                    canvas.create_line(
-                        *p0, *p1,
-                        fill=device_outline,
-                        width=7 if (selected or hovered) else 5,
-                        tags=(tag, "device"),
+                    aperture = (
+                        door_aperture(
+                            next(
+                                (r for r in self.layout["rooms"]
+                                 if r["id"] == device.get("room_id")),
+                                {},
+                            ),
+                            device,
+                        )
+                        if device["type"] == "door"
+                        else None
                     )
+                    if aperture is not None:
+                        # Remove the room boundary stroke underneath the door
+                        # instead of painting a thick door on an intact wall.
+                        canvas.create_line(
+                            *p0, *p1,
+                            fill=self._theme_palette["surface_alt"], width=10,
+                            tags=(tag, "device", "door-gap-2d"),
+                        )
+                        # Closed door leaf at the jambs, with a thin swing arc
+                        # to indicate the potential opening direction.
+                        canvas.create_line(
+                            *p0, *p1, fill=device_outline, width=3,
+                            tags=(tag, "device", "door-leaf-2d"),
+                        )
+                        hinge_u = (
+                            aperture["u0"] if device.get("swing") != "right"
+                            else aperture["u1"]
+                        )
+                        free_u = (
+                            aperture["u1"] if device.get("swing") != "right"
+                            else aperture["u0"]
+                        )
+                        room = next(
+                            r for r in self.layout["rooms"]
+                            if r["id"] == device["room_id"]
+                        )
+                        hinge = wall_point(room, side, hinge_u, 0.0)
+                        free = wall_point(room, side, free_u, 0.0)
+                        along_x = free[0] - hinge[0]
+                        along_y = free[1] - hinge[1]
+                        outward = {
+                            "east": (1.0, 0.0), "west": (-1.0, 0.0),
+                            "north": (0.0, 1.0), "south": (0.0, -1.0),
+                        }[side]
+                        swing_radius = device["width_m"]
+                        points = []
+                        for step in range(9):
+                            angle = (math.pi / 2) * step / 8
+                            xx = (hinge[0] + along_x * math.cos(angle)
+                                  - outward[0] * swing_radius * math.sin(angle))
+                            yy = (hinge[1] + along_y * math.cos(angle)
+                                  - outward[1] * swing_radius * math.sin(angle))
+                            points.extend(self._world_to_canvas(xx, yy))
+                        canvas.create_line(
+                            *points, fill="#0891b2", width=1, dash=(3, 3),
+                            smooth=True, tags=(tag, "device", "door-swing-2d"),
+                        )
+                        hx, hy = self._world_to_canvas(hinge[0], hinge[1])
+                        canvas.create_oval(
+                            hx - 3, hy - 3, hx + 3, hy + 3,
+                            fill=device_outline, outline="",
+                            tags=(tag, "device", "door-hinge-2d"),
+                        )
+                    else:
+                        canvas.create_line(
+                            *p0, *p1,
+                            fill=device_outline,
+                            width=7 if (selected or hovered) else 5,
+                            tags=(tag, "device"),
+                        )
                     if self._show_labels.get():
                         canvas.create_text(
                             x, y - 10,
@@ -3847,22 +3914,49 @@ class SpatialDesignWorkspace(ttk.Frame):
                 stipple=stipple,
                 tags=(tag, "room3d"),
             )
-            canvas.create_polygon(
-                *sum((base[1], base[2], top[2], top[1]), ()),
-                fill="#6c7f92",
-                outline=outline,
-                width=polygon_width,
-                stipple=stipple,
-                tags=(tag, "room3d"),
-            )
-            canvas.create_polygon(
-                *sum((base[2], base[3], top[3], top[2]), ()),
-                fill="#53687c",
-                outline=outline,
-                width=polygon_width,
-                stipple=stipple,
-                tags=(tag, "room3d"),
-            )
+            # Treat doors as real wall apertures, not single vertical strokes.
+            # Draw only the solid wall patches around openings; roof and
+            # remaining walls preserve the existing spatial overview.
+            for side, face, surface_fill, wall_span in (
+                ("east", (base[1], base[2], top[2], top[1]),
+                 "#6c7f92", room["width_m"]),
+                ("north", (base[2], base[3], top[3], top[2]),
+                 "#53687c", room["length_m"]),
+            ):
+                apertures = []
+                for device in self.layout["devices"]:
+                    if not self._is_item_visible("device", device["id"]):
+                        continue
+                    aperture = door_aperture(room, device)
+                    if (aperture is not None and aperture["side"] == side
+                            and aperture["z0"] < z1 - z0):
+                        clipped = dict(aperture)
+                        clipped["z1"] = min(clipped["z1"], z1 - z0)
+                        apertures.append(clipped)
+                if not apertures:
+                    canvas.create_polygon(
+                        *sum(face, ()), fill=surface_fill, outline=outline,
+                        width=polygon_width, stipple=stipple, tags=(tag, "room3d"),
+                    )
+                    continue
+                for u0, u1, lower, upper in solid_wall_panels(
+                    wall_span, z1 - z0, apertures
+                ):
+                    vertices = (
+                        wall_point(room, side, u0, lower),
+                        wall_point(room, side, u1, lower),
+                        wall_point(room, side, u1, upper),
+                        wall_point(room, side, u0, upper),
+                    )
+                    projected = [
+                        self._project_3d(px - cx, py - cy, pz)
+                        for px, py, pz in vertices
+                    ]
+                    canvas.create_polygon(
+                        *sum(projected, ()), fill=surface_fill,
+                        outline="", stipple=stipple,
+                        tags=(tag, "room3d", "door-cut-wall-3d"),
+                    )
             for start, end in zip(base, top):
                 canvas.create_line(
                     *start, *end, fill=outline, width=1, tags=(tag, "room3d")
@@ -3913,7 +4007,35 @@ class SpatialDesignWorkspace(ttk.Frame):
                 device_bottom_z = room_floor + device["z_m"]
                 if section_height is not None and device_bottom_z >= section_height:
                     continue
-                if device["type"] in {"door", "window", "opening", "transfer"}:
+                aperture = door_aperture(room, device) if room is not None else None
+                if aperture is not None and (
+                    section_height is None or section_height > device_bottom_z
+                ):
+                    aperture = dict(aperture)
+                    if section_height is not None:
+                        aperture["z1"] = min(
+                            aperture["z1"], section_height - room_floor
+                        )
+                    corners = opening_corners(room, aperture)
+                    pixels = [
+                        self._project_3d(px - cx, py - cy, pz)
+                        for px, py, pz in corners
+                    ]
+                    # The door is CLOSED for the design's leakage model.
+                    # A translucent-stipple leaf makes the frame distinguishable.
+                    canvas.create_polygon(
+                        *sum(pixels, ()),
+                        fill="#0f766e", outline=device_outline, width=2,
+                        stipple="gray50",
+                        tags=(tag, "device3d", "door-leaf-3d"),
+                    )
+                    for first, last in ((0, 3), (1, 2), (3, 2)):
+                        canvas.create_line(
+                            *pixels[first], *pixels[last],
+                            fill="#e2e8f0", width=3,
+                            tags=(tag, "device3d", "door-frame-3d"),
+                        )
+                elif device["type"] in {"door", "window", "opening", "transfer"}:
                     device_top_z = (
                         device_bottom_z + device.get("height_m", 0.4)
                     )

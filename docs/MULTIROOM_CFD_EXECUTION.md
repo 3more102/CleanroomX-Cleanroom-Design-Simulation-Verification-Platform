@@ -362,3 +362,33 @@ unsolved or solid voxel boundary, its screening path terminates rather than
 claiming deposition. The native VTK + real Tk + Xvfb smoke regression exercises
 the time slider and verifies that marker coordinates equal recorded sample
 positions from the frozen-field particle model.
+
+
+## Engineering review: measured open-door delta versus 5 Pa design target
+
+The **Engineering review** tab and the exported `engineering-review.json`
+show per-door pressure differences computed from the *recorded* OpenFOAM
+room-mean kinematic pressure, converted to Pa using the explicitly selected
+air density. A signed **Computed − design** difference is reported instead
+of assuming the designer's target was achieved. The table also displays the
+actual `phi`-integrated forward and reverse volume-flux components (m³/h).
+The results remain tied to the source run receipt, manifest SHA-256 and
+selected SIMPLE iteration.
+
+The engineering outcome is **HOLD** for this *all-doors-open* scenario even
+if the computed differences happen to equal 5 Pa or OpenFOAM reports
+numerical convergence. It is impossible to demonstrate a *closed-door*
+pressure cascade from an open-door simulation. Reviewer-defined compliance
+tolerances are deliberately **not** invented. The tab separately surfaces
+selected-iteration numerical convergence, opposing pressure direction,
+missing design targets and absence of evidence for closed-door leakage,
+pressure control, physical validation and mesh sensitivity. Such findings
+are observations and investigation priorities, not automatic prescriptions
+to increase FFU speed or change supply/return openings.
+
+The standalone `engineering-review.json` can be exported from the GUI
+without overwriting existing records. The ordinary **Export report** action
+also saves `engineering-review.json` alongside its other computed evidence
+and includes a visibly noncertifying door comparison in the HTML dashboard.
+A completed OpenFOAM execution plus output/manifest hash checks establish
+field *provenance*, not commissioning acceptance or cleanroom performance.

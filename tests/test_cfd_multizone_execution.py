@@ -247,6 +247,17 @@ def test_actual_gui_displays_recorded_fields_vectors_and_residuals(computed_repo
         root.update()
         assert len(window.closed_door_table.get_children())==3
         assert "TWO DIFFERENT MODELS" in window.closed_door_details.get("1.0","end")
+        wrong_iteration=dict(closed)
+        wrong_iteration["open_cfd_provenance"]={
+            **closed["open_cfd_provenance"],"selected_iteration":"75"}
+        with pytest.raises(ValueError,match="another CFD run/iteration"):
+            window.load_closed_door_comparison(wrong_iteration)
+        assert len(window.closed_door_table.get_children())==3
+        wrong_manifest=dict(closed)
+        wrong_manifest["open_cfd_provenance"]={
+            **closed["open_cfd_provenance"],"manifest_sha256":"0"*64}
+        with pytest.raises(ValueError,match="another CFD run/iteration"):
+            window.load_closed_door_comparison(wrong_manifest)
         assert "ENGINEERING HOLD" in window.closed_door_status.get()
         window.closed_door_model=synthetic_model
         window.closed_door_evidence=synthetic_sources

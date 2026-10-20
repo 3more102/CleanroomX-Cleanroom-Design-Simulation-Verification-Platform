@@ -26,6 +26,7 @@ from cleanroomx.cfd_multizone_stability import (
 )
 from cleanroomx.cfd_streamlines import ComputedVelocityGrid, trace_computed_streamline
 from cleanroomx.gui import bundled_demo_project_path
+from cleanroomx.cfd_closed_door_sensitivity import sweep_closed_door_leakage
 from cleanroomx.cfd_closed_door_comparison import (
     compare_closed_network_with_open_cfd,write_closed_door_scenario_template,
     load_closed_door_network_scenario,export_closed_door_comparison,
@@ -247,6 +248,13 @@ def test_actual_gui_displays_recorded_fields_vectors_and_residuals(computed_repo
         assert len(window.closed_door_table.get_children())==3
         assert "TWO DIFFERENT MODELS" in window.closed_door_details.get("1.0","end")
         assert "ENGINEERING HOLD" in window.closed_door_status.get()
+        window.closed_door_model=synthetic_model
+        window.closed_door_evidence=synthetic_sources
+        window.run_closed_leakage_sensitivity()
+        root.update()
+        assert len(window.closed_sweep_table.get_children())==9
+        assert "Hypothetical leakage sensitivity" in window.closed_door_status.get()
+        assert window.closed_door_sensitivity["engineering_release"]=="HOLD"
 
         earlier=analyze_multizone_case(
             executed_case,density_kg_m3=1.2,reference_room_id="corridor",
@@ -509,5 +517,20 @@ def test_real_openfoam_room_inventory_maps_to_explicit_closed_leakage_network(
     out=export_closed_door_comparison(
         comparison,tmp_path/"two-model-review.json")
     assert json.loads(out.read_text())["engineering_release"]=="HOLD"
+    assert len(comparison["mechanical_airflow_boundary_comparison"])==4
+    for item in comparison["mechanical_airflow_boundary_comparison"]:
+        rid=item["room"]
+        assert item["open_cfd_supply_m3_h"]==pytest.approx(
+            source["rooms"][rid]["supply_inflow_m3_s"]*3600)
+        assert item["open_cfd_return_m3_h"]==pytest.approx(
+            source["rooms"][rid]["return_outflow_m3_s"]*3600)
+        assert item["closed_network_supply_input_m3_h"]==0.
+    sweep=sweep_closed_door_leakage(
+        source,model,evidence,factors=(.5,1.,2.))
+    assert sweep["engineering_release"]=="HOLD"
+    assert not sweep["closed_door_cfd_demonstrated"]
+    assert len(sweep["factor_results"])==3
+    assert all(len(scenario["door_results"])==3
+               for scenario in sweep["factor_results"])
 
 

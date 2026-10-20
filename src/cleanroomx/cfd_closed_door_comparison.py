@@ -161,6 +161,62 @@ def compare_closed_network_with_open_cfd(
     }
 
 
+def write_closed_door_scenario_template(report, destination):
+    """Generate an intentionally INCOMPLETE input template from actual room IDs.
+
+    Missing equipment flow rates and door leakage coefficients remain JSON
+    null. No solver may run successfully until a responsible engineer supplies
+    those values and documents their source. No 5 Pa performance is implied.
+    """
+    review=review_recorded_multizone(report)
+    if report.get("scenario")!="all_doors_open":
+        raise ValueError("Only recorded open-door cases can seed a closed-door input template")
+    ref=report["pressure_reference"]["room_id"]
+    rooms=report["rooms"]
+    if ref not in rooms:
+        raise ValueError("CFD pressure reference is not a modeled room")
+    nodes=[{
+        "name":rid,"supply_m3_h":None,"return_m3_h":None,
+        "exhaust_m3_h":None,"fixed_pressure_pa":0.0 if rid==ref else None
+    } for rid in sorted(rooms)]
+    paths=[]
+    targets=[]
+    evidence={}
+    for d in sorted(review["doors"],key=lambda row:row["door"]):
+        target=d["target_delta_pa"]
+        if target is None or _finite(target,"design delta")<=0:
+            raise ValueError("Each modeled door needs its own positive design target")
+        did=d["door"]
+        paths.append({
+            "name":did,"start_node":d["from_room"],
+            "end_node":d["to_room"],"kind":"door","model":"power_law",
+            "coefficient_m3_s_pa_n":None,"exponent":None,
+            "linearization_pressure_pa":0.01,
+        })
+        targets.append({
+            "name":"Nominal "+did,
+            "high_node":d["from_room"],"low_node":d["to_room"],
+            "minimum_delta_pa":target,
+        })
+        evidence[did]={
+            "basis":"engineering_assumption",
+            "reference":"",
+        }
+    payload={
+        "schema":SCENARIO_SCHEMA,
+        "network":{
+            "name":"User-specified closed-door scenario for recorded multiroom model",
+            "nodes":nodes,"paths":paths,"targets":targets,
+        },
+        "path_evidence":evidence,
+    }
+    path=Path(destination)
+    with path.open("x",encoding="utf-8") as handle:
+        json.dump(payload,handle,indent=2,allow_nan=False)
+        handle.write("\n")
+    return path
+
+
 def export_closed_door_comparison(comparison,destination):
     """Write non-certifying comparison JSON; never overwrite previous evidence."""
     if (not isinstance(comparison,dict) or comparison.get("schema")!=RESULT_SCHEMA

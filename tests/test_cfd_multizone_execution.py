@@ -236,6 +236,18 @@ def test_actual_gui_displays_recorded_fields_vectors_and_residuals(computed_repo
         assert len(window.engineering_table.get_children())==3
         assert "5 Pa CLOSED-DOOR PERFORMANCE NOT DEMONSTRATED" in window.engineering_verdict.get()
         assert "OPEN_DOOR_SCENARIO" in window.engineering_text.get("1.0","end")
+        # Reuse real OpenFOAM room/door references with intentionally assumed
+        # leakage only to test UI mapping; no physical validation is claimed.
+        synthetic_model,synthetic_sources=_explicit_hypothetical_closed_door_network(
+            computed_report)
+        closed=compare_closed_network_with_open_cfd(
+            computed_report,synthetic_model,synthetic_sources)
+        window.load_closed_door_comparison(closed)
+        root.update()
+        assert len(window.closed_door_table.get_children())==3
+        assert "TWO DIFFERENT MODELS" in window.closed_door_details.get("1.0","end")
+        assert "ENGINEERING HOLD" in window.closed_door_status.get()
+
         earlier=analyze_multizone_case(
             executed_case,density_kg_m3=1.2,reference_room_id="corridor",
             time_name="25")

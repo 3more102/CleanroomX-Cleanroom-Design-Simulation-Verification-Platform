@@ -25,10 +25,13 @@ numerical convergence, a valid laminar flow regime, UDAF compliance or certifica
    and provenance. Export a new report folder containing HTML, JSON, full cell
    CSV and residual CSV. **NOT CONVERGED** stays visible when appropriate.
 
-Native Windows-to-WSL process launching has not been implemented or verified.
-The existing Windows launcher and independent-room exporter remain available;
-run this workflow within a sourced Foundation v10 Linux/WSL environment. A native
-Windows GUI does not automatically acquire WSL solver executables.
+The new **opt-in Windows-to-WSL solver bridge** allows the Windows GUI to
+create a case and then runs the original verified Foundation v10 solver pipeline
+inside a selected WSL distribution from PowerShell. The resulting case can be
+imported back into the Windows GUI. This is a separate launcher, not automatic
+GUI solver integration, and its actual Windows/WSL behavior has not yet been
+verified on the user's machine. See [Windows/WSL bridge](WINDOWS_WSL_OPENFOAM_BRIDGE.md).
+The Windows GUI's own solver button still requires local solver executables.
 
 ## Reproduce the executed scenario
 

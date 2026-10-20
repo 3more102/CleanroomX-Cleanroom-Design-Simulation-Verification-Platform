@@ -123,6 +123,30 @@ def compare_closed_network_with_open_cfd(
         any(ch not in "0123456789abcdef" for ch in scenario_sha256)
     ):
         raise ValueError("Invalid closed-door input SHA-256")
+    # These are different models and may use DIFFERENT boundary airflow
+    # assumptions. Reconcile their inputs rather than silently implying
+    # equivalent operating conditions. Open values are solved phi at patches,
+    # not the nominal FFU values written into the CFD dictionaries.
+    airflow_comparison=[]
+    network_by_name={node.name:node for node in network.nodes}
+    for rid in sorted(source_rooms):
+        room=source_rooms[rid]
+        node=network_by_name[rid]
+        cfd_supply=_finite(room["supply_inflow_m3_s"],"CFD supply phi")*3600
+        cfd_return=_finite(room["return_outflow_m3_s"],"CFD return phi")*3600
+        if min(cfd_supply,cfd_return)<-1e-8:
+            raise ValueError("Computed CFD supply/return patch flows have invalid direction")
+        airflow_comparison.append({
+            "room":rid,
+            "open_cfd_supply_m3_h":cfd_supply,
+            "closed_network_supply_input_m3_h":node.supply_m3_h,
+            "closed_minus_open_supply_m3_h":node.supply_m3_h-cfd_supply,
+            "open_cfd_return_m3_h":cfd_return,
+            "closed_network_return_input_m3_h":node.return_m3_h,
+            "closed_minus_open_return_m3_h":node.return_m3_h-cfd_return,
+            "closed_network_exhaust_input_m3_h":node.exhaust_m3_h,
+            "open_cfd_exhaust_comparison_available":False,
+        })
     network_result=solve_room_pressure_network(network)
     computed_nodes={row["name"]:row for row in network_result["nodes"]}
     computed_paths={row["name"]:row for row in network_result["paths"]}
@@ -162,6 +186,19 @@ def compare_closed_network_with_open_cfd(
         "open_door_model":"provenanced all-doors-open simpleFoam steady fields",
         "reference_room":reference,
         "path_evidence":evidence,
+        "mechanical_airflow_boundary_comparison":airflow_comparison,
+        "boundary_conditions_match_between_models":all(
+            abs(row["closed_minus_open_supply_m3_h"])<=1e-6 and
+            abs(row["closed_minus_open_return_m3_h"])<=1e-6 and
+            row["closed_network_exhaust_input_m3_h"]==0
+            for row in airflow_comparison),
+        "boundary_comparison_note":(
+            "Open-door SUPPLY and RETURN are independent solved patch phi integrals; "
+            "closed-network values are separate explicit mechanical inputs. "
+            "Numerical equality is not physical equivalence; corridor/exhaust "
+            "and pressure boundary types can still differ. No tolerance is "
+            "adopted for engineering acceptance."
+        ),
         "explicit_closed_door_inputs":asdict(network),
         "network_solver_result":network_result,
         "door_comparison":rows,
@@ -173,6 +210,7 @@ def compare_closed_network_with_open_cfd(
             "Leakage coefficients, mechanical supply/return/exhaust and fixed-pressure boundary were supplied, NOT inferred or calibrated by the open CFD",
             "Nominal network targets are not measured commissioning performance, door-event dynamics, turbulent CFD, or air-distribution validation",
             "Network results cannot be used to claim mesh-independent 5 Pa closed-door CFD or cleanroom acceptance",
+            "Room-by-room mechanical airflow inputs must be independently measured or sourced; this comparison does not infer them from open CFD",
         ],
     }
 

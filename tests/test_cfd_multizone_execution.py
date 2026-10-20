@@ -264,6 +264,10 @@ def test_actual_gui_displays_recorded_fields_vectors_and_residuals(computed_repo
         window.run_closed_leakage_sensitivity()
         root.update()
         assert len(window.closed_sweep_table.get_children())==9
+        assert len(window.closed_sweep_canvas.find_withtag("leakage-solved-point"))==9
+        assert len(window.closed_sweep_canvas.find_withtag("leakage-design-target"))==3
+        assert len(window.closed_sweep_canvas.find_withtag("leakage-factor-marker"))==3
+        assert len(window.closed_sweep_canvas.find_withtag("leakage-legend"))==3
         assert "Hypothetical leakage sensitivity" in window.closed_door_status.get()
         assert window.closed_door_sensitivity["engineering_release"]=="HOLD"
 

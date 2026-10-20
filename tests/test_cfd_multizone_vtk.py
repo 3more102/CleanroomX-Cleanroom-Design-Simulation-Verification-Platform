@@ -12,7 +12,7 @@ vtk = pytest.importorskip("vtk")
 
 from cleanroomx.cfd_multizone_vtk import (
     MAX_3D_CELLS, build_multizone_vtk_renderer, computed_field_polydata,
-    computed_trace_polydata,
+    computed_trace_polydata, sampled_velocity_glyph_actor,
 )
 from cleanroomx.cfd_streamlines import trace_computed_streamline
 
@@ -86,3 +86,29 @@ def test_vtk_rejects_missing_solved_cells_nonfinite_and_wall_crossing_paths():
     report["cells"][1]["center_m"][0] += 0.13
     with pytest.raises(ValueError,match="lattice"):
         computed_field_polydata(report)
+
+
+def test_3d_velocity_glyphs_use_recorded_vectors_and_are_bounded():
+    report=_source()
+    actor=sampled_velocity_glyph_actor(report,max_arrows=2)
+    poly=actor.GetMapper().GetInput()
+    actor.GetMapper().Update()
+    poly=actor.GetMapper().GetInput()
+    assert isinstance(actor,vtk.vtkActor)
+    assert poly.GetNumberOfPoints() > 0
+    renderer=build_multizone_vtk_renderer(report,[],vectors=True)
+    base=build_multizone_vtk_renderer(report,[],vectors=False)
+    assert renderer.GetActors().GetNumberOfItems() == base.GetActors().GetNumberOfItems()+1
+    with pytest.raises(ValueError, match="boolean"):
+        build_multizone_vtk_renderer(report,[],vectors=1)
+    with pytest.raises(ValueError, match="max_arrows"):
+        sampled_velocity_glyph_actor(report,max_arrows=0)
+
+
+def test_3d_velocity_glyphs_handle_zero_velocity_without_invented_arrows():
+    report=_source()
+    for cell in report["cells"]:
+        cell["velocity_m_s"]=[0.,0.,0.]
+    actor=sampled_velocity_glyph_actor(report,max_arrows=3)
+    actor.GetMapper().Update()
+    assert actor.GetMapper().GetInput().GetNumberOfPoints()==0

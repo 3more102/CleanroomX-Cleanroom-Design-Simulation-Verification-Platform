@@ -310,3 +310,38 @@ particle diameter, inertia, Brownian diffusion, gravity, deposition,
 collisions or a solved transient particle concentration field. Unit cases
 are synthetic and only the dedicated OpenFOAM execution job provides
 solver-derived CFD provenance checks.
+
+
+## Physics-parameterized one-way particle screening (20 October 2026)
+
+**Scope:** This phase adds the independent `cfd_particles.py` particle
+trajectory *screening* integrator and a separate **One-way particle screening**
+mode in **Open real VTK 3D**. A user can select particle diameter (0.5–20 μm),
+material density (100–20000 kg/m³), elapsed integration duration (up to 60 s)
+and a computed CFD fluid-cell injection point. **Pick fluid seed in 3D** must
+be enabled; choose the particle mode before clicking a colored cell-centre.
+Particle paths are **green**, distinct from the **gold** steady air streamlines.
+
+The particle model solves the one-way, low-slip-Reynolds Stokes drag equation
+with a fixed-air Cunningham correction, finite particle velocity relaxation,
+buoyancy-adjusted gravitational settling (default -z), and exact constant-U
+relaxation within a short time step. Each fluid cell's U is a *recorded*
+OpenFOAM field value. The gas field is held **frozen** at the selected
+OpenFOAM SIMPLE iteration and sampled as piecewise constant cell-centred U;
+the integrator does **not** run a new OpenFOAM solver or interpolate missing
+cells. Steps are bounded by local cell pitch and integration duration. Paths
+stop at solid/outside-fluid boundaries without inventing rebound or
+deposition. A slip Reynolds number >=1 raises an explicit Stokes-regime
+validity warning, not a confident conclusion.
+
+The particle path's `elapsed_particle_s` is *model integration time in a
+frozen gas field*, **not** an actual transient OpenFOAM solver time. Separate
+**Clear particles** and **Export particle paths** controls export a
+no-overwrite provenance-tagged JSON containing CFD iteration and source SHA-256
+receipts. This is a deterministic screening model, **not CFD-coupled
+validated particle transport**: no turbulence-induced stochastic dispersion,
+Brownian diffusion, agglomeration, electrostatic forces, wall trapping,
+deposition, resuspension, collisions, transient gas fields or two-way
+feedback are modeled. No infection/contamination or cleanroom compliance
+claim is made. The test suite explicitly distinguishes synthetic numerical
+fixtures from real OpenFOAM cell-field ingestion checks.

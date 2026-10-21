@@ -218,6 +218,14 @@ def test_headless_review_can_attach_matching_cfd_evidence(tmp_path, capsys):
     assert envelope["model_used"] is False
     assert envelope["context"]["cfd_evidence"]["engineering_release"] == "HOLD"
     assert envelope["action_plan"]["schema"] == "cleanroomx.ai-assistant-action-plan"
+    cfd_actions = [
+        a for a in envelope["action_plan"]["actions"]
+        if a["source_kind"] == "recorded_cfd_review"
+    ]
+    assert any(a["source_rule"] == "cfd.OPEN_DOOR_SCENARIO" for a in cfd_actions)
+    assert all(a["source_element"]["id"] == envelope["context"]["cfd_evidence"]["report_sha256"]
+               for a in cfd_actions)
+    assert all(a["state"] == "proposal_not_executed" for a in cfd_actions)
 
     assert main([str(project_path), "--cfd-export", str(export)]) == 0
     assert "RECORDED CFD EXPORT REVIEW" in capsys.readouterr().out

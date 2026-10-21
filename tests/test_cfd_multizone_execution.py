@@ -127,6 +127,42 @@ def test_true_openfoam_saved_iteration_history_uses_p_u_and_phi_snapshots(
         triage,tmp_path/"actual-solver-triage.json").is_file()
 
 
+def test_alternative_simple_relaxation_executes_as_an_independent_provenanced_case(tmp_path):
+    """A REAL Foundation v10 short run; checks execution, not convergence improvement.
+
+    New-case settings must be documented by fvSolution and the input manifest,
+    and every solver field must be hash-linked to the independent run receipt.
+    """
+    _require_runtime()
+    case=tmp_path/"alternate-relaxation"
+    generated=generate_multizone_open_door_case(
+        bundled_demo_project_path(),case,door_mode="open",
+        kinematic_viscosity_m2_s=1.5e-5,
+        max_iterations=10,output_interval=5,
+        pressure_relaxation=.2,velocity_relaxation=.5,
+    )
+    assert generated["case"]["numerical_controls"]["pressure_field_relaxation"]==.2
+    assert generated["case"]["numerical_controls"]["velocity_equation_relaxation"]==.5
+    assert "fields { p 0.2; }" in (case/"system/fvSolution").read_text()
+    assert "equations { U 0.5; }" in (case/"system/fvSolution").read_text()
+    run=run_multizone_open_door_case(case,timeout_seconds=120)
+    assert run["status"]=="executed_requires_convergence_review",run
+    assert [step["command"] for step in run["stages"]]==[
+        "blockMesh","checkMesh","simpleFoam","postProcess"]
+    report=analyze_multizone_case(case,density_kg_m3=1.2,reference_room_id="corridor")
+    assert report["time_name"]=="10"
+    assert report["available_times"]==["5","10"]
+    assert len(report["cells"])==13210
+    assert report["provenance"]["manifest_sha256"]==hashlib.sha256(
+        (case/"manifest.json").read_bytes()).hexdigest()
+    assert report["provenance"]["run_receipt_sha256"]==hashlib.sha256(
+        (case/"run-receipt.json").read_bytes()).hexdigest()
+    assert all(math.isfinite(row["initial"]) for row in report["residual_history"])
+    # Deliberately no assertion that this setting converges better or
+    # achieves 5 Pa: that requires a controlled study of full solver runs.
+    assert report["scenario"]=="all_doors_open"
+
+
 def test_actual_fluxes_units_reference_and_door_pressure(computed_report,executed_case):
     report=computed_report
     rooms=report["rooms"]

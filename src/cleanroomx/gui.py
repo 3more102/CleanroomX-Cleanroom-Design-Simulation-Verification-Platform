@@ -88,6 +88,7 @@ from .gui_windowing import fit_window_to_display
 from .gui_proofgraph import ProofGraphViewer
 from .gui_start import StartCenter
 from .ai_assistant_ui import AssistantWindow
+from .ai_assistant_chat import project_chat_key
 from .project_dossier import (
     build_project_engineering_dossier,
     markdown_project_engineering_dossier,
@@ -2085,6 +2086,7 @@ class CleanroomXApp:
         self.root.geometry(f"{default_width}x{default_height}")
 
         self.project: ProjectDocument = new_project()
+        self._assistant_unsaved_id = uuid.uuid4().hex
         self.project_path: Path | None = None
         self._project_file_revision = None
         self._recovery_source_path: Path | None = None
@@ -6064,6 +6066,7 @@ class CleanroomXApp:
             return
         self._discard_current_autosave()
         self.project = new_project()
+        self._assistant_unsaved_id = uuid.uuid4().hex
         self.project_path = None
         self._project_file_revision = None
         self._recovery_source_path = None
@@ -7558,6 +7561,9 @@ class CleanroomXApp:
             self.root,
             project_getter=lambda: self.project,
             base_dir_getter=self._base_dir,
+            project_key_getter=lambda: project_chat_key(
+                self.project_path, unsaved_id=self._assistant_unsaved_id
+            ),
             on_close=lambda: setattr(self, "_ai_assistant_window", None),
         )
 

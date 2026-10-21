@@ -48,8 +48,10 @@ class ProjectAssistantDialog(tk.Toplevel):
 
         body = ttk.Frame(self, padding=(12, 0, 12, 8))
         body.pack(fill="both", expand=True)
+        list_frame = ttk.Frame(body)
+        list_frame.pack(fill="both", expand=True)
         self.tree = ttk.Treeview(
-            body, columns=("severity", "rule", "action"),
+            list_frame, columns=("severity", "rule", "action"),
             show="headings", height=9,
         )
         self.tree.heading("severity", text="Severity")
@@ -58,10 +60,10 @@ class ProjectAssistantDialog(tk.Toplevel):
         self.tree.column("severity", width=90, stretch=False)
         self.tree.column("rule", width=260, stretch=False)
         self.tree.column("action", width=620, stretch=True)
-        scroll = ttk.Scrollbar(body, orient="vertical", command=self.tree.yview)
+        scroll = ttk.Scrollbar(list_frame, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=scroll.set)
-        self.tree.pack(side="top", fill="both", expand=True)
-        scroll.pack_forget()
+        scroll.pack(side="right", fill="y")
+        self.tree.pack(side="left", fill="both", expand=True)
 
         ttk.Label(
             body, text="Selected finding and source evidence",

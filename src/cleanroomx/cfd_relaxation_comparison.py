@@ -226,6 +226,21 @@ def export_independent_relaxation_comparison(comparison, destination):
         not isinstance(comparison.get("door_comparison"),dict) or
         not isinstance(comparison.get("room_comparison"),dict)):
         raise ValueError("Only verified, noncertifying paired solver evidence may be exported")
+    # Re-open both independently executed source cases and recompute every
+    # observable before exporting: a post-comparison edit to an endpoint,
+    # pressure/flux, identity or verdict must never become accepted evidence.
+    baseline=comparison.get("baseline")
+    variant=comparison.get("variant")
+    if (not isinstance(baseline,dict) or not isinstance(variant,dict) or
+        not isinstance(baseline.get("directory"),str) or
+        not isinstance(variant.get("directory"),str)):
+        raise ValueError("Both independent solver source directories are required")
+    recomputed=compare_independent_relaxation_cases(
+        baseline["directory"],variant["directory"],
+        density_kg_m3=comparison.get("air_density_kg_m3"),
+        reference_room_id=comparison.get("reference_room_id"))
+    if recomputed!=comparison:
+        raise ValueError("Paired numerical evidence changed after source-linked computation")
     data=json.dumps(comparison,indent=2,allow_nan=False)+"\n"
     out=Path(destination)
     with out.open("x",encoding="utf-8") as file:

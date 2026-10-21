@@ -29,7 +29,7 @@
     "src/cleanroomx/cfd_multizone_gui.py": "cc9e5b6d2ca7c3e136874bc04587a7e357f8783334bb4ae13c3452236f840b25",
     "tests/test_cfd_cell_probes.py": "f32b6c34e1163193a94862bf7fe86bb92878ef5d0c7b2d47a8a46299a5de6132",
     "tests/test_cfd_cell_probes_archive.py": "3cacbcfb3e9a57bb46b397c89d3dd125210b2782c149327e46194a73e0e83e47",
-    "tests/test_cfd_cell_probes_gui.py": "c552280dc5026e70e331b983a8bf29883fa184adb2b79668232b733e4fd5c0b7",
+    "tests/test_cfd_cell_probes_gui.py": "10cf4c07ac82c50741e723dcf0ed4eb04e291e5cf072857d16eb8f3b6a0bfca4",
     "tests/test_cfd_multizone_execution.py": "e62fece4de05323464a2c8be94e9eb86e6368fd92c438b41a92cb0348dbbe64d"
   }
 }

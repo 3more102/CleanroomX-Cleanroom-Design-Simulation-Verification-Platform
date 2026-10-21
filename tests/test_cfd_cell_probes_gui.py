@@ -9,8 +9,8 @@ from cleanroomx import cfd_multizone_gui as gui
 from test_cfd_cell_probes import _report
 
 
-@pytest.fixture
-def desktop():
+@pytest.fixture(scope="module")
+def tk_desktop():
     try:
         root = tk.Tk()
     except tk.TclError as exc:
@@ -18,6 +18,17 @@ def desktop():
             raise
         pytest.skip(f"Actual Tk display required: {exc}")
     root.withdraw()
+    try:
+        yield root
+    finally:
+        root.destroy()
+
+
+@pytest.fixture
+def desktop(tk_desktop):
+    # The application has one Tk interpreter and separate child workspaces.
+    # Reuse that lifecycle on Windows rather than repeatedly initialising Tcl.
+    root = tk_desktop
     errors = []
     root.report_callback_exception = lambda *args: errors.append(args)
     window = gui.MultizoneCFDWindow(root)
@@ -34,7 +45,7 @@ def desktop():
         assert not errors
     finally:
         window.close()
-        root.destroy()
+        root.update()
 
 
 def test_click_and_xyz_probe_exact_values_without_creating_streamlines(desktop):

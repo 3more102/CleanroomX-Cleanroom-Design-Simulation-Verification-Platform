@@ -53,13 +53,31 @@ bounded analysis names/types, diagnostic severity/counts/findings, the latest
 and retained verification status summaries. These run statuses are **not**
 CFD convergence claims. The diagnostic snapshot **does not include**
 raw room geometry, full analysis inputs, CFD fields, solver residual arrays,
-files, or project metadata. Names, diagnostic messages and previously entered chat messages can still
-contain sensitive information: inspect your project before enabling cloud mode.
+files, or project metadata. Diagnostic element references are restricted to
+bounded `type`, `id`, and `name` strings, with no extra nested element data.
+The complete serialized model request (question, history, and context) must
+fit within 256 KiB or it is rejected before network access. Model IDs are
+bounded and request timeout values must be integers. Names, diagnostic messages
+and previously entered chat messages can still contain sensitive information:
+inspect your project before enabling cloud mode.
+
+**Cancel response** dismisses an in-progress model reply in the desktop window.
+The unsaved pending question is removed and any late response from that request
+is ignored, including when a new model request has already started. Cancellation
+does **not** abort an HTTP request or terminate the Ollama/OpenAI provider process;
+the request may continue until its configured timeout. No cancelled response
+is recorded in the project-bound conversation.
 
 The snapshot identity is calculated from the current **in-memory** project,
-not assumed to be identical to any on-disk revision. If the project changes
-while the model is responding, the GUI warns that the suggestion concerns
-an older snapshot.
+not assumed to be identical to any on-disk revision. The desktop rebuilds and
+rechecks the active project revision around diagnostic/CFD evidence collection,
+and rejects a snapshot if a project switch, in-memory edit, or saved source
+path change occurred during collection. The same ProjectDocument instance is
+used for diagnostics and any imported CFD export. If the project changes
+*after* an accepted snapshot while a model is responding, the GUI marks the
+resulting suggestion **STALE project/CFD snapshot**. The warning persists when
+the conversation is redrawn, saved, or reopened; stale exchanges are not used
+as model history for a current revision.
 
 ## Local model (default, no external cloud upload)
 

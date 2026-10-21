@@ -21,6 +21,8 @@ from .run_history import run_history_records
 
 MAX_QUESTION_CHARS = 4000
 MAX_RESPONSE_BYTES = 1_000_000
+MAX_REQUEST_BYTES = 256 * 1024
+MAX_MODEL_NAME_CHARS = 128
 LOCAL_URL = "http://127.0.0.1:11434/v1/chat/completions"
 CLOUD_URL = "https://api.openai.com/v1/chat/completions"
 
@@ -118,6 +120,22 @@ def project_snapshot_sha256(project: ProjectDocument) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+
+def _bounded_diagnostic_element(value: Any) -> dict[str, str | None]:
+    """Expose only canonical identifiers, never arbitrary diagnostic payloads.
+
+    Project diagnostics can carry nested details and user-provided strings.
+    Those are not required to identify a finding and must not be forwarded
+    to an opt-in model as unbounded element data.
+    """
+    raw = value if isinstance(value, dict) else {}
+    limits = {"type": 64, "id": 128, "name": 160}
+    return {
+        field: raw[field][:limit] if type(raw.get(field)) is str else None
+        for field, limit in limits.items()
+    }
+
+
 def build_assistant_context(
     project: ProjectDocument,
     *,
@@ -166,7 +184,7 @@ def build_assistant_context(
                 {
                     "rule": str(item.get("rule", ""))[:120],
                     "severity": str(item.get("severity", ""))[:32],
-                    "element": item.get("element", {}),
+                    "element": _bounded_diagnostic_element(item.get("element")),
                     "message": str(item.get("message", ""))[:400],
                     "suggested_action": str(item.get("suggested_action", ""))[:400],
                 }
@@ -275,10 +293,11 @@ def ask_model(
             raise AssistantConfigurationError("Invalid cloud provider configuration.")
     else:
         raise AssistantConfigurationError("Unsupported provider.")
-    if not cfg.model or not isinstance(cfg.model, str):
-        raise AssistantConfigurationError("A model identifier is required.")
-    if not 1 <= timeout_seconds <= 120:
-        raise ValueError("timeout_seconds must be between 1 and 120")
+    if (type(cfg.model) is not str or not 1 <= len(cfg.model) <= MAX_MODEL_NAME_CHARS
+        or any(ord(char) < 32 or ord(char) == 127 for char in cfg.model)):
+        raise AssistantConfigurationError("A bounded model identifier is required.")
+    if type(timeout_seconds) is not int or not 1 <= timeout_seconds <= 120:
+        raise ValueError("timeout_seconds must be an integer between 1 and 120")
     if not isinstance(focus, str) or focus not in REVIEW_FOCUS:
         raise ValueError("Unsupported engineering review focus.")
 
@@ -314,9 +333,16 @@ def ask_model(
     headers = {"Content-Type": "application/json", "Accept": "application/json"}
     if cfg.api_key:
         headers["Authorization"] = "Bearer " + cfg.api_key
+    # Bound the final serialized request, including diagnostic metadata,
+    # chat history and the user's question, BEFORE opening a network socket.
+    # A context originating from a plugin or a caller can be larger than the
+    # ordinary project-derived diagnostic snapshot.
+    encoded = json.dumps(payload, ensure_ascii=False, allow_nan=False).encode("utf-8")
+    if len(encoded) > MAX_REQUEST_BYTES:
+        raise ValueError("AI request exceeds the 256 KiB safety limit.")
     request = Request(
         cfg.endpoint,
-        data=json.dumps(payload, ensure_ascii=False, allow_nan=False).encode("utf-8"),
+        data=encoded,
         headers=headers,
         method="POST",
     )

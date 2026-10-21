@@ -5,7 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from cleanroomx.ai_assistant_cli import build_offline_review, main
+from cleanroomx.ai_assistant_cli import (
+    ProjectReviewChangedError, build_offline_review, main,
+)
 from cleanroomx.project import new_project, save_project_document
 
 
@@ -62,5 +64,29 @@ def test_headless_review_fails_closed_if_source_changes(tmp_path, monkeypatch):
         return result
 
     monkeypatch.setattr(ai_assistant_cli, "build_assistant_context", mutate_source)
-    with pytest.raises(RuntimeError, match="changed during AI review"):
+    with pytest.raises(ProjectReviewChangedError, match="changed during AI review"):
         build_offline_review(source)
+
+
+def test_cli_reports_project_revision_change_without_output(monkeypatch, capsys):
+    from cleanroomx import ai_assistant_cli
+
+    def changed(*_args, **_kwargs):
+        raise ProjectReviewChangedError("Saved project revision changed")
+
+    monkeypatch.setattr(ai_assistant_cli, "build_offline_review", changed)
+    assert main(["does-not-matter.json"]) == 2
+    output = capsys.readouterr()
+    assert not output.out
+    assert "Saved project revision changed" in output.err
+
+
+def test_cli_does_not_mask_unexpected_runtime_error(monkeypatch):
+    from cleanroomx import ai_assistant_cli
+
+    def unexpected(*_args, **_kwargs):
+        raise RuntimeError("Unexpected programming defect")
+
+    monkeypatch.setattr(ai_assistant_cli, "build_offline_review", unexpected)
+    with pytest.raises(RuntimeError, match="Unexpected programming defect"):
+        main(["does-not-matter.json"])

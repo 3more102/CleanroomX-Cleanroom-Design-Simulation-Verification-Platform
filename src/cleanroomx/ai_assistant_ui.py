@@ -60,6 +60,10 @@ class AssistantWindow(tk.Toplevel):
         self._pending: Queue[dict] = Queue()
         self._busy = False
         self._closed = False
+        # Monotonic UI request identity: a cancelled model response must never
+        # commit into a chat or interrupt a subsequent request when it arrives.
+        self._next_request_id = 0
+        self._active_request_id: int | None = None
 
         content = ttk.Frame(self, padding=12)
         content.pack(fill="both", expand=True)
@@ -112,6 +116,11 @@ class AssistantWindow(tk.Toplevel):
             buttons, text="Ask AI", command=self.ask_ai
         )
         self.ask_button.pack(side="left", padx=8)
+        self.cancel_button = ttk.Button(
+            buttons, text="Cancel response", command=self.cancel_ai,
+            state="disabled",
+        )
+        self.cancel_button.pack(side="left")
         ttk.Label(buttons, text="Review focus:").pack(side="left", padx=(14, 5))
         self.review_focus = tk.StringVar(value="general")
         ttk.Combobox(
@@ -205,10 +214,15 @@ class AssistantWindow(tk.Toplevel):
             self._session_id, self._active_project_key
         )
         for message in chat.messages:
-            self._append(
-                "You" if message.role == "user" else "AI suggestion (unverified)",
-                message.content,
-            )
+            # Stale answers are retained for audit, but MUST remain visibly
+            # marked even after chats are saved, reloaded or switched.
+            if message.role == "user":
+                speaker = "You"
+            elif message.metadata.get("stale_project_on_receipt") is True:
+                speaker = "AI suggestion (STALE project/CFD snapshot; unverified)"
+            else:
+                speaker = "AI suggestion (unverified)"
+            self._append(speaker, message.content)
 
     def _on_session_selected(self, _event: tk.Event) -> None:
         selection = self.session_choice.current()
@@ -278,21 +292,42 @@ class AssistantWindow(tk.Toplevel):
         self.status.set("AI workspace loaded; only conversations for this project are shown.")
 
     def _snapshot(self) -> dict:
+        """Build project/CFD evidence from one consistent in-memory revision."""
+        project_key = self._project_key_getter()
+        project = self._project_getter()
+        export_dir = self._cfd_export_dir
+        export_key = self._cfd_project_key
+        project_path = self._project_path_getter() if export_dir is not None else None
         context = build_assistant_context(
-            self._project_getter(), base_dir=self._base_dir_getter()
+            project, base_dir=self._base_dir_getter()
         )
-        if self._cfd_export_dir is not None:
-            if self._cfd_project_key != self._project_key_getter():
+        source_digest = context["project"]["in_memory_sha256"]
+        if export_dir is not None:
+            if export_key != project_key:
                 raise ValueError("CFD evidence belongs to another project.")
-            path = self._project_path_getter()
-            if path is None:
+            if project_path is None:
                 raise ValueError("Save the project before attaching CFD evidence.")
-            # Re-read the export on every request; stale or modified evidence
-            # must not be silently forwarded to the model.
+            # Bind CFD to the SAME ProjectDocument used for diagnostics, not
+            # a second getter result that could have changed mid-review.
             context["cfd_evidence"] = bound_cfd_evidence(
-                self._cfd_export_dir,
-                project=self._project_getter(),
-                project_path=path,
+                export_dir, project=project, project_path=project_path,
+            )
+        # Read back both the original object and the active project identity.
+        # A project edit / open / Save As while reading CFD must fail closed;
+        # no mixed-revision snapshot may be forwarded to a model.
+        if (
+            self._project_key_getter() != project_key
+            or self._cfd_export_dir != export_dir
+            or self._cfd_project_key != export_key
+            or project_snapshot_sha256(project) != source_digest
+            or project_snapshot_sha256(self._project_getter()) != source_digest
+            or (
+                export_dir is not None
+                and self._project_path_getter() != project_path
+            )
+        ):
+            raise ValueError(
+                "Project changed during assistant snapshot; retry the review."
             )
         return context
 
@@ -375,8 +410,8 @@ class AssistantWindow(tk.Toplevel):
             return
         if not messagebox.askyesno(
             "Open existing CFD workspace?",
-            "The preview matches the saved project and has no recorded solver run.\n\n"
-            "Open the existing Multiroom CFD workspace for independent review?\n"
+            "The preview matches the saved project and has no recorded solver run.\\n\\n"
+            "Open the existing Multiroom CFD workspace for independent review?\\n"
             "This action does NOT run OpenFOAM. Running the solver requires a "
             "separate deliberate action in that workspace.",
             parent=self,
@@ -448,6 +483,25 @@ class AssistantWindow(tk.Toplevel):
     def _on_return(self, _event: tk.Event) -> None:
         self.ask_ai()
 
+    def cancel_ai(self) -> None:
+        """Discard a pending reply in this UI, without claiming HTTP cancellation.
+
+        The remote/local provider call may continue until its configured
+        timeout. Late worker messages are ignored by request ID.
+        """
+        if not self._busy:
+            return
+        self._active_request_id = None
+        self._busy = False
+        self.ask_button.configure(state="normal")
+        self.cancel_button.configure(state="disabled")
+        # A pending question was never committed to the ChatSessionStore.
+        self._redraw()
+        self.status.set(
+            "Pending AI response cancelled in this window. The provider "
+            "request may continue until timeout; no answer will be saved."
+        )
+
     def ask_ai(self) -> None:
         if self._busy:
             return
@@ -473,8 +527,12 @@ class AssistantWindow(tk.Toplevel):
             self._append("Assistant setup", str(exc))
             return
 
+        self._next_request_id += 1
+        request_id = self._next_request_id
+        self._active_request_id = request_id
         self._busy = True
         self.ask_button.configure(state="disabled")
+        self.cancel_button.configure(state="normal")
         self._append("You (pending)", question)
         self.question.delete(0, "end")
         snapshot_sha = context["project"]["in_memory_sha256"]
@@ -486,6 +544,7 @@ class AssistantWindow(tk.Toplevel):
 
         def worker() -> None:
             payload = {
+                "request_id": request_id,
                 "project_key": key,
                 "session_id": chat.id,
                 "revision": chat.revision,
@@ -521,8 +580,14 @@ class AssistantWindow(tk.Toplevel):
                 response = self._pending.get_nowait()
             except Empty:
                 break
+            # Ignore cancelled or superseded replies BEFORE modifying UI
+            # state or writing either half of a conversation exchange.
+            if response.get("request_id") != self._active_request_id:
+                continue
+            self._active_request_id = None
             self._busy = False
             self.ask_button.configure(state="normal")
+            self.cancel_button.configure(state="disabled")
             same_view = (
                 response["project_key"] == self._project_key_getter()
                 and response["session_id"] == self._session_id
@@ -576,6 +641,7 @@ class AssistantWindow(tk.Toplevel):
 
     def _close(self) -> None:
         self._closed = True
+        self._active_request_id = None
         self.destroy()
         if self._on_close is not None:
             self._on_close()

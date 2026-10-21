@@ -343,3 +343,264 @@ def test_gui_handoff_blocks_mutation_between_preview_and_consent(tmp_path, monke
     finally:
         window._close()
         root.destroy()
+
+
+def test_cancelled_model_reply_is_dropped_after_new_request(monkeypatch):
+    """Delayed provider replies cannot overwrite the newer conversation."""
+    from cleanroomx import ai_assistant_ui
+
+    root = _root()
+    root.withdraw()
+    project = new_project()
+    key = project_chat_key(None, unsaved_id="cancelled-model")
+    deferred = []
+
+    class DeferredThread:
+        def __init__(self, *, target, **_kwargs):
+            self.worker = target
+            deferred.append(self)
+        def start(self):
+            pass
+
+    monkeypatch.setattr(ai_assistant_ui.threading, "Thread", DeferredThread)
+    monkeypatch.setattr(
+        ai_assistant_ui, "ask_model",
+        lambda question, *_args, **_kwargs: "Reply: " + question,
+    )
+    window = AssistantWindow(
+        root, project_getter=lambda: project,
+        base_dir_getter=lambda: None, project_key_getter=lambda: key,
+    )
+    try:
+        session_id = window._session_id
+        window.question.insert(0, "Discard this question")
+        window.ask_ai()
+        assert window._busy
+        assert str(window.cancel_button.cget("state")) == "normal"
+        assert len(deferred) == 1
+
+        window.cancel_ai()
+        assert not window._busy
+        assert window._active_request_id is None
+        assert str(window.cancel_button.cget("state")) == "disabled"
+        assert "may continue until timeout" in window.status.get()
+        assert not window._conversations.require_session(session_id, key).messages
+
+        window.question.insert(0, "Keep this question")
+        window.ask_ai()
+        assert len(deferred) == 2
+        assert window._busy
+
+        # Old provider completes first, then the current request. Only the
+        # second request can be committed; no stale first Q/A may leak.
+        deferred[0].worker()
+        deferred[1].worker()
+        window._poll()
+
+        messages = window._conversations.require_session(session_id, key).messages
+        assert [item.content for item in messages] == [
+            "Keep this question", "Reply: Keep this question",
+        ]
+        assert "Discard this question" not in window.transcript.get("1.0", "end")
+        assert not window._busy
+        assert window._active_request_id is None
+        assert str(window.cancel_button.cget("state")) == "disabled"
+    finally:
+        window._close()
+        root.destroy()
+
+
+def test_cancelled_response_without_successor_does_not_change_chat(monkeypatch):
+    from cleanroomx import ai_assistant_ui
+
+    root = _root()
+    root.withdraw()
+    project = new_project()
+    key = project_chat_key(None, unsaved_id="cancel-alone")
+    workers = []
+
+    class DeferredThread:
+        def __init__(self, *, target, **_kwargs):
+            workers.append(target)
+        def start(self):
+            pass
+
+    monkeypatch.setattr(ai_assistant_ui.threading, "Thread", DeferredThread)
+    monkeypatch.setattr(
+        ai_assistant_ui, "ask_model",
+        lambda question, *_args, **_kwargs: "Late answer",
+    )
+    window = AssistantWindow(
+        root, project_getter=lambda: project,
+        base_dir_getter=lambda: None, project_key_getter=lambda: key,
+    )
+    try:
+        window.question.insert(0, "Old pending question")
+        window.ask_ai()
+        window.cancel_ai()
+        workers[0]()
+        window._poll()
+        assert not window._conversations.require_session(
+            window._session_id, key,
+        ).messages
+        assert "Late answer" not in window.transcript.get("1.0", "end")
+        assert "cancelled in this window" in window.status.get()
+    finally:
+        window._close()
+        root.destroy()
+
+
+def test_assistant_snapshot_rejects_mutation_during_diagnostics(monkeypatch):
+    """Do not send diagnostics for a project revision that no longer exists."""
+    from cleanroomx import ai_assistant_ui
+
+    root = _root()
+    root.withdraw()
+    project = new_project("Original review")
+    key = project_chat_key(None, unsaved_id="mutating-diagnostics")
+    window = AssistantWindow(
+        root, project_getter=lambda: project,
+        base_dir_getter=lambda: None, project_key_getter=lambda: key,
+    )
+    original = ai_assistant_ui.build_assistant_context
+
+    def mutate_after_build(source, **kwargs):
+        context = original(source, **kwargs)
+        source.name = "Changed after diagnostics"
+        return context
+
+    try:
+        monkeypatch.setattr(
+            ai_assistant_ui, "build_assistant_context", mutate_after_build,
+        )
+        with pytest.raises(ValueError, match="changed during assistant snapshot"):
+            window._snapshot()
+        assert not window._conversations.require_session(
+            window._session_id, key,
+        ).messages
+    finally:
+        window._close()
+        root.destroy()
+
+
+def test_assistant_snapshot_rejects_cross_project_cfd_binding(
+    tmp_path, monkeypatch,
+):
+    """Switching project during an export read must never mix snapshots."""
+    from cleanroomx import ai_assistant_ui
+
+    root = _root()
+    root.withdraw()
+    old_project = new_project("Old facility")
+    new_project_doc = new_project("New facility")
+    old_key = project_chat_key(None, unsaved_id="snapshot-old")
+    new_key = project_chat_key(None, unsaved_id="snapshot-new")
+    state = {"project": old_project, "key": old_key}
+    case_export = tmp_path / "recorded-export"
+    window = AssistantWindow(
+        root, project_getter=lambda: state["project"],
+        base_dir_getter=lambda: None,
+        project_key_getter=lambda: state["key"],
+        project_path_getter=lambda: tmp_path / "facility.json",
+    )
+    window._cfd_export_dir = case_export
+    window._cfd_project_key = old_key
+    observed = []
+
+    def bind_and_switch(directory, *, project, project_path):
+        observed.append((directory, project, project_path))
+        state["project"] = new_project_doc
+        state["key"] = new_key
+        return {"schema": "cleanroomx.ai-cfd-evidence", "report_sha256": "a" * 64}
+
+    try:
+        monkeypatch.setattr(
+            ai_assistant_ui, "bound_cfd_evidence", bind_and_switch,
+        )
+        with pytest.raises(ValueError, match="changed during assistant snapshot"):
+            window._snapshot()
+        assert len(observed) == 1
+        assert observed[0][1] is old_project
+        assert not window._conversations.require_session(
+            window._session_id, old_key,
+        ).messages
+    finally:
+        window._close()
+        root.destroy()
+
+
+def test_assistant_snapshot_rejects_save_as_during_cfd_read(
+    tmp_path, monkeypatch,
+):
+    """A changed saved-project path invalidates the selected CFD binding."""
+    from cleanroomx import ai_assistant_ui
+
+    root = _root()
+    root.withdraw()
+    project = new_project("Path-sensitive export")
+    key = project_chat_key(None, unsaved_id="saved-source-revision")
+    state = {"path": tmp_path / "first.json"}
+    window = AssistantWindow(
+        root, project_getter=lambda: project,
+        base_dir_getter=lambda: None, project_key_getter=lambda: key,
+        project_path_getter=lambda: state["path"],
+    )
+    window._cfd_export_dir = tmp_path / "export"
+    window._cfd_project_key = key
+
+    def bind_and_save_as(directory, *, project, project_path):
+        state["path"] = tmp_path / "second.json"
+        return {"schema": "cleanroomx.ai-cfd-evidence", "report_sha256": "a" * 64}
+
+    try:
+        monkeypatch.setattr(
+            ai_assistant_ui, "bound_cfd_evidence", bind_and_save_as,
+        )
+        with pytest.raises(ValueError, match="changed during assistant snapshot"):
+            window._snapshot()
+    finally:
+        window._close()
+        root.destroy()
+
+
+def test_stale_assistant_reply_remains_marked_after_redraw(monkeypatch):
+    """Persisted UI rendering must not promote old-revision AI advice."""
+    from cleanroomx import ai_assistant_ui
+
+    root = _root()
+    root.withdraw()
+    project = new_project("Before request")
+    key = project_chat_key(None, unsaved_id="stale-reply")
+    delayed = []
+
+    class DeferredThread:
+        def __init__(self, *, target, **_kwargs):
+            delayed.append(target)
+        def start(self):
+            pass
+
+    monkeypatch.setattr(ai_assistant_ui.threading, "Thread", DeferredThread)
+    monkeypatch.setattr(
+        ai_assistant_ui, "ask_model",
+        lambda *_args, **_kwargs: "Advice based on old project",
+    )
+    window = AssistantWindow(
+        root, project_getter=lambda: project,
+        base_dir_getter=lambda: None, project_key_getter=lambda: key,
+    )
+    try:
+        window.question.insert(0, "Review project")
+        window.ask_ai()
+        project.name = "After request"
+        delayed[0]()
+        window._poll()
+        chat = window._conversations.require_session(window._session_id, key)
+        assert [message.role for message in chat.messages] == ["user", "assistant"]
+        assert chat.messages[1].metadata["stale_project_on_receipt"] is True
+        assert "STALE project/CFD snapshot" in window.transcript.get("1.0", "end")
+        window._redraw()
+        assert "STALE project/CFD snapshot" in window.transcript.get("1.0", "end")
+        assert "Advice based on old project" in window.transcript.get("1.0", "end")
+    finally:
+        window._close()
+        root.destroy()

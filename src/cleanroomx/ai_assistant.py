@@ -38,6 +38,31 @@ SYSTEM_INSTRUCTIONS = (
 )
 
 
+REVIEW_FOCUS = {
+    "general": (
+        "Prioritize actionable project diagnostics and clearly separate "
+        "known evidence from suggested future work."
+    ),
+    "cfd": (
+        "Focus on CFD case readiness, solver residual/convergence evidence, "
+        "mesh independence and boundary mass/flux consistency. "
+        "Do not assert convergence based only on a run status."
+    ),
+    "hvac": (
+        "Focus on explicit airflow, ACH, pressure-network and room-to-room "
+        "balance evidence, units and missing user-defined targets."
+    ),
+    "particles": (
+        "Focus on source configuration, recorded velocity input, particle "
+        "model limitations and numerical-versus-measured concentration."
+    ),
+    "verification": (
+        "Focus on source revision integrity, stale runs, incomplete checks, "
+        "uncertified evidence and independent reproducibility."
+    ),
+}
+
+
 class AssistantConfigurationError(ValueError):
     """The selected AI provider cannot be used safely as configured."""
 
@@ -199,7 +224,7 @@ def format_offline_review(context: dict[str, Any]) -> str:
     if not d["findings"]:
         lines.append("No configured project diagnostic findings were reported.")
     runs = context.get("recent_runs", [])
-    lines.append("\\nRetained analysis runs listed: " + str(len(runs)))
+    lines.append("\nRetained analysis runs listed: " + str(len(runs)))
     for run in runs[-5:]:
         lines.append(
             "  " + str(run["analysis_id"]) + ": " + str(run["recorded_status"])
@@ -222,6 +247,7 @@ def ask_model(
     configuration: AssistantConfiguration | None = None,
     timeout_seconds: int = 30,
     history: list[dict[str, str]] | None = None,
+    focus: str = "general",
 ) -> str:
     """Ask a configured model. No side effects beyond one opt-in HTTP request."""
     if not isinstance(question, str) or not question.strip():
@@ -244,6 +270,8 @@ def ask_model(
         raise AssistantConfigurationError("A model identifier is required.")
     if not 1 <= timeout_seconds <= 120:
         raise ValueError("timeout_seconds must be between 1 and 120")
+    if not isinstance(focus, str) or focus not in REVIEW_FOCUS:
+        raise ValueError("Unsupported engineering review focus.")
 
     if history is None:
         history = []
@@ -264,7 +292,7 @@ def ask_model(
         "model": cfg.model,
         "stream": False,
         "messages": [
-            {"role": "system", "content": SYSTEM_INSTRUCTIONS},
+            {"role": "system", "content": SYSTEM_INSTRUCTIONS + " " + REVIEW_FOCUS[focus]},
             *history,
             {
                 "role": "user",

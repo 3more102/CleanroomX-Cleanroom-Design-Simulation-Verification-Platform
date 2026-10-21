@@ -150,7 +150,8 @@ cleanroomx-ai-review project.json --cfd-export path/to/export --cfd-actions --fo
 ```
 
 `--cfd-actions` without `--cfd-export` fails with exit code 2. This is
-independent from `--actions`, which only plans from project diagnostics.
+independent from `--actions`, which combines canonical project diagnostics
+and attached recorded CFD review findings into one prioritized worklist.
 The CFD worklist uses the canonical review reasons and non-prescriptive
 checks, and adds explicit steps to investigate closed-door evidence,
 authentic source fields, and physical validation. All entries remain

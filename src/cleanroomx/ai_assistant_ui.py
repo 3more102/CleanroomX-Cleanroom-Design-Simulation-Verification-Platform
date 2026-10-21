@@ -275,7 +275,10 @@ class AssistantWindow(tk.Toplevel):
             context = self._snapshot()
             key = self._active_project_key
             chat = self._conversations.require_session(self._session_id, key)
-            history = self._conversations.model_history(chat.id, key)
+            history = self._conversations.model_history(
+                chat.id, key,
+                snapshot_sha256=context["project"]["in_memory_sha256"],
+            )
         except (OSError, ValueError, TypeError, KeyError) as exc:
             self._append("Assistant setup", str(exc))
             return

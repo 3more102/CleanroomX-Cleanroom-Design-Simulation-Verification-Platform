@@ -287,21 +287,42 @@ class AssistantWindow(tk.Toplevel):
         self.status.set("AI workspace loaded; only conversations for this project are shown.")
 
     def _snapshot(self) -> dict:
+        """Build project/CFD evidence from one consistent in-memory revision."""
+        project_key = self._project_key_getter()
+        project = self._project_getter()
+        export_dir = self._cfd_export_dir
+        export_key = self._cfd_project_key
+        project_path = self._project_path_getter() if export_dir is not None else None
         context = build_assistant_context(
-            self._project_getter(), base_dir=self._base_dir_getter()
+            project, base_dir=self._base_dir_getter()
         )
-        if self._cfd_export_dir is not None:
-            if self._cfd_project_key != self._project_key_getter():
+        source_digest = context["project"]["in_memory_sha256"]
+        if export_dir is not None:
+            if export_key != project_key:
                 raise ValueError("CFD evidence belongs to another project.")
-            path = self._project_path_getter()
-            if path is None:
+            if project_path is None:
                 raise ValueError("Save the project before attaching CFD evidence.")
-            # Re-read the export on every request; stale or modified evidence
-            # must not be silently forwarded to the model.
+            # Bind CFD to the SAME ProjectDocument used for diagnostics, not
+            # a second getter result that could have changed mid-review.
             context["cfd_evidence"] = bound_cfd_evidence(
-                self._cfd_export_dir,
-                project=self._project_getter(),
-                project_path=path,
+                export_dir, project=project, project_path=project_path,
+            )
+        # Read back both the original object and the active project identity.
+        # A project edit / open / Save As while reading CFD must fail closed;
+        # no mixed-revision snapshot may be forwarded to a model.
+        if (
+            self._project_key_getter() != project_key
+            or self._cfd_export_dir != export_dir
+            or self._cfd_project_key != export_key
+            or project_snapshot_sha256(project) != source_digest
+            or project_snapshot_sha256(self._project_getter()) != source_digest
+            or (
+                export_dir is not None
+                and self._project_path_getter() != project_path
+            )
+        ):
+            raise ValueError(
+                "Project changed during assistant snapshot; retry the review."
             )
         return context
 

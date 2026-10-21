@@ -69,9 +69,13 @@ the request may continue until its configured timeout. No cancelled response
 is recorded in the project-bound conversation.
 
 The snapshot identity is calculated from the current **in-memory** project,
-not assumed to be identical to any on-disk revision. If the project changes
-while the model is responding, the GUI warns that the suggestion concerns
-an older snapshot.
+not assumed to be identical to any on-disk revision. The desktop rebuilds and
+rechecks the active project revision around diagnostic/CFD evidence collection,
+and rejects a snapshot if a project switch, in-memory edit, or saved source
+path change occurred during collection. The same ProjectDocument instance is
+used for diagnostics and any imported CFD export. If the project changes
+*after* an accepted snapshot while a model is responding, the GUI warns that
+the suggestion concerns an older snapshot.
 
 ## Local model (default, no external cloud upload)
 

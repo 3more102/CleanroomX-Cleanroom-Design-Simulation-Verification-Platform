@@ -123,3 +123,70 @@ def test_project_room_audit_cli_requires_user_thresholds():
     assert args.max_initial_residual == pytest.approx(1e-5)
     with pytest.raises(SystemExit):
         parser.parse_args(["project-rooms-audit", "somecase"])
+
+
+
+def test_project_room_audit_rejects_log_swap_between_check_and_open(tmp_path, monkeypatch):
+    """Synthetic race: a replaced log must not become accepted evidence."""
+    from cleanroomx import cfd_audit
+
+    root = _generated(tmp_path)
+    _log_fixtures(root)
+    victim = root / "room_process/checkMesh.log"
+    replacement = root / "room_ante/checkMesh.log"
+    try:
+        probe = tmp_path / "symlink-probe"
+        probe.symlink_to(replacement)
+        probe.unlink()
+    except (OSError, NotImplementedError):
+        pytest.skip("Symlink creation is unavailable")
+    original_open = cfd_audit.os.open
+    switched = False
+
+    def swap_before_open(path, flags, *args, **kwargs):
+        nonlocal switched
+        if str(path) == str(victim) and not switched:
+            switched = True
+            victim.rename(root / "room_process/checkMesh.original")
+            victim.symlink_to(replacement)
+        return original_open(path, flags, *args, **kwargs)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(cfd_audit.os, "open", swap_before_open)
+        report = _audit(root)
+    assert switched
+    assert report["status"] == "incomplete_or_failed"
+    assert report["cases"]["process"]["status"] == "incomplete_or_failed"
+    assert any("checkMesh" in reason for reason in report["cases"]["process"]["violations"])
+
+
+def test_solver_log_reader_rejects_oversized_and_nonregular_files(tmp_path):
+    """Synthetic fixtures cannot bypass bounded regular-file validation."""
+    import os
+    from cleanroomx.cfd_audit import MAX_LOG_BYTES, read_bounded_regular_log
+
+    huge = tmp_path / "sparse.log"
+    with huge.open("wb") as stream:
+        stream.truncate(MAX_LOG_BYTES + 1)
+    with pytest.raises(ValueError, match="32 MiB"):
+        read_bounded_regular_log(huge)
+    if not hasattr(os, "mkfifo"):
+        pytest.skip("Named pipes are unavailable")
+    pipe = tmp_path / "solver.pipe"
+    os.mkfifo(pipe)
+    with pytest.raises(ValueError, match="regular file"):
+        read_bounded_regular_log(pipe)
+
+
+def test_project_room_audit_preserves_exact_log_hashes(tmp_path):
+    """Audit hashes must identify precisely the bytes used by the parser."""
+    import hashlib
+    from cleanroomx.cfd_audit import read_bounded_regular_log
+
+    root = _generated(tmp_path)
+    _log_fixtures(root)
+    report = _audit(root)
+    for room in ("process", "preparation", "ante"):
+        path = root / f"room_{room}" / "checkMesh.log"
+        expected = hashlib.sha256(read_bounded_regular_log(path)).hexdigest()
+        assert report["cases"][room]["mesh_logs"]["checkMesh"]["sha256"] == expected

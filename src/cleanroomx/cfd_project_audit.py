@@ -10,19 +10,13 @@ import json
 from pathlib import Path
 import re
 
-from .cfd_audit import MAX_LOG_BYTES, audit_openfoam_log
+from .cfd_audit import audit_openfoam_log, read_bounded_regular_log
 from .cfd_project_rooms import CASE_RE, PROJECT_CFD_SCHEMA
 
 
 def _bounded_log(path: Path) -> tuple[str, str]:
-    """Read one bounded regular UTF-8 log without following symbolic links."""
-    if path.is_symlink() or not path.is_file():
-        raise ValueError(f"Missing regular solver log: {path.name}")
-    if path.stat().st_size > MAX_LOG_BYTES:
-        raise ValueError(f"Oversized solver log: {path.name}")
-    data = path.read_bytes()
-    if len(data) > MAX_LOG_BYTES or len(data) != path.stat().st_size:
-        raise ValueError(f"Solver log size changed or exceeded bound: {path.name}")
+    """Read and hash precisely the same bounded solver-log bytes."""
+    data = read_bounded_regular_log(path)
     try:
         content = data.decode("utf-8")
     except UnicodeDecodeError as exc:

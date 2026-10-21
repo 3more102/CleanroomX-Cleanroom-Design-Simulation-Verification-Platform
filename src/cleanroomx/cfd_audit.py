@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import hashlib
 import math
+import os
+import stat
 from pathlib import Path
 import re
 
@@ -22,6 +24,57 @@ _CONTINUITY=re.compile(
 )
 _FATAL=re.compile(r"FOAM FATAL|floating point exception|segmentation fault|nan\b|inf(?:inity)?\b",re.I)
 MAX_LOG_BYTES=32*1024*1024
+
+
+def read_bounded_regular_log(path):
+    """Read one bounded log through a stable regular-file descriptor.
+
+    POSIX O_NOFOLLOW rejects symlink swaps at open; elsewhere pre/post
+    identity checks offer best-effort change detection.
+    """
+    source = Path(path)
+    try:
+        before = source.lstat()
+    except OSError as exc:
+        raise ValueError("Log must be a regular file, not a symlink") from exc
+    if not stat.S_ISREG(before.st_mode):
+        raise ValueError("Log must be a regular file, not a symlink")
+    if before.st_size > MAX_LOG_BYTES:
+        raise ValueError("Log exceeds 32 MiB")
+    flags = (os.O_RDONLY | getattr(os, "O_BINARY", 0)
+             | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_NOFOLLOW", 0))
+    try:
+        fd = os.open(source, flags)
+    except OSError as exc:
+        raise ValueError("Log could not be opened as the checked regular file") from exc
+    try:
+        with os.fdopen(fd, "rb") as stream:
+            fd = -1
+            opened = os.fstat(stream.fileno())
+            if (not stat.S_ISREG(opened.st_mode) or
+                (opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino)):
+                raise ValueError("Log identity changed before opening")
+            if opened.st_size > MAX_LOG_BYTES:
+                raise ValueError("Log exceeds 32 MiB")
+            data = stream.read(MAX_LOG_BYTES + 1)
+            after = os.fstat(stream.fileno())
+    finally:
+        if fd >= 0:
+            os.close(fd)
+    try:
+        current = source.lstat()
+    except OSError as exc:
+        raise ValueError("Log path disappeared during reading") from exc
+    def identity(info):
+        return (info.st_dev, info.st_ino, info.st_size,
+                info.st_mtime_ns, info.st_ctime_ns)
+    if (not stat.S_ISREG(current.st_mode) or
+        identity(before) != identity(opened) or
+        identity(before) != identity(after) or
+        identity(before) != identity(current) or
+        len(data) != before.st_size or len(data) > MAX_LOG_BYTES):
+        raise ValueError("Log changed during bounded reading")
+    return data
 
 
 def _threshold(value,name):
@@ -49,18 +102,11 @@ def audit_openfoam_log(
     a=_threshold(max_initial_residual,"max_initial_residual")
     b=_threshold(max_final_residual,"max_final_residual")
     c=None if max_global_continuity is None else _threshold(max_global_continuity,"max_global_continuity")
-    source=Path(path)
-    if source.is_symlink() or not source.is_file():
-        raise ValueError("Log must be a regular file, not a symlink")
-    if source.stat().st_size>MAX_LOG_BYTES: raise ValueError("Log exceeds 32 MiB")
-    data=source.read_bytes()
-    if len(data)>MAX_LOG_BYTES: raise ValueError("Log exceeds 32 MiB")
+    data = read_bounded_regular_log(path)
     try:
-        content=data.decode("utf-8")
+        content = data.decode("utf-8")
     except UnicodeDecodeError as exc:
         raise ValueError("Log must be UTF-8") from exc
-    after=source.stat()
-    if after.st_size!=len(data): raise ValueError("Log changed during reading")
     fatal=bool(_FATAL.search(content))
     complete=bool(re.search(r"(?m)^\s*End\s*$",content))
     measurements={f:[] for f in fields}

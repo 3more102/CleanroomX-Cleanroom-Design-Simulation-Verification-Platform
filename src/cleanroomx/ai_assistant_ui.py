@@ -16,6 +16,7 @@ from .ai_assistant import (
     project_snapshot_sha256,
 )
 from .ai_assistant_chat import AssistantConversations
+from .ai_cfd_evidence import bound_cfd_evidence, format_cfd_evidence
 from .ai_assistant_plan import build_assistant_action_plan, render_assistant_action_plan
 from .project import ProjectDocument
 
@@ -30,6 +31,7 @@ class AssistantWindow(tk.Toplevel):
         project_getter: Callable[[], ProjectDocument],
         base_dir_getter: Callable[[], str | Path | None],
         project_key_getter: Callable[[], str],
+        project_path_getter: Callable[[], str | Path | None] | None = None,
         on_close: Callable[[], None] | None = None,
     ) -> None:
         super().__init__(parent)
@@ -40,6 +42,9 @@ class AssistantWindow(tk.Toplevel):
         self._project_getter = project_getter
         self._base_dir_getter = base_dir_getter
         self._project_key_getter = project_key_getter
+        self._project_path_getter = project_path_getter or (lambda: None)
+        self._cfd_export_dir: Path | None = None
+        self._cfd_project_key: str | None = None
         self._on_close = on_close
         self._conversations = AssistantConversations()
         self._active_project_key: str | None = None
@@ -96,6 +101,10 @@ class AssistantWindow(tk.Toplevel):
             buttons, text="Next actions (offline)", command=self.review_action_plan
         )
         self.plan_button.pack(side="left", padx=(6, 0))
+        self.cfd_button = ttk.Button(
+            buttons, text="Review CFD export...", command=self.review_cfd_export
+        )
+        self.cfd_button.pack(side="left", padx=(6, 0))
         self.ask_button = ttk.Button(
             buttons, text="Ask AI", command=self.ask_ai
         )
@@ -135,6 +144,10 @@ class AssistantWindow(tk.Toplevel):
         if key != self._active_project_key or self._session_id not in {
             session.id for session in sessions
         }:
+            if key != self._active_project_key:
+                # Imported evidence is never shared with another project.
+                self._cfd_export_dir = None
+                self._cfd_project_key = None
             self._active_project_key = key
             self._session_id = sessions[-1].id
             self._redraw()
@@ -236,8 +249,62 @@ class AssistantWindow(tk.Toplevel):
         self.status.set("AI workspace loaded; only conversations for this project are shown.")
 
     def _snapshot(self) -> dict:
-        return build_assistant_context(
+        context = build_assistant_context(
             self._project_getter(), base_dir=self._base_dir_getter()
+        )
+        if self._cfd_export_dir is not None:
+            if self._cfd_project_key != self._project_key_getter():
+                raise ValueError("CFD evidence belongs to another project.")
+            path = self._project_path_getter()
+            if path is None:
+                raise ValueError("Save the project before attaching CFD evidence.")
+            # Re-read the export on every request; stale or modified evidence
+            # must not be silently forwarded to the model.
+            context["cfd_evidence"] = bound_cfd_evidence(
+                self._cfd_export_dir,
+                project=self._project_getter(),
+                project_path=path,
+            )
+        return context
+
+    def review_cfd_export(self) -> None:
+        """Explicitly inspect an existing CFD export without any model request."""
+        if self._busy:
+            self.status.set("Finish the current request before changing CFD evidence.")
+            return
+        self._ensure_session()
+        project_path = self._project_path_getter()
+        if project_path is None:
+            self._append(
+                "CFD evidence unavailable",
+                "Save this project and export matching recorded CFD evidence first.",
+            )
+            return
+        source = filedialog.askopenfilename(
+            parent=self,
+            title="Select computed CFD export report.json",
+            filetypes=[("CleanroomX CFD report", "report.json"), ("JSON", "*.json")],
+        )
+        if not source:
+            return
+        try:
+            candidate = Path(source)
+            if candidate.name != "report.json":
+                raise ValueError("Select the CleanroomX exported report.json file.")
+            report = bound_cfd_evidence(
+                candidate.parent, project=self._project_getter(),
+                project_path=project_path,
+            )
+        except (OSError, ValueError, TypeError, KeyError) as exc:
+            self._append("CFD evidence rejected", str(exc))
+            self.status.set("CFD export not attached; no network request made.")
+            return
+        self._cfd_export_dir = candidate.parent
+        self._cfd_project_key = self._project_key_getter()
+        self._append("Recorded CFD export (offline)", format_cfd_evidence(report))
+        self.status.set(
+            "Matching CFD evidence loaded for read-only AI Q&A. "
+            "Engineering release remains HOLD."
         )
 
     def review_project(self) -> None:
@@ -279,6 +346,10 @@ class AssistantWindow(tk.Toplevel):
                 chat.id, key,
                 snapshot_sha256=context["project"]["in_memory_sha256"],
             )
+            if "cfd_evidence" in context:
+                # Past answers may have used a different CFD export; do not
+                # forward them as context for this imported evidence.
+                history = []
         except (OSError, ValueError, TypeError, KeyError) as exc:
             self._append("Assistant setup", str(exc))
             return

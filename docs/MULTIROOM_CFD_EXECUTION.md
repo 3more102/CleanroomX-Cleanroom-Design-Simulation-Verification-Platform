@@ -19,7 +19,11 @@ numerical convergence, a valid laminar flow regime, UDAF compliance or certifica
    inherited Linux solver environment. On Windows, select a WSL distribution,
    click **Probe WSL**, and optionally choose **Run case in WSL** to execute
    via the verified Foundation v10 wrapper. Both workflows show actual stage
-   logs; execution alone is not numerical convergence.
+   logs; execution alone is not numerical convergence. Both run actions open
+   the [Live solver preview](LIVE_CFD_MONITOR.md), showing actual observed
+   iterations, residuals and continuity diagnostics while the log grows.
+   Preview values have not passed completed-run provenance checks; import
+   computed fields after execution for the canonical numerical review.
 5. Enter the actual air density in kg/m³ and choose a modeled reference room ID
    (the demo uses `corridor`). Import recorded computed fields. Pressure in Pa is
    `density × (kinematic pressure − computed reference-room mean)`.

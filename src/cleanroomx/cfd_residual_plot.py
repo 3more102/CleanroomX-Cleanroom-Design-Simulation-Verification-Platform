@@ -6,6 +6,8 @@ import re
 import tkinter as tk
 from tkinter import ttk
 
+from .cfd_live_monitor import PREVIEW_SCHEMA
+
 
 _COLORS = ("#ffbf69", "#22c5d6", "#98d36b", "#d990ed", "#f789a4")
 _KINDS = {"Initial": "initial", "Final linear": "final"}
@@ -23,8 +25,12 @@ def residual_plot_data(report, *, field="All", kind="Initial", window="All"):
     history = report.get("residual_history")
     if type(history) is not list or not history:
         raise ValueError("Recorded residual history is required")
+    preview = report.get("schema") == PREVIEW_SCHEMA
+    offset = report.get("residual_log_offset", 0) if preview else 0
+    if type(offset) is not int or offset < 0:
+        raise ValueError("Invalid preview log offset")
     rows, occurrences = [], {}
-    for index, row in enumerate(history, 1):
+    for index, row in enumerate(history, offset + 1):
         if type(row) is not dict:
             raise ValueError("Invalid recorded residual entry")
         name, iteration = row.get("field"), row.get("iteration")
@@ -44,20 +50,21 @@ def residual_plot_data(report, *, field="All", kind="Initial", window="All"):
     names = tuple(dict.fromkeys(row["field"] for row in rows))
     if field != "All" and field not in names:
         raise ValueError("Selected field has no recorded residual entries")
-    selected = report.get("time_name")
-    try:
-        selected = float(selected)
-    except (ValueError, TypeError) as exc:
-        raise ValueError("Selected saved iteration must be finite") from exc
-    if not math.isfinite(selected) or selected < 0:
-        raise ValueError("Selected saved iteration must be finite")
+    selected = None
+    if not preview:
+        try:
+            selected = float(report.get("time_name"))
+        except (ValueError, TypeError) as exc:
+            raise ValueError("Selected saved iteration must be finite") from exc
+        if not math.isfinite(selected) or selected < 0:
+            raise ValueError("Selected saved iteration must be finite")
     iterations = sorted({row["iteration"] for row in rows})
     count = _WINDOWS[window]
     first = iterations[-count] if count and len(iterations) > count else iterations[0]
     visible = [row for row in rows if row["iteration"] >= first
                and (field == "All" or row["field"] == field)]
     limits = {}
-    if kind == "Initial":
+    if kind == "Initial" and not preview:
         for name, row in report.get("numerics", {}).get("fields", {}).items():
             if name not in {item["field"] for item in visible}:
                 continue
@@ -196,12 +203,15 @@ class RecordedResidualPlot(ttk.Frame):
         # Probe order is the original global log order, including repeated solves.
         self.points = [(xx(row["iteration"]), yy(row["value"]), row) for row in model["samples"]]
         selected = model["selected_iteration"]
-        if first <= selected <= last:
+        if selected is not None and first <= selected <= last:
             x = xx(selected)
             c.create_line(x, top, x, bottom, fill="white", dash=(4, 3), tags="selected-iteration")
-        caption = f"{self.kind.get()} residuals | saved fields: iteration {selected:g}"
-        if not first <= selected <= last:
-            caption += " (outside visible range)"
+        if selected is None:
+            caption = f"{self.kind.get()} residuals | UNVERIFIED log preview; no saved fields imported"
+        else:
+            caption = f"{self.kind.get()} residuals | saved fields: iteration {selected:g}"
+            if not first <= selected <= last:
+                caption += " (outside visible range)"
         c.create_text(left, 17, anchor="w", text=caption, fill="white", tags="residual-caption")
         visible_fields = tuple(dict.fromkeys(row["field"] for row in model["samples"]))
         for i, name in enumerate(visible_fields):

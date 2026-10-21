@@ -17,6 +17,7 @@ from .gui_lifecycle import collect_retired_tk_objects, protect_tk_lifecycle
 from .gui_scrollable import create_scrollable_content
 from .gui_windowing import fit_window_to_display
 from .cfd_residual_plot import RecordedResidualPlot
+from .cfd_live_monitor_gui import LiveSolverPanel
 from .cfd_convergence_triage import (
     triage_recorded_convergence, export_convergence_triage,
 )
@@ -261,6 +262,8 @@ class MultizoneCFDWindow(tk.Toplevel):
         closed_tab=create_scrollable_content(closed_host,padding=10)
         for tab,label in ((summary_host,"Room comparison"),(fields,"Computed sections"),(residuals,"Residual histories"),(logs,"Solver logs"),(diagnostics,"Diagnostics / provenance"),(engineering,"Engineering review"),(history_host,"Iteration stability"),(closed_host,"Closed-door network")):
             self.tabs.add(tab,text=label)
+        self.live_solver = LiveSolverPanel(self.tabs)
+        self.tabs.add(self.live_solver, text="Live solver")
         tab_nav=ttk.Frame(top)
         tab_nav.pack(fill="x",pady=(0,5))
         ttk.Label(tab_nav,text="Jump to panel").pack(side="left",padx=(0,8))
@@ -507,8 +510,9 @@ class MultizoneCFDWindow(tk.Toplevel):
             return
         self.report=None
         self._clear_results()
+        self.live_solver.begin(root)
         self.status.set("Running recorded OpenFOAM stages. Review logs and numerical convergence after execution.")
-        self.tabs.select(3)
+        self.tabs.select(self.live_solver)
         self._native_cancel_event=threading.Event()
         self.cancel_native_button.configure(state="normal")
         cancel_event=self._native_cancel_event
@@ -571,6 +575,7 @@ class MultizoneCFDWindow(tk.Toplevel):
         bashrc=self.wsl_openfoam_bashrc.get().strip() or None
         self.report=None
         self._clear_results()
+        self.live_solver.begin(root, source="WSL run")
         self.active_log=None
         self.log_offset=0
         self._wsl_running_case=root
@@ -578,7 +583,7 @@ class MultizoneCFDWindow(tk.Toplevel):
         self._wsl_seen_stages=set()
         self.status.set(
             "Running the verified OpenFOAM 10 pipeline in WSL. Solver exit is NOT convergence or 5 Pa validation.")
-        self.tabs.select(3)
+        self.tabs.select(self.live_solver)
         self._worker(lambda:wsl_gui_command(
             repository=repository,
             directory=root,distribution=distribution,mode="run",openfoam_bashrc=bashrc,
@@ -596,6 +601,7 @@ class MultizoneCFDWindow(tk.Toplevel):
                 self._wsl_seen_stages.add(stage)
                 self.log_text.insert("end",f"\n--- WSL: {stage} (recorded log) ---\n")
                 self.status.set(f"WSL: {stage} | reading actual solver log; no convergence claim")
+                self.live_solver.phase.set(f"WSL: {stage} | log preview remains unverified.")
             self.active_log=path
             self.log_offset=self._wsl_log_positions.get(stage,0)
             self._tail_log()
@@ -628,6 +634,8 @@ class MultizoneCFDWindow(tk.Toplevel):
                     self.log_text.see("end")
                 elif kind=="progress":
                     self.status.set(f"{payload['stage']}: {payload['event']}")
+                    self.live_solver.phase.set(
+                        f"Native: {payload['stage']} {payload['event']} | log preview remains unverified.")
                     if payload["event"]=="started":
                         self.active_log=Path(payload["log"])
                         self.log_offset=0
@@ -650,6 +658,10 @@ class MultizoneCFDWindow(tk.Toplevel):
                     self.wsl_repository_entry.configure(state=state)
                     self.wsl_repository_button.configure(state=state)
                     self._wsl_running_case=None
+                    if self.live_solver.follower is not None:
+                        outcome = "failed" if kind == "error" else payload.get("status", "finished")
+                        self.live_solver.phase.set(
+                            "Run " + outcome.replace("_", " ") + " | import computed fields to verify results.")
                     if kind=="error":
                         self.status.set("CFD operation failed: "+payload)
                         messagebox.showerror("CFD operation failed",payload,parent=self)
@@ -668,6 +680,7 @@ class MultizoneCFDWindow(tk.Toplevel):
         except queue.Empty:
             pass
         self._tail_log()
+        self.live_solver.poll()
         self._poll_id=self.after(150,self._poll)
 
     def _tail_log(self):
@@ -683,6 +696,7 @@ class MultizoneCFDWindow(tk.Toplevel):
                 self.log_text.see("end")
 
     def _clear_results(self):
+        self.live_solver.reset()
         self.trace_paths.clear()
         self._section_samples = []
         self._section_to_pixel = None

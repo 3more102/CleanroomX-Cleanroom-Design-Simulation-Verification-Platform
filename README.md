@@ -44,6 +44,13 @@ and exact mouse/keyboard point inspection. See the
 [actual residual-control captures and usage](docs/native-residual-inspection-20261021/README.md).
 These controls inspect recorded data and preserve the original convergence verdict.
 
+Fresh native and WSL runs now open the **Live solver** panel: observed SIMPLE
+iterations, initial/final residuals, raw continuity diagnostics and interactive
+plots update from the actual growing solver log. Preview values remain
+unverified until the normal completed-field import. See
+[usage and reading limits](docs/LIVE_CFD_MONITOR.md) and the
+[actual widget capture, explicitly replaying a recorded log](docs/live-solver-monitor-20261021/README.md).
+
 The [executed cancellation and GUI lifecycle report](reports/native-cancellation-20261021/REPORT.md)
 includes the complete **2833 passed / 1 optional IFC skip** run, original
 cancelled-case archive and

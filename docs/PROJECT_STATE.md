@@ -1,5 +1,21 @@
 # CleanroomX engineering state — 21 October 2026
 
+## Live solver monitor increment
+
+Fresh native and WSL run actions now open a separate **Live solver** panel:
+observed SIMPLE iterations, exact initial/final residuals, raw continuity
+diagnostics and interactive plots. Bounded incremental reading keeps partial
+lines pending and retains whole recorded iterations. The preview cannot
+publish computed fields or a convergence verdict; the original completed-run
+import remains authoritative. The panel scrolls at the minimum window size.
+
+The [verification report](../reports/live-solver-monitor-20261021/REPORT.md)
+records current checks and limitations. The [actual Tk capture](live-solver-monitor-20261021/README.md)
+explicitly replays the verified original 400-entry unconverged log. No new
+solver execution is claimed in this environment. The new actual GUI-to-solver
+regression requires Foundation v10; Windows-to-WSL workstation qualification
+and engineering acceptance remain outstanding. **Engineering release: HOLD.**
+
 ## Native residual inspection increment
 
 The existing desktop residual panel now supports actual field/kind/scale

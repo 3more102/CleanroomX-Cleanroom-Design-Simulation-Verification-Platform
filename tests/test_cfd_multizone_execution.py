@@ -89,6 +89,61 @@ def test_actual_mesh_solver_outputs_and_provenance(executed_case,computed_report
         assert all(math.isfinite(v) for v in cell["velocity_m_s"])
 
 
+def test_actual_gui_run_streams_residuals_before_canonical_field_import(tmp_path, monkeypatch):
+    """Requires real Foundation v10; no fixture log stands in for a new run."""
+    _require_runtime()
+    try:
+        desktop = tk.Tk()
+    except tk.TclError as exc:
+        if os.environ.get("DISPLAY"):
+            raise
+        pytest.skip(f"Actual GUI display unavailable: {exc}")
+    desktop.withdraw()
+    errors = []
+    desktop.report_callback_exception = lambda *args: errors.append(args)
+    from cleanroomx import cfd_multizone_gui as gui
+    monkeypatch.setattr(gui.messagebox, "showerror", lambda *args, **kwargs: errors.append(args))
+    case = tmp_path / "live-gui-run"
+    generate_multizone_open_door_case(
+        bundled_demo_project_path(), case, door_mode="open", kinematic_viscosity_m2_s=1.5e-5,
+        max_iterations=100, output_interval=25,
+    )
+    view = MultizoneCFDWindow(desktop, directory=case)
+    try:
+        view.run_button.invoke()
+        deadline = time.monotonic() + 120
+        while view.running and time.monotonic() < deadline:
+            desktop.update()
+            time.sleep(.01)
+        assert not view.running
+        # Drain any bounded final preview chunks after the runner completed.
+        for _ in range(8):
+            view.live_solver.poll()
+        preview = view.live_solver.follower.monitor
+        assert preview.error is None
+        assert view.report is None  # The preview cannot publish computed fields.
+        report = analyze_multizone_case(case, density_kg_m3=1.2, reference_room_id="corridor")
+        assert list(preview.history) == report["residual_history"]
+        assert preview.total_samples == 400
+        assert preview.iteration == 100
+        assert view.live_solver.plot.model["selected_iteration"] is None
+        view.load_report(report)
+        desktop.update()
+        assert view.live_solver.follower is None
+        assert view.report["provenance"] == report["provenance"]
+        assert view.residual_plot.model["selected_iteration"] == 100
+        assert errors == []
+    finally:
+        if view._native_cancel_event is not None:
+            view._native_cancel_event.set()
+        deadline = time.monotonic() + 10
+        while view.running and time.monotonic() < deadline:
+            desktop.update()
+            time.sleep(.01)
+        view.close()
+        desktop.destroy()
+
+
 def test_scheduled_sources_use_actual_executed_openfoam_velocity(computed_report, tmp_path):
     """Real solver -> recorded U -> timed source integration -> verified exports."""
     from cleanroomx.cfd_particle_sources import (

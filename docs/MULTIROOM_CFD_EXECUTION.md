@@ -714,3 +714,19 @@ Foundation v10 CI executes two *independent* ten-iteration cases as a real
 engineering-contract test, while generator and CLI tests verify the bounded
 settings and reject unsolved or noncomparable cases. The ten-iteration
 experiment itself is **not a converged reference solution**.
+
+
+## Archived iteration self-consistency gate (21 October 2026)
+
+The recorded SIMPLE history consumer and exporter recompute room pressure, mean
+speed, door pressure, door transfer and absolute-cell-imbalance changes directly
+from saved numerical snapshot values. They reject mismatched drift fields,
+changed inventories, inconsistent door-flux components, altered door-pressure
+reversal records and contradictory last-iteration summaries before numerical
+triage or JSON/CSV publication. The audit is enforced by focused VTK/CFD tests
+and the complete Python CI suite.
+
+This internal arithmetic review does **not** rehash/re-import original OpenFOAM
+case files; the existing source importer must be used to establish that source
+evidence. Neither check establishes mesh independence, physical convergence,
+5 Pa closed-door performance or an engineering release: **HOLD** remains.

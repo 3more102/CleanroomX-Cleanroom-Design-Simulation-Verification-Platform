@@ -10,6 +10,8 @@ import json
 import math
 from pathlib import Path
 
+from .cfd_iteration_evidence import validate_recorded_history_consistency
+
 SCHEMA = "cleanroomx.multizone-iteration-comparison.v1"
 
 
@@ -207,6 +209,7 @@ def export_recorded_iteration_history(history,directory):
         history.get("closed_door_5pa_demonstrated") is not False or
         not isinstance(history.get("snapshots"),list) or len(history["snapshots"])<2):
         raise ValueError("Only unqualified source-linked CFD iteration histories may be exported")
+    validate_recorded_history_consistency(history)
     root=Path(directory)
     root.mkdir(parents=True,exist_ok=False)
     try:

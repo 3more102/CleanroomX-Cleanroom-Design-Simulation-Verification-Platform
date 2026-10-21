@@ -12,6 +12,7 @@ from pathlib import Path
 import re
 
 from .cfd_multizone_stability import SCHEMA as HISTORY_SCHEMA
+from .cfd_iteration_evidence import validate_recorded_history_consistency
 
 TRIAGE_SCHEMA = "cleanroomx.multizone-convergence-triage.v1"
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
@@ -109,6 +110,9 @@ def triage_recorded_convergence(
         "change_from_previous_recorded_iteration"]:
         raise ValueError("Last saved snapshot change is inconsistent with source history")
 
+    # Recompute numerical drifts directly from saved room/door source values.
+    # A valid-looking drift summary cannot override an altered snapshot.
+    validate_recorded_history_consistency(history)
     available_changes=len(snapshots)-1
     selected=snapshots[-min(consecutive_changes,available_changes):]
     rows=[]

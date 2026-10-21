@@ -251,6 +251,45 @@ project data, or approve a design. The detailed HVAC, particle and geometry
 datasets remain outside the bounded general snapshot; future specialist
 adapters must supply provenance-checked inputs before making numeric claims.
 
+## Confirmed handoff to existing CFD workspace (non-executing)
+
+In the desktop **Tools > AI Engineering Assistant...** window, select
+**Review and open CFD workspace...** to choose a previously *generated*,
+not-yet-executed connected OpenFOAM case directory.
+
+The assistant independently verifies that:
+
+- The current in-memory project exactly matches the saved project document.
+- The generated case's source SHA-256 matches those saved project bytes.
+- The canonical `verify_multizone_inputs()` contract validates all eight
+  inventoried solver inputs against the case manifest.
+- The manifest is strict, bounded JSON that remains identical across reads.
+- No prior run receipt, solver-stage logs or nonzero computed-time directory
+  exists in the case.
+- The project and case are rechecked **after** the human confirmation, so a
+  change between preview and confirmation prevents the handoff.
+
+The preview remains `proposal_not_executed` and records the saved project,
+in-memory project, and case manifest digests. A separate confirmation dialog
+then opens **the existing Multiroom CFD workspace with that case selected**.
+No OpenFOAM process starts and no project or case file is written by the AI.
+The operator can separately inspect settings and choose the workspace's
+existing **Run OpenFOAM 10** or Windows-to-WSL run control, both of which
+use their own canonical input/runtime validation. Merely opening a workspace
+is **not** approval to run a solver.
+
+This workflow only supports the documented **all-doors-open** connected CFD
+case. It cannot be interpreted as proof of 5 Pa closed-door control,
+convergence, commissioning, physical validation or compliance. The local case
+path appears only in the operator's handoff preview; it is not added to the
+bounded cloud/model prompt context.
+
+Regression commands (the tests do **not** run an OpenFOAM solver):
+
+```bash
+python -m pytest -q tests/test_ai_cfd_handoff.py tests/test_ai_assistant_ui.py
+```
+
 ## Next engineering phases
 
 **Phase 2 — Specialist assistants:** the initial *offline* specialty review

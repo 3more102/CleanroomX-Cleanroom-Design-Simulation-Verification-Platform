@@ -1,5 +1,20 @@
 # CleanroomX engineering state — 21 October 2026
 
+## Native cancellation and GUI lifetime recovery
+
+The [current execution report](../reports/native-cancellation-20261021/REPORT.md)
+records **2833 passed / 0 failed / 1 optional IFC skip** with actual Foundation
+v10 and a Tk/VTK display. Native solver cancellation now cleans up its managed
+POSIX process group, retains cancelled receipts and refuses partial imports.
+Real solver regressions include Ctrl+C and closing the entire Tk application.
+A complete-suite Tk variable finalization crash led to a main-thread GUI
+lifetime boundary and targeted ownership regressions. Two actual current
+desktop captures and an original cancelled-case archive are retained.
+The report also retains a separately rejected incomplete mesh attempt whose
+cause is unresolved. Windows-to-WSL cancellation and physical CFD qualification
+remain open; engineering release remains **HOLD**. The earlier results below
+are historical evidence with their original scopes.
+
 ## Startup and runtime recovery increment
 
 The [current recovery report](../reports/startup-runtime-recovery-20261021/REPORT.md)

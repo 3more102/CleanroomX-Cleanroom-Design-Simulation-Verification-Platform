@@ -372,7 +372,7 @@ jobs:
         run: '"%GITHUB_WORKSPACE%\start-cleanroomx.cmd" --demo --smoke --autosave-interval-seconds 0'
       - name: Verify startup failures and Windows launcher regressions
         shell: pwsh
-        run: python -m pytest -q tests/test_gui_startup.py tests/test_windows_launchers.py
+        run: python -m pytest -q tests/test_gui_startup.py tests/test_gui_lifecycle.py tests/test_windows_launchers.py
       - name: Parse WSL launcher and test bridge contracts on Windows
         shell: pwsh
         run: |

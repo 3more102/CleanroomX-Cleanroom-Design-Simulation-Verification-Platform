@@ -10,8 +10,13 @@ import json
 import math
 import os
 from pathlib import Path
+import re
 import shutil
+import signal
 import subprocess
+import sys
+import threading
+import time
 import tkinter as tk
 
 import pytest
@@ -401,17 +406,176 @@ def test_timeout_injection_records_failure_without_success_evidence(tmp_path,mon
     _require_runtime()
     root=tmp_path/"timeout"
     generate_multizone_open_door_case(bundled_demo_project_path(),root,door_mode="open",kinematic_viscosity_m2_s=1.5e-5)
-    original=subprocess.run
+    from cleanroomx.cfd_multizone import run_native_cfd_process
+    original=run_native_cfd_process
     def fail_mesh(arguments,**kwargs):
         if arguments==["blockMesh"]:
             raise subprocess.TimeoutExpired(arguments,60)
         return original(arguments,**kwargs)
-    monkeypatch.setattr("cleanroomx.cfd_multizone.subprocess.run",fail_mesh)
+    monkeypatch.setattr("cleanroomx.cfd_multizone.run_native_cfd_process",fail_mesh)
     receipt=run_multizone_open_door_case(root,timeout_seconds=60)
     assert receipt["status"]=="incomplete"
     assert receipt["stages"][0]["returncode"] is None
     assert "timed out" in receipt["stages"][0]["failure"]
     assert receipt["outputs"]=={}
+
+
+def test_cancel_terminates_actual_simplefoam_and_rejects_partial_fields(tmp_path):
+    """Genuine mesh/solver cancellation; no synthetic successful solver logs."""
+    _require_runtime()
+    root=tmp_path/"cancel-native-solver"
+    generate_multizone_open_door_case(
+        bundled_demo_project_path(),root,door_mode="open",kinematic_viscosity_m2_s=1.5e-5,
+        max_iterations=10000,output_interval=100,
+    )
+    cancel=threading.Event()
+    timers=[]
+    def progress(event):
+        if event["stage"]=="simpleFoam" and event["event"]=="started":
+            timer=threading.Timer(.3,cancel.set)
+            timers.append(timer)
+            timer.start()
+    try:
+        receipt=run_multizone_open_door_case(root,timeout_seconds=60,on_progress=progress,cancel_event=cancel)
+    finally:
+        for timer in timers:
+            timer.cancel()
+            timer.join()
+    assert receipt["status"]=="cancelled"
+    assert [s["command"] for s in receipt["stages"]]==["blockMesh","checkMesh","simpleFoam"]
+    assert [s["returncode"] for s in receipt["stages"][:2]]==[0,0]
+    assert receipt["stages"][-1]["returncode"] is None
+    assert "cancelled" in receipt["stages"][-1]["failure"]
+    assert "OpenFOAM" in (root/"simpleFoam.log").read_text()
+    assert not (root/"postProcess.log").exists()
+    assert receipt["outputs"]=={}
+    assert json.loads((root/"run-receipt.json").read_text())==receipt
+    with pytest.raises(ValueError,match="successful recorded"):
+        analyze_multizone_case(root,density_kg_m3=1.2,reference_room_id="corridor")
+
+
+def test_cancel_after_final_actual_stage_cannot_publish_success(tmp_path):
+    _require_runtime()
+    root=tmp_path/"cancel-final-native-stage"
+    generate_multizone_open_door_case(
+        bundled_demo_project_path(),root,door_mode="open",kinematic_viscosity_m2_s=1.5e-5,
+        max_iterations=5,output_interval=5,
+    )
+    cancel=threading.Event()
+    def progress(event):
+        if event["stage"]=="postProcess" and event["event"]=="finished":
+            cancel.set()
+    receipt=run_multizone_open_door_case(root,timeout_seconds=60,on_progress=progress,cancel_event=cancel)
+    assert all(s["returncode"]==0 for s in receipt["stages"])
+    assert len(receipt["stages"])==4
+    assert receipt["status"]=="cancelled"
+    assert receipt["outputs"]=={}
+    with pytest.raises(ValueError,match="successful recorded"):
+        analyze_multizone_case(root,density_kg_m3=1.2,reference_room_id="corridor")
+
+
+@pytest.mark.skipif(os.name!="posix",reason="Actual native Linux CLI interrupt")
+def test_ctrl_c_reaps_actual_simplefoam_and_records_cancelled_cli_run(tmp_path):
+    _require_runtime()
+    root=tmp_path/"interrupt-native-cli"
+    generate_multizone_open_door_case(
+        bundled_demo_project_path(),root,door_mode="open",kinematic_viscosity_m2_s=1.5e-5,
+        max_iterations=10000,output_interval=100,
+    )
+    with (tmp_path/"cli.log").open("w") as output:
+        process=subprocess.Popen(
+            [sys.executable,"-m","cleanroomx.cfd_pipeline_cli","multizone-run",str(root)],
+            stdout=output,stderr=subprocess.STDOUT,
+        )
+        try:
+            deadline=time.monotonic()+20
+            solver_pid=None
+            while time.monotonic()<deadline and process.poll() is None:
+                if (root/"simpleFoam.log").exists():
+                    text=(root/"simpleFoam.log").read_text()
+                    match=re.search(r"(?m)^PID\s*:\s*(\d+)",text)
+                    if match and "Time =" in text:
+                        solver_pid=int(match[1])
+                        break
+                time.sleep(.02)
+            assert solver_pid is not None,"Actual solver did not enter its iteration loop"
+            process.send_signal(signal.SIGINT)
+            assert process.wait(timeout=5)==2
+        finally:
+            if process.poll() is None:
+                process.send_signal(signal.SIGINT)
+                try:
+                    process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait()
+    receipt=json.loads((root/"run-receipt.json").read_text())
+    assert receipt["status"]=="cancelled"
+    assert receipt["outputs"]=={}
+    with pytest.raises(ProcessLookupError):
+        os.kill(solver_pid,0)
+    with pytest.raises(ValueError,match="successful recorded"):
+        analyze_multizone_case(root,density_kg_m3=1.2,reference_room_id="corridor")
+
+
+def test_closing_actual_desktop_reaps_native_solver_and_retains_cancelled_receipt(tmp_path):
+    """Close the real parent Tk window during a genuine simpleFoam run."""
+    _require_runtime()
+    try:
+        desktop=tk.Tk()
+    except tk.TclError as exc:
+        if os.environ.get("DISPLAY"):
+            raise
+        pytest.skip(f"Actual display required: {exc}")
+    case=tmp_path/"close-desktop-native-run"
+    generate_multizone_open_door_case(
+        bundled_demo_project_path(),case,door_mode="open",kinematic_viscosity_m2_s=1.5e-5,
+        max_iterations=10000,output_interval=100,
+    )
+    errors=[]
+    desktop.report_callback_exception=lambda *args:errors.append(args)
+    view=MultizoneCFDWindow(desktop,directory=case)
+    solver_pid=None
+    try:
+        view.run_case()
+        deadline=time.monotonic()+20
+        while view.running and time.monotonic()<deadline:
+            desktop.update()
+            logfile=case/"simpleFoam.log"
+            if logfile.exists():
+                text=logfile.read_text()
+                match=re.search(r"(?m)^PID\s*:\s*(\d+)",text)
+                if match and "Time =" in text:
+                    solver_pid=int(match[1])
+                    break
+            time.sleep(.02)
+        assert solver_pid is not None,"Actual solver did not enter its iteration loop"
+        desktop.destroy()
+        receipt_path=case/"run-receipt.json"
+        deadline=time.monotonic()+5
+        receipt=None
+        while time.monotonic()<deadline:
+            try:
+                receipt=json.loads(receipt_path.read_text())
+                break
+            except (FileNotFoundError,json.JSONDecodeError):
+                pass  # Wait for the worker to finish writing the receipt.
+            time.sleep(.02)
+        assert receipt is not None,"Native worker did not finish cleanup after closing Tk"
+        assert receipt["status"]=="cancelled"
+        assert receipt["outputs"]=={}
+        with pytest.raises(ProcessLookupError):
+            os.kill(solver_pid,0)
+        with pytest.raises(ValueError,match="successful recorded"):
+            analyze_multizone_case(case,density_kg_m3=1.2,reference_room_id="corridor")
+        assert errors==[]
+    finally:
+        if view._native_cancel_event is not None:
+            view._native_cancel_event.set()
+        try:
+            desktop.destroy()
+        except tk.TclError:
+            pass
 
 
 def test_actual_gui_displays_recorded_fields_vectors_and_residuals(computed_report,executed_case):

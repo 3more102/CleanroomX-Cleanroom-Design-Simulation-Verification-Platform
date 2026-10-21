@@ -1,0 +1,30 @@
+{
+  "finished_utc": "2026-10-21T11:20:24.537662+00:00",
+  "manifest_sha256": "b1763e5aec4d057d4e0ebedde005fe8d166d678da36fc4b2c42313b3181b9972",
+  "outputs": {},
+  "runtime": {
+    "executables": {
+      "blockMesh": "/opt/openfoam10/platforms/linux64GccDPInt32Opt/bin/blockMesh",
+      "checkMesh": "/opt/openfoam10/platforms/linux64GccDPInt32Opt/bin/checkMesh",
+      "postProcess": "/opt/openfoam10/platforms/linux64GccDPInt32Opt/bin/postProcess",
+      "simpleFoam": "/opt/openfoam10/platforms/linux64GccDPInt32Opt/bin/simpleFoam"
+    },
+    "version": "Usage: simpleFoam [OPTIONS]\noptions:\n  -case <dir>       specify alternate case directory, default is the cwd\n  -fileHandler <handler>\n                    override the fileHandler\n  -hostRoots <((host1 dir1) .. (hostN dirN))>\n                    slave root directories (per host) for distributed running\n  -libs '(\"lib1.so\" ... \"libN.so\")'\n                    pre-load libraries\n  -listFunctionObjects\n                    List functionObjects\n  -listFvConstraints\n                    List fvConstraints\n  -listFvModels     List fvModels\n  -listMomentumTransportModels\n                    List momentumTransportModels\n  -listScalarBCs    List scalar field boundary conditions (fvPatchField<scalar>)\n  -listSwitches     List all available debug, info and optimisation switches\n  -listVectorBCs    List vector field boundary conditions (fvPatchField<vector>)\n  -noFunctionObjects\n                    do not execute functionObjects\n  -parallel         run in parallel\n  -postProcess      Execute functionObjects only\n  -roots <(dir1 .. dirN)>\n                    slave root directories for distributed running\n  -srcDoc           display source code in browser\n  -doc              display application documentation in browser\n  -help             print the usage\n\nUsing: OpenFOAM-10 (see https://openfoam.org)\nBuild: 10-c4cf895ad8fa"
+  },
+  "schema": "cleanroomx.multizone-run.v1",
+  "stages": [
+    {
+      "arguments": [
+        "blockMesh"
+      ],
+      "command": "blockMesh",
+      "elapsed_seconds": 6.005877941000108,
+      "failure": "Missing normal completion marker or fatal OpenFOAM diagnostic",
+      "log_sha256": "db9fd930555c275267fe039ea6547aa50d3f676c8c82d7033e9d673a1dc158db",
+      "returncode": 0
+    }
+  ],
+  "started_utc": "2026-10-21T11:20:18.531041+00:00",
+  "status": "incomplete",
+  "warning": "Review residuals, flux balance, model validity and mesh sensitivity; execution is not validation."
+}

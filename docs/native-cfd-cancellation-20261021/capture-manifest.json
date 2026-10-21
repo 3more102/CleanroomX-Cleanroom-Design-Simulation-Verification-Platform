@@ -1,0 +1,41 @@
+{
+  "created_utc": "2026-10-21T11:31:38.024690+00:00",
+  "operation": "genuine_Tk_native_OpenFOAM_cancellation",
+  "solver_pid_reaped": true,
+  "receipt_status": "cancelled",
+  "partial_field_import_rejected": true,
+  "gui_callback_errors": [],
+  "engineering_release": "HOLD",
+  "images": [
+    {
+      "file": "01-running-native-solver.png",
+      "description": "Actual live native simpleFoam, with enabled cancellation control",
+      "width": 1390,
+      "height": 930,
+      "kind": "actual_Tk_window_pixels",
+      "sha256": "37e5a9c7a4df42055b64effdf1fbc250e53b400bbf3fd6fdad71ba274878d4e1"
+    },
+    {
+      "file": "02-cancelled-and-rejected.png",
+      "description": "Actual cancelled receipt; GUI refuses partial fields as completed CFD",
+      "width": 1390,
+      "height": 930,
+      "kind": "actual_Tk_window_pixels",
+      "sha256": "e48f03288a7479f15f02c7ebab8eb8c954efeb084b297baeaa8bd92371bcc532"
+    }
+  ],
+  "evidence_sha256": {
+    "source-manifest.json": "b1763e5aec4d057d4e0ebedde005fe8d166d678da36fc4b2c42313b3181b9972",
+    "run-receipt.json": "5a4c790dabc8c4a34001d4d8741533179b63713a3f90c68e69a86bfd8fec61f2",
+    "blockMesh.log.gz": "2107fee9e6257526a37523d078958d81e74fe372931b882a016eddef0c4b7e68",
+    "checkMesh.log.gz": "e659481c01629492c2d2f7332be3980b5d35cfc8a78bf2b4866ab33844376255",
+    "simpleFoam.log.gz": "690a2271d873ddda7e4619ae2b9ac660acc43fa30e5f7978dbc65eafac3b6057"
+  },
+  "raw_source_sha256": {
+    "manifest.json": "b1763e5aec4d057d4e0ebedde005fe8d166d678da36fc4b2c42313b3181b9972",
+    "run-receipt.json": "5a4c790dabc8c4a34001d4d8741533179b63713a3f90c68e69a86bfd8fec61f2",
+    "blockMesh.log": "4d55576feb7682f7c01e266a1a1f5b8ad03c091d0e3180b12afef9916f8d4dda",
+    "checkMesh.log": "e19b73e4c9b75fa5aac09461368029178c377c2c5b1b65b6bd535e661785b51e",
+    "simpleFoam.log": "97d5a81cc38ab08e2ffe4c98b2a00ee0a37b201bb06b4d9329d91e8b00a5eee5"
+  }
+}

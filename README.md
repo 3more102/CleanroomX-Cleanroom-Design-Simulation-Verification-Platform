@@ -32,6 +32,17 @@ Launch with `cleanroomx-gui --demo`; install optional 3D dependencies using
 Use the [multiroom workflow](docs/MULTIROOM_CFD_EXECUTION.md) or the explicit
 [Windows → WSL procedure](docs/WINDOWS_WSL_OPENFOAM_BRIDGE.md).
 
+The connected native Linux runner also supports
+[cancellation and child-process cleanup](docs/NATIVE_CFD_CANCELLATION.md).
+Cancelled or interrupted runs retain failure evidence and cannot be imported
+as completed CFD. The separate Windows-to-WSL bridge does not yet offer this
+cancellation control.
+
+The [executed cancellation and GUI lifecycle report](reports/native-cancellation-20261021/REPORT.md)
+includes the complete **2833 passed / 1 optional IFC skip** run, original
+cancelled-case archive and
+[two actual desktop captures](docs/native-cfd-cancellation-20261021/README.md).
+
 ### Actual application captures
 
 These images come from the running Tk application and native VTK framebuffer.

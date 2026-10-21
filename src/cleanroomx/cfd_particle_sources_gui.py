@@ -5,6 +5,7 @@ import copy
 import queue
 import threading
 import tkinter as tk
+from .gui_lifecycle import collect_retired_tk_objects, protect_tk_lifecycle
 from tkinter import filedialog, ttk
 
 from .cfd_particle_sources import (
@@ -21,6 +22,7 @@ class ParticleSourcesWindow(tk.Toplevel):
 
     def __init__(self, parent, report, *, on_run, on_sources=None, scene_state=None):
         super().__init__(parent)
+        protect_tk_lifecycle(self)
         self.title("CleanroomX | Recorded CFD particle sources")
         self.geometry("1160x830")
         self.minsize(960, 720)
@@ -239,6 +241,7 @@ class ParticleSourcesWindow(tk.Toplevel):
         if self.busy:
             self.status.set("A particle task is already running")
             return False
+        collect_retired_tk_objects()
         self.busy = True
         self._cancel = threading.Event()
         revision = self.revision

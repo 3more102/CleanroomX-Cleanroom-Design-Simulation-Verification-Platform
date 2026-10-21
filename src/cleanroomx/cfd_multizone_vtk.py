@@ -515,12 +515,14 @@ def open_multizone_vtk_window(parent, report, traces, *, case_directory=None):
     """
     import tkinter as tk
     from tkinter import ttk
+    from .gui_lifecycle import protect_tk_lifecycle
 
     vtk = _vtk()
     # Validate the complete recorded scene *before* opening a native window.
     renderer = build_multizone_vtk_renderer(report, traces)
     set_recorded_view_camera(renderer,"iso")
     window = tk.Toplevel(parent)
+    protect_tk_lifecycle(window)
     window.title("CleanroomX | Recorded CFD 3D controls")
     window.geometry("1120x760")
     window.minsize(620, 260)

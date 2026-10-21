@@ -85,6 +85,7 @@ from .gui_state import (
 )
 from .gui_theme import configure_ttk_theme, normalize_theme_name
 from .runtime_diagnostics import install_tk_exception_handler, report_gui_failure
+from .gui_lifecycle import protect_tk_lifecycle
 from .gui_windowing import fit_window_to_display
 from .gui_proofgraph import ProofGraphViewer
 from .gui_start import StartCenter
@@ -2069,6 +2070,7 @@ class CleanroomXApp:
         ui_state_path: str | Path | None = None,
     ):
         self.root = root
+        protect_tk_lifecycle(root)
         self.root.title(f"CleanroomX {__version__}")
         self._display_width = max(1, int(self.root.winfo_screenwidth()))
         self._display_height = max(1, int(self.root.winfo_screenheight()))

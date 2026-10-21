@@ -12,6 +12,8 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 from .cfd_multizone import run_multizone_open_door_case, verify_multizone_inputs
+from .cfd_process import CFDRunCancelled
+from .gui_lifecycle import collect_retired_tk_objects, protect_tk_lifecycle
 from .cfd_convergence_triage import (
     triage_recorded_convergence, export_convergence_triage,
 )
@@ -112,6 +114,7 @@ class MultizoneCFDWindow(tk.Toplevel):
 
     def __init__(self, master, *, directory: str | Path | None = None):
         super().__init__(master)
+        protect_tk_lifecycle(self)
         self.title("CleanroomX • Multiroom CFD")
         self.geometry("1230x830")
         self.minsize(850,600)
@@ -132,6 +135,7 @@ class MultizoneCFDWindow(tk.Toplevel):
         self._wsl_running_case = None
         self._wsl_log_positions = {}
         self._wsl_seen_stages = set()
+        self._native_cancel_event = None
         self.density = tk.StringVar(value="")
         self.reference = tk.StringVar(value="corridor")
         self.time_name = tk.StringVar(value="latest")
@@ -150,6 +154,11 @@ class MultizoneCFDWindow(tk.Toplevel):
         self._build()
         self._poll_id = self.after(150,self._poll)
         self.protocol("WM_DELETE_WINDOW",self.close)
+        self.bind("<Destroy>",self._cancel_native_on_destroy,add="+")
+
+    def _cancel_native_on_destroy(self, event):
+        if event.widget is self and self._native_cancel_event is not None:
+            self._native_cancel_event.set()
 
     def _build(self):
         top=ttk.Frame(self,padding=12)
@@ -171,6 +180,9 @@ class MultizoneCFDWindow(tk.Toplevel):
         self.run_button.pack(side="left",padx=8)
         self.import_button=ttk.Button(commands,text="Import computed fields",command=self.import_case)
         self.import_button.pack(side="left")
+        self.cancel_native_button=ttk.Button(
+            commands,text="Cancel native run",command=self.cancel_native_run,state="disabled")
+        self.cancel_native_button.pack(side="left",padx=8)
         ttk.Button(commands,text="Export report",command=self.export_report).pack(side="right")
         wsl_controls=ttk.Frame(top)
         wsl_controls.pack(fill="x",pady=(0,6))
@@ -413,6 +425,7 @@ class MultizoneCFDWindow(tk.Toplevel):
     def _worker(self, function):
         if self.running:
             return
+        collect_retired_tk_objects()
         self.running=True
         self.run_button.configure(state="disabled")
         self.import_button.configure(state="disabled")
@@ -423,14 +436,21 @@ class MultizoneCFDWindow(tk.Toplevel):
         self.wsl_repository_entry.configure(state="disabled")
         self.wsl_repository_button.configure(state="disabled")
         self.progress.start(15)
+        events=self.events
         def work():
             try:
-                self.events.put(("result",function()))
+                events.put(("result",function()))
+            except CFDRunCancelled:
+                events.put(("result",{"status":"cancelled"}))
             except Exception as exc:
-                self.events.put(("error",str(exc)))
-        threading.Thread(target=work,daemon=True).start()
+                events.put(("error",str(exc)))
+        # A native worker must finish cleanup when the parent Tk app closes.
+        # This closure retains no Tk object and publishes only to its queue.
+        threading.Thread(target=work,daemon=self._native_cancel_event is None).start()
 
     def run_case(self):
+        if self.running:
+            return
         try:
             root,_=verify_multizone_inputs(self.case_path.get())
         except (OSError,ValueError) as exc:
@@ -440,7 +460,19 @@ class MultizoneCFDWindow(tk.Toplevel):
         self._clear_results()
         self.status.set("Running recorded OpenFOAM stages. Review logs and numerical convergence after execution.")
         self.tabs.select(3)
-        self._worker(lambda:run_multizone_open_door_case(root,on_progress=lambda event:self.events.put(("progress",event))))
+        self._native_cancel_event=threading.Event()
+        self.cancel_native_button.configure(state="normal")
+        cancel_event=self._native_cancel_event
+        events=self.events
+        self._worker(lambda:run_multizone_open_door_case(
+            root,on_progress=lambda event:events.put(("progress",event)),
+            cancel_event=cancel_event))
+
+    def cancel_native_run(self):
+        if self.running and self._native_cancel_event is not None:
+            self._native_cancel_event.set()
+            self.cancel_native_button.configure(state="disabled")
+            self.status.set("Cancelling the native solver and its child processes; waiting for cleanup.")
 
     def probe_wsl(self):
         if self.running or not _windows_wsl_available():
@@ -556,6 +588,8 @@ class MultizoneCFDWindow(tk.Toplevel):
                 else:
                     self._tail_log()
                     self.running=False
+                    self._native_cancel_event=None
+                    self.cancel_native_button.configure(state="disabled")
                     self.progress.stop()
                     self.run_button.configure(state="normal")
                     self.import_button.configure(state="normal")
@@ -576,6 +610,10 @@ class MultizoneCFDWindow(tk.Toplevel):
                         self.load_iteration_history(payload)
                     elif payload.get("status")=="wsl_probe_ready":
                         self.status.set("WSL Foundation v10 probe READY. Generate a new connected case before running.")
+                    elif payload.get("status")=="cancelled":
+                        self.status.set("Native CFD run cancelled. Partial results cannot be imported; generate a new case to rerun.")
+                    elif payload.get("status")=="incomplete":
+                        self.status.set("CFD execution incomplete. Inspect the recorded failure; generate a new case to rerun.")
                     else:
                         self.status.set(payload["status"].replace("_"," ")+". Enter density and import computed fields to review.")
         except queue.Empty:
@@ -1347,7 +1385,10 @@ class MultizoneCFDWindow(tk.Toplevel):
 
     def close(self):
         if self.running:
-            self.status.set("An OpenFOAM operation is running. This window remains open until execution finishes.")
+            if self._native_cancel_event is not None:
+                self.status.set("A native run is active. Use Cancel native run and wait for cleanup before closing.")
+            else:
+                self.status.set("An OpenFOAM operation is running. This window remains open until execution finishes.")
             return
         self.after_cancel(self._poll_id)
         self.destroy()

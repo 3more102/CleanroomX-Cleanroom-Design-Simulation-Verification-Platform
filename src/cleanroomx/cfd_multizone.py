@@ -15,9 +15,12 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import tempfile
+import threading
 import time
 
 from .cfd_openfoam import _field, _header
+from .cfd_process import CFDRunCancelled, run_native_cfd_process
 from .door_geometry import adjoining_room, door_aperture
 from .project import load_project_document
 
@@ -550,7 +553,7 @@ def verify_multizone_inputs(directory: str | Path) -> tuple[Path, dict]:
 
 
 def run_multizone_open_door_case(directory: str | Path, *, timeout_seconds: int=3600,
-                                 on_progress=None) -> dict:
+                                 on_progress=None, cancel_event: threading.Event | None = None) -> dict:
     """Run Foundation v10, persist successes/failures and hash actual output fields.
 
     on_progress receives stage/log events from the calling worker thread. A
@@ -563,9 +566,13 @@ def run_multizone_open_door_case(directory: str | Path, *, timeout_seconds: int=
     for cmd in commands:
         if shutil.which(cmd) is None:
             raise RuntimeError(f"{cmd} not found: install OpenFOAM Foundation v10 in Linux/WSL")
-    version=subprocess.run(["simpleFoam","-help"],capture_output=True,text=True,
-                           check=False,timeout=30)
-    version_text=version.stdout+version.stderr
+    with tempfile.TemporaryFile() as version_output:
+        version=run_native_cfd_process(
+            ["simpleFoam","-help"],cwd=root,output=version_output,
+            timeout_seconds=30,cancel_event=cancel_event,
+        )
+        version_output.seek(0)
+        version_text=version_output.read(64*1024).decode("utf-8",errors="replace")
     if version.returncode or not re.search(r"Using: OpenFOAM-10\s",version_text):
         raise RuntimeError("This case requires OpenFOAM Foundation v10; source its environment first")
     if (root/"run-receipt.json").exists() or any((root/(cmd+".log")).exists() for cmd in commands):
@@ -583,6 +590,10 @@ def run_multizone_open_door_case(directory: str | Path, *, timeout_seconds: int=
         "warning":"Review residuals, flux balance, model validity and mesh sensitivity; execution is not validation.",
     }
     for cmd in commands:
+        if cancel_event is not None and cancel_event.is_set():
+            result["status"]="cancelled"
+            result["failure"]="Native CFD run cancelled before the next stage"
+            break
         arguments=[cmd] if cmd!="postProcess" else [cmd,"-func","writeCellCentres","-noZero"]
         logfile=root/(cmd+".log")
         if on_progress:
@@ -591,10 +602,15 @@ def run_multizone_open_door_case(directory: str | Path, *, timeout_seconds: int=
         failure=None
         with logfile.open("x",encoding="utf-8") as output:
             try:
-                process=subprocess.run(arguments,cwd=root,stdout=output,
-                                       stderr=subprocess.STDOUT,check=False,
-                                       timeout=timeout_seconds)
+                process=run_native_cfd_process(
+                    arguments,cwd=root,output=output,
+                    timeout_seconds=timeout_seconds,cancel_event=cancel_event,
+                )
                 returncode=process.returncode
+            except (CFDRunCancelled, KeyboardInterrupt):
+                returncode=None
+                failure="Native CFD run cancelled; its process group was terminated"
+                result["status"]="cancelled"
             except subprocess.TimeoutExpired:
                 returncode=None
                 failure=f"Stage timed out after {timeout_seconds} seconds"
@@ -631,6 +647,12 @@ def run_multizone_open_door_case(directory: str | Path, *, timeout_seconds: int=
         except ValueError as exc:
             result["status"]="incomplete"
             result["failure"]=str(exc)
+    # Cancellation can arrive during the final output hash/manifest checks.
+    if cancel_event is not None and cancel_event.is_set():
+        result["status"]="cancelled"
+        result["failure"]="Native CFD run cancelled before publishing its receipt"
+    if result["status"]!="executed_requires_convergence_review":
+        result["outputs"]={}
     result["finished_utc"]=datetime.now(timezone.utc).isoformat()
     with (root/"run-receipt.json").open("x",encoding="utf-8") as output:
         json.dump(result,output,indent=2,sort_keys=True,allow_nan=False)

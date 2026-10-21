@@ -735,30 +735,40 @@ class MultizoneCFDWindow(tk.Toplevel):
         controls.pack(fill="x",pady=6)
         limits=(
             ("Pressure drift (Pa)","pressure_drift_limit_pa","0.01"),
+            ("Room speed drift (m/s)","speed_drift_limit_m_s","0.001"),
             ("Door flux drift (m³/s)","transfer_drift_limit_m3_s","0.00001"),
             ("Cell imbalance (m³/s)","cell_imbalance_limit_m3_s","0.001"),
             ("Compare last N changes","consecutive_changes","2"),
         )
         entries={}
-        for title,key,default in limits:
-            ttk.Label(controls,text=title).pack(side="left",padx=(8,2))
+        for index,(title,key,default) in enumerate(limits):
+            group=ttk.Frame(controls)
+            group.grid(row=index//3,column=index%3,sticky="w",padx=5,pady=2)
+            ttk.Label(group,text=title).pack(side="left",padx=(3,2))
             variable=tk.StringVar(value=default)
-            ttk.Entry(controls,textvariable=variable,width=10).pack(side="left")
+            ttk.Entry(group,textvariable=variable,width=10).pack(side="left")
             entries[key]=variable
         result_status=tk.StringVar(
             value="Select Review last saved snapshots; thresholds never authorize engineering release.")
         ttk.Label(frame,textvariable=result_status,wraplength=980).pack(anchor="w")
-        columns=("previous","current","room","door","transfer","imbalance","within")
-        table=ttk.Treeview(frame,columns=columns,show="headings",height=7)
+        columns=("previous","current","room","speed","door","transfer","imbalance","within")
+        table_holder=ttk.Frame(frame)
+        table_holder.pack(fill="both",expand=True,pady=8)
+        table=ttk.Treeview(table_holder,columns=columns,show="headings",height=7)
         for key,label,width in (
             ("previous","Prior SIMPLE",90),("current","Saved SIMPLE",90),
-            ("room","Room Δp drift Pa",145),("door","Door Δp drift Pa",145),
+            ("room","Room Δp drift Pa",145),
+            ("speed","Room speed drift m/s",160),
+            ("door","Door Δp drift Pa",145),
             ("transfer","Door flux drift m³/s",160),
             ("imbalance","Absolute cell imbalance m³/s",185),
             ("within","Within operator limits?",155)):
             table.heading(key,text=label)
             table.column(key,width=width,minwidth=75)
-        table.pack(fill="both",expand=True,pady=8)
+        table.pack(fill="both",expand=True)
+        horizontal=ttk.Scrollbar(table_holder,orient="horizontal",command=table.xview)
+        table.configure(xscrollcommand=horizontal.set)
+        horizontal.pack(fill="x")
         latest={"value":None}
         actions=ttk.Frame(frame)
         actions.pack(fill="x")
@@ -785,6 +795,7 @@ class MultizoneCFDWindow(tk.Toplevel):
                 table.insert("","end",values=(
                     row["previous_iteration"],row["iteration"],
                     f"{obs['max_absolute_room_pressure_change_pa']:.6g}",
+                    f"{obs['max_absolute_room_speed_change_m_s']:.6g}",
                     f"{obs['max_absolute_door_delta_change_pa']:.6g}",
                     f"{obs['max_absolute_door_transfer_change_m3_s']:.6g}",
                     f"{obs['sum_absolute_cell_imbalance_m3_s']:.6g}",

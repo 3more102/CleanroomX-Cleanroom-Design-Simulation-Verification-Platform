@@ -48,10 +48,12 @@ def test_saved_snapshot_triage_shows_recorded_drift_not_certification(gui,tmp_pa
     assert report["numerical_screening"]=="solver_not_converged"
     assert report["engineering_release"]=="HOLD"
     assert len(dialog._cleanroomx_convergence_table.get_children())==2
+    assert "speed" in dialog._cleanroomx_convergence_table["columns"]
     assert "ENGINEERING HOLD" in dialog._cleanroomx_convergence_status.get()
     # A different operator limit changes only the diagnostic breaches.
     entries=dialog._cleanroomx_convergence_variables
     entries["pressure_drift_limit_pa"].set("10")
+    entries["speed_drift_limit_m_s"].set("10")
     entries["transfer_drift_limit_m3_s"].set("1")
     entries["cell_imbalance_limit_m3_s"].set("10")
     assert dialog._cleanroomx_convergence_review()
@@ -63,6 +65,10 @@ def test_saved_snapshot_triage_shows_recorded_drift_not_certification(gui,tmp_pa
     assert dialog._cleanroomx_convergence_latest["value"] is None
     assert "rejected" in dialog._cleanroomx_convergence_status.get()
     entries["pressure_drift_limit_pa"].set("10")
+    entries["speed_drift_limit_m_s"].set("nan")
+    assert not dialog._cleanroomx_convergence_review()
+    assert dialog._cleanroomx_convergence_latest["value"] is None
+    entries["speed_drift_limit_m_s"].set("10")
     assert dialog._cleanroomx_convergence_review()
     saved=tmp_path/"review.json"
     monkeypatch.setattr(

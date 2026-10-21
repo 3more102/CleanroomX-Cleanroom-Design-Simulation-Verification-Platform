@@ -40,6 +40,7 @@ def test_operator_limits_are_explicit_and_never_change_release():
     report=triage_recorded_convergence(
         _history(converged=True),
         pressure_drift_limit_pa=10,
+        speed_drift_limit_m_s=10,
         transfer_drift_limit_m3_s=1,
         cell_imbalance_limit_m3_s=2,
     )
@@ -58,6 +59,61 @@ def test_operator_limits_are_explicit_and_never_change_release():
     assert smaller["numerical_screening"]=="observed_drift_exceeds_operator_limits"
     assert smaller["observed_breaches"]
     assert smaller["engineering_release"]=="HOLD"
+
+
+def test_room_velocity_oscillation_cannot_be_screened_as_stable():
+    # Synthetic evidence: pressure/door flow/cell balance are flat, but room
+    # velocity oscillates. A pressure-only screen would falsely appear bounded.
+    reports = [
+        _snapshot(25, 5., .1, 0., converged=True),
+        _snapshot(50, 5., .1, 0., converged=True),
+        _snapshot(100, 5., .1, 0., converged=True),
+    ]
+    reports[1]["rooms"]["A"]["mean_speed_m_s"] = 1.4
+    history = compare_recorded_iterations(reports)
+    triage = triage_recorded_convergence(history, consecutive_changes=2)
+    assert triage["numerical_screening"] == "observed_drift_exceeds_operator_limits"
+    assert triage["operator_tolerances"]["max_absolute_room_speed_change_m_s"] == .001
+    assert {item["metric"] for item in triage["observed_breaches"]} == {
+        "max_absolute_room_speed_change_m_s"
+    }
+    assert len(triage["observed_breaches"]) == 2
+    assert triage["engineering_release"] == "HOLD"
+    # A different operator limit only changes the diagnostic; never release.
+    relaxed = triage_recorded_convergence(
+        history, consecutive_changes=2, speed_drift_limit_m_s=2.)
+    assert relaxed["numerical_screening"] == "bounded_snapshot_drift_under_operator_limits"
+    assert relaxed["engineering_release"] == "HOLD"
+
+
+@pytest.mark.parametrize("invalid", [-1, True, math.nan, math.inf, "0.001"])
+def test_invalid_room_speed_limits_fail_closed(invalid):
+    with pytest.raises(ValueError, match="room speed drift limit"):
+        triage_recorded_convergence(_history(), speed_drift_limit_m_s=invalid)
+
+
+def test_missing_recorded_room_velocity_drift_rejects_triage():
+    history = _history()
+    history["snapshots"][2]["change_from_previous_recorded_iteration"].pop(
+        "max_absolute_room_speed_change_m_s")
+    with pytest.raises(ValueError, match="nonnegative"):
+        triage_recorded_convergence(history)
+
+
+def test_velocity_breach_cannot_be_erased_in_export(tmp_path):
+    reports = [
+        _snapshot(25, 5., .1, 0., converged=True),
+        _snapshot(50, 5., .1, 0., converged=True),
+        _snapshot(100, 5., .1, 0., converged=True),
+    ]
+    reports[1]["rooms"]["A"]["mean_speed_m_s"] = 1.4
+    triage = triage_recorded_convergence(compare_recorded_iterations(reports))
+    forged = copy.deepcopy(triage)
+    forged["observed_breaches"] = []
+    path = tmp_path / "forged.json"
+    with pytest.raises(ValueError, match="breach"):
+        export_convergence_triage(forged, path)
+    assert not path.exists()
 
 
 def test_limited_saved_snapshots_not_assumed_converged():

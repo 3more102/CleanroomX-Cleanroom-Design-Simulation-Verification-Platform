@@ -17,6 +17,7 @@ TRIAGE_SCHEMA = "cleanroomx.multizone-convergence-triage.v1"
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 _METRICS = (
     ("max_absolute_room_pressure_change_pa", "room_pressure_drift", "Pa"),
+    ("max_absolute_room_speed_change_m_s", "room_speed_drift", "m/s"),
     ("max_absolute_door_delta_change_pa", "door_pressure_drift", "Pa"),
     ("max_absolute_door_transfer_change_m3_s", "door_transfer_drift", "m3/s"),
     ("sum_absolute_cell_imbalance_m3_s", "absolute_cell_imbalance", "m3/s"),
@@ -43,6 +44,7 @@ def _snapshot_iteration(row):
 
 def triage_recorded_convergence(
     history, *, pressure_drift_limit_pa=0.01,
+    speed_drift_limit_m_s=0.001,
     transfer_drift_limit_m3_s=1e-5,
     cell_imbalance_limit_m3_s=1e-3,
     consecutive_changes=2,
@@ -65,6 +67,8 @@ def triage_recorded_convergence(
     thresholds = {
         "max_absolute_room_pressure_change_pa":_finite_nonnegative(
             pressure_drift_limit_pa, "room pressure drift limit"),
+        "max_absolute_room_speed_change_m_s":_finite_nonnegative(
+            speed_drift_limit_m_s, "room speed drift limit"),
         "max_absolute_door_delta_change_pa":_finite_nonnegative(
             pressure_drift_limit_pa, "door pressure drift limit"),
         "max_absolute_door_transfer_change_m3_s":_finite_nonnegative(
@@ -94,7 +98,7 @@ def triage_recorded_convergence(
             raise ValueError("A recorded snapshot change is missing")
         if drift.get("previous_iteration") != snapshots[index-1]["iteration"]:
             raise ValueError("Snapshot change is not linked to preceding iteration")
-        for key, _, _ in _METRICS[:3]:
+        for key, _, _ in _METRICS[:-1]:
             _finite_nonnegative(drift.get(key), key)
         _finite_nonnegative(row.get("sum_absolute_cell_imbalance_m3_s"),"cell imbalance")
     if (history.get("latest_iteration") != snapshots[-1]["iteration"] or
@@ -113,6 +117,8 @@ def triage_recorded_convergence(
         observed={
             "max_absolute_room_pressure_change_pa":_finite_nonnegative(
                 change["max_absolute_room_pressure_change_pa"],"room pressure drift"),
+            "max_absolute_room_speed_change_m_s":_finite_nonnegative(
+                change["max_absolute_room_speed_change_m_s"],"room speed drift"),
             "max_absolute_door_delta_change_pa":_finite_nonnegative(
                 change["max_absolute_door_delta_change_pa"],"door pressure drift"),
             "max_absolute_door_transfer_change_m3_s":_finite_nonnegative(

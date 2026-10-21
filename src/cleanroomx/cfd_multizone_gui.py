@@ -14,6 +14,8 @@ from tkinter import filedialog, messagebox, ttk
 from .cfd_multizone import run_multizone_open_door_case, verify_multizone_inputs
 from .cfd_process import CFDRunCancelled
 from .gui_lifecycle import collect_retired_tk_objects, protect_tk_lifecycle
+from .gui_scrollable import create_scrollable_content
+from .gui_windowing import fit_window_to_display
 from .cfd_convergence_triage import (
     triage_recorded_convergence, export_convergence_triage,
 )
@@ -116,8 +118,8 @@ class MultizoneCFDWindow(tk.Toplevel):
         super().__init__(master)
         protect_tk_lifecycle(self)
         self.title("CleanroomX • Multiroom CFD")
-        self.geometry("1230x830")
-        self.minsize(850,600)
+        fit_window_to_display(self, preferred_width=1230, preferred_height=830,
+                              minimum_width=850, minimum_height=600)
         self.report = None
         self.engineering_review = None
         self.iteration_history = None
@@ -176,16 +178,23 @@ class MultizoneCFDWindow(tk.Toplevel):
         ttk.Entry(commands,textvariable=self.density,width=8).pack(side="left",padx=6)
         ttk.Label(commands,text="Pressure reference room").pack(side="left")
         ttk.Entry(commands,textvariable=self.reference,width=13).pack(side="left",padx=6)
-        self.run_button=ttk.Button(commands,text="Run OpenFOAM 10",command=self.run_case)
+        actions=ttk.Frame(top)
+        actions.pack(fill="x",pady=(0,8))
+        self.run_button=ttk.Button(actions,text="Run OpenFOAM 10",command=self.run_case)
         self.run_button.pack(side="left",padx=8)
-        self.import_button=ttk.Button(commands,text="Import computed fields",command=self.import_case)
+        self.import_button=ttk.Button(actions,text="Import computed fields",command=self.import_case)
         self.import_button.pack(side="left")
         self.cancel_native_button=ttk.Button(
-            commands,text="Cancel native run",command=self.cancel_native_run,state="disabled")
+            actions,text="Cancel native run",command=self.cancel_native_run,state="disabled")
         self.cancel_native_button.pack(side="left",padx=8)
-        ttk.Button(commands,text="Export report",command=self.export_report).pack(side="right")
+        ttk.Button(actions,text="Export report",command=self.export_report).pack(side="right")
+        self.wsl_settings_button=ttk.Button(
+            actions,text="Show WSL settings",command=self.toggle_wsl_settings)
+        if _windows_wsl_available():
+            self.wsl_settings_button.pack(side="left",padx=(6,2))
         wsl_controls=ttk.Frame(top)
-        wsl_controls.pack(fill="x",pady=(0,6))
+        if _windows_wsl_available():
+            wsl_controls.pack(fill="x",pady=(0,6))
         ttk.Label(wsl_controls,text="Windows → WSL OpenFOAM 10").pack(side="left")
         ttk.Label(wsl_controls,text="Distribution").pack(side="left",padx=(12,4))
         self.wsl_distribution_entry=ttk.Entry(
@@ -202,7 +211,8 @@ class MultizoneCFDWindow(tk.Toplevel):
             wsl_controls,text="Opt-in; inspect real solver logs and import recorded fields. Engineering HOLD."
         ).pack(side="left",padx=8)
         repository_path = ttk.Frame(top)
-        repository_path.pack(fill="x", pady=(0,6))
+        if _windows_wsl_available():
+            repository_path.pack(fill="x", pady=(0,6))
         ttk.Label(repository_path, text="WSL source checkout").pack(side="left")
         self.wsl_repository_entry = ttk.Entry(
             repository_path, textvariable=self.wsl_repository, state=initial_state,
@@ -214,29 +224,54 @@ class MultizoneCFDWindow(tk.Toplevel):
         )
         self.wsl_repository_button.pack(side="left")
         runtime_path = ttk.Frame(top)
-        runtime_path.pack(fill="x", pady=(0,6))
+        if _windows_wsl_available():
+            runtime_path.pack(fill="x", pady=(0,6))
         ttk.Label(runtime_path, text="WSL OpenFOAM etc/bashrc").pack(side="left")
         self.wsl_bashrc_entry = ttk.Entry(
             runtime_path, textvariable=self.wsl_openfoam_bashrc, state=initial_state,
         )
         self.wsl_bashrc_entry.pack(side="left", fill="x", expand=True, padx=8)
         ttk.Label(runtime_path, text="Optional Linux path; blank detects v10 installations").pack(side="left")
-        ttk.Label(top,textvariable=self.status,wraplength=1130).pack(anchor="w")
+        # Start with optional WSL controls collapsed on Windows.
+        self._wsl_rows=(wsl_controls,repository_path,runtime_path)
+        for row in self._wsl_rows:
+            row.pack_forget()
+        self._wsl_expanded=False
+        status_label=ttk.Label(top,textvariable=self.status,wraplength=1130)
+        self._wsl_status_anchor=status_label
+        status_label.pack(anchor="w")
+        top.bind("<Configure>", lambda event: status_label.configure(
+            wraplength=max(250,event.width-35)), add="+")
         self.progress=ttk.Progressbar(top,mode="indeterminate")
         self.progress.pack(fill="x",pady=(8,0))
         self.tabs=ttk.Notebook(self)
         self.tabs.pack(fill="both",expand=True,padx=12,pady=(0,12))
-        summary=ttk.Frame(self.tabs,padding=10)
+        summary_host=ttk.Frame(self.tabs)
+        summary=create_scrollable_content(summary_host,padding=10)
         fields=ttk.Frame(self.tabs,padding=8)
         residuals=ttk.Frame(self.tabs,padding=8)
         logs=ttk.Frame(self.tabs,padding=8)
         diagnostics=ttk.Frame(self.tabs,padding=8)
         engineering=ttk.Frame(self.tabs,padding=10)
-        history_tab=ttk.Frame(self.tabs,padding=10)
-        self.history_tab=history_tab
-        closed_tab=ttk.Frame(self.tabs,padding=10)
-        for tab,label in ((summary,"Room comparison"),(fields,"Computed sections"),(residuals,"Residual histories"),(logs,"Solver logs"),(diagnostics,"Diagnostics / provenance"),(engineering,"Engineering review"),(history_tab,"Iteration stability"),(closed_tab,"Closed-door network")):
+        history_host=ttk.Frame(self.tabs)
+        history_tab=create_scrollable_content(history_host,padding=10)
+        self.history_tab=history_host
+        closed_host=ttk.Frame(self.tabs)
+        closed_tab=create_scrollable_content(closed_host,padding=10)
+        for tab,label in ((summary_host,"Room comparison"),(fields,"Computed sections"),(residuals,"Residual histories"),(logs,"Solver logs"),(diagnostics,"Diagnostics / provenance"),(engineering,"Engineering review"),(history_host,"Iteration stability"),(closed_host,"Closed-door network")):
             self.tabs.add(tab,text=label)
+        tab_nav=ttk.Frame(top)
+        tab_nav.pack(fill="x",pady=(0,5))
+        ttk.Label(tab_nav,text="Jump to panel").pack(side="left",padx=(0,8))
+        self.tab_picker=ttk.Combobox(
+            tab_nav,state="readonly",width=32,
+            values=tuple(self.tabs.tab(tab,"text") for tab in self.tabs.tabs()))
+        self.tab_picker.pack(side="left")
+        self.tab_picker.current(0)
+        self.tab_picker.bind("<<ComboboxSelected>>",
+            lambda _event:self.tabs.select(self.tab_picker.current()))
+        self.tabs.bind("<<NotebookTabChanged>>",
+            lambda _event:self.tab_picker.current(self.tabs.index("current")),add="+")
         columns=("name","target","pressure","speed","supply","returns","imbalance","balance_pct","upward")
         self.room_table=ttk.Treeview(summary,columns=columns,show="headings",height=5)
         for key,label,width in zip(columns,("Room","Target Pa","Computed Pa*","Mean m/s","Supply m³/h","Return m³/h","Imbalance m³/s","Imbalance %†","Upward %"),(140,75,100,85,95,95,120,100,85)):
@@ -411,6 +446,20 @@ class MultizoneCFDWindow(tk.Toplevel):
         self.log_text.pack(fill="both",expand=True)
         self.diagnostics=tk.Text(diagnostics,wrap="word",font=("TkFixedFont",10))
         self.diagnostics.pack(fill="both",expand=True)
+
+    def toggle_wsl_settings(self):
+        """Expand Windows-only WSL settings without changing solver state."""
+        if not _windows_wsl_available():
+            return
+        self._wsl_expanded=not self._wsl_expanded
+        if self._wsl_expanded:
+            for row in self._wsl_rows:
+                row.pack(fill="x",pady=(0,6),before=self._wsl_status_anchor)
+        else:
+            for row in self._wsl_rows:
+                row.pack_forget()
+        self.wsl_settings_button.configure(
+            text="Hide WSL settings" if self._wsl_expanded else "Show WSL settings")
 
     def browse(self):
         if self.running:

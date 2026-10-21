@@ -292,3 +292,109 @@ def test_openfoam_recent_residual_samples_preserve_source_order(tmp_path):
     assert residuals["residual_sample_axis"] == (
         "linear_solver_log_order_not_simple_iterations"
     )
+
+
+
+def test_residual_dashboard_binds_actual_numeric_log_samples(tmp_path):
+    """Synthetic log fixtures test chart integrity, not CFD validity."""
+    import hashlib
+    from cleanroomx.cfd_audit import audit_openfoam_log
+    from cleanroomx.cfd_residual_dashboard import render_residual_dashboard
+
+    log = tmp_path / "simpleFoam.synthetic.log"
+    log.write_text(
+        "".join(
+            f"GAMG: Solving for p, Initial residual = {value}, "
+            "Final residual = 1e-9, No Iterations 1\n"
+            for value in (1e-4, 5e-5, 2e-5, 1e-5)
+        ) + "End\n", encoding="utf-8"
+    )
+    report = audit_openfoam_log(
+        log, fields=["p"], max_initial_residual=.001,
+        max_final_residual=.0001, window=3, include_plot_series=True,
+    )
+    trace = report["fields"]["p"]
+    assert trace["sample_count"] == 4
+    assert trace["plot_first_sample_index"] == 1
+    assert trace["plot_initial_residual_samples"] == [1e-4, 5e-5, 2e-5, 1e-5]
+    assert report["log_sha256"] == hashlib.sha256(log.read_bytes()).hexdigest()
+    html = render_residual_dashboard(report)
+    assert '<svg id="chart"' in html
+    assert 'type="application/json"' in html
+    assert report["log_sha256"] in html
+    assert "https://" not in html
+    assert '"total": 4' in html
+    assert "not saved SIMPLE iterations" in html
+
+
+def test_residual_dashboard_rejects_incomplete_and_mutated_data(tmp_path):
+    import copy
+    from cleanroomx.cfd_audit import audit_openfoam_log
+    from cleanroomx.cfd_residual_dashboard import render_residual_dashboard
+
+    log = tmp_path / "solver.log"
+    log.write_text(
+        "GAMG: Solving for p, Initial residual = 0.001, Final residual = 0.00001\n"
+        "GAMG: Solving for p, Initial residual = 0.0001, Final residual = 0.00001\n"
+        "End\n"
+    )
+    def audit():
+        return audit_openfoam_log(
+            log, fields=["p"], max_initial_residual=.01,
+            max_final_residual=.001, window=2, include_plot_series=True,
+        )
+    valid = audit()
+    changed = copy.deepcopy(valid)
+    changed["fields"]["p"]["plot_initial_residual_samples"][-1] = 99.
+    with pytest.raises(ValueError, match="disagrees"):
+        render_residual_dashboard(changed)
+    log.write_text(log.read_text() + "new output after End\n")
+    with pytest.raises(ValueError, match="terminal"):
+        render_residual_dashboard(audit())
+
+
+def test_dashboard_retains_true_indices_for_last_thousand_log_samples(tmp_path):
+    from cleanroomx.cfd_audit import audit_openfoam_log
+    from cleanroomx.cfd_residual_dashboard import render_residual_dashboard
+
+    log = tmp_path / "solver.log"
+    log.write_text(
+        "".join(
+            f"GAMG: Solving for p, Initial residual = {1e-5*(i%4+1)}, "
+            "Final residual = 1e-9\n"
+            for i in range(1006)
+        ) + "End\n"
+    )
+    report = audit_openfoam_log(
+        log, fields=["p"], max_initial_residual=.001,
+        max_final_residual=.001, include_plot_series=True,
+    )
+    series = report["fields"]["p"]
+    assert series["sample_count"] == 1006
+    assert series["plot_first_sample_index"] == 7
+    assert len(series["plot_initial_residual_samples"]) == 1000
+    assert '"total": 1006' in render_residual_dashboard(report)
+
+
+def test_interactive_html_cli_does_not_overwrite_original_log(tmp_path, monkeypatch):
+    import sys
+    from cleanroomx.cfd_pipeline_cli import main
+
+    log = tmp_path / "solver.log"
+    log.write_text(
+        "GAMG: Solving for p, Initial residual = 1e-6, "
+        "Final residual = 1e-8\nEnd\n"
+    )
+    original = log.read_bytes()
+    cmd = [
+        "cleanroomx-cfd-pipeline", "audit-log", str(log),
+        "--fields", "p", "--max-initial-residual", ".001",
+        "--max-final-residual", ".0001", "--window", "1",
+    ]
+    monkeypatch.setattr(sys, "argv", cmd + ["--interactive-html", str(log)])
+    assert main() == 1
+    assert log.read_bytes() == original
+    html = tmp_path / "recorded-residuals.html"
+    monkeypatch.setattr(sys, "argv", cmd + ["--interactive-html", str(html)])
+    assert main() == 0
+    assert "Recorded solver residuals" in html.read_text(encoding="utf-8")

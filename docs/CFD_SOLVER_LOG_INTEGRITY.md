@@ -57,3 +57,31 @@ charting; they are **not** indexed by saved SIMPLE iterations, are not
 an independent convergence criterion, and cannot establish cleanroom
 compliance. Thresholds remain supplied by the operator. Existing
 JSON reports gain fields but preserve the established screening status.
+
+## Interactive residual dashboard from the captured OpenFOAM log
+
+The audit-log command can render an interactive **offline HTML** graph of actual
+captured solver residuals. No external plotting service, chart screenshots,
+synthetic values or re-read of the source file are involved.
+
+```bash
+cleanroomx-cfd-pipeline audit-log /path/to/simpleFoam.log \
+  --fields p Ux Uy Uz \
+  --max-initial-residual 0.00001 \
+  --max-final-residual 0.000001 --window 3 \
+  --interactive-html /path/to/new-residuals.html \
+  --output /path/to/new-numerical-audit.json
+```
+
+Open the generated HTML file in a browser. Change field, Initial/Final residual,
+linear/log10 y-axis and recent-sample count without needing a server or web
+connection. All values are from the same bounded, SHA-256-recorded OpenFOAM
+log snapshot inspected by audit-log. The latest **1000** entries per field are
+retained with their original one-based, matching-field linear-solver log
+sample indices. A linear-solver entry is **not** a SIMPLE iteration or elapsed
+physical time; graphs are diagnostic, not convergence or ISO qualification.
+
+Generation rejects incomplete or fatal logs, absent field samples, altered
+plot evidence and inconsistent audited tails. A numerical threshold failure
+may still be plotted, but retains its original `incomplete_or_failed` status.
+HTML and JSON outputs cannot refer to the source log or to each other.

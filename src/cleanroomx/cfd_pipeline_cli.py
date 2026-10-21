@@ -15,6 +15,7 @@ from .cfd_vtk import populate_study_from_vtk
 from .cfd_visualization import render_cfd_cross_section
 from .cfd_scalar import prepare_scalar_case, run_scalar_case
 from .cfd_audit import audit_openfoam_log
+from .cfd_residual_dashboard import render_residual_dashboard
 from .cfd_grid_study import analyze_vtk_grid_study, validate_grid_spec
 from .cfd_grid_family import generate_grid_family
 from pathlib import Path
@@ -138,6 +139,7 @@ def build_parser():
     audit.add_argument("--max-global-continuity",type=float)
     audit.add_argument("--window",type=int,default=3)
     audit.add_argument("--output")
+    audit.add_argument("--interactive-html", help="Self-contained interactive plot of actual bounded solver residuals")
     grid=sub.add_parser("grid-generate",help="Generate nine OpenFOAM cases: three configurations x three mesh resolutions")
     grid.add_argument("spec")
     grid.add_argument("directory")
@@ -276,14 +278,25 @@ def main():
         print(dumps_strict_json(result))
         return 0 if result["status"]=="executed_requires_residual_and_field_validation" else 2
     if args.command=="audit-log":
+        if (args.output and args.interactive_html and
+            Path(args.output).resolve() == Path(args.interactive_html).resolve()):
+            raise ValueError("JSON and interactive HTML outputs must have different paths")
         result=audit_openfoam_log(args.log,fields=args.fields,
                   max_initial_residual=args.max_initial_residual,
                   max_final_residual=args.max_final_residual,
-                  max_global_continuity=args.max_global_continuity,window=args.window)
+                  max_global_continuity=args.max_global_continuity,
+                  window=args.window,include_plot_series=bool(args.interactive_html))
+        dashboard=(render_residual_dashboard(result) if args.interactive_html else None)
         payload=dumps_strict_json(result)
+        if args.interactive_html:
+            if not publish_cli_output("cleanroomx-cfd-pipeline",args.interactive_html,
+                                      dashboard,protected_inputs=(args.log,)+
+                                      ((args.output,) if args.output else ())):
+                return 1
         if args.output:
             if not publish_cli_output("cleanroomx-cfd-pipeline",args.output,payload,
-                                      protected_inputs=(args.log,)):
+                                      protected_inputs=(args.log,)+
+                                      ((args.interactive_html,) if args.interactive_html else ())):
                 return 1
         else:
             print(payload)

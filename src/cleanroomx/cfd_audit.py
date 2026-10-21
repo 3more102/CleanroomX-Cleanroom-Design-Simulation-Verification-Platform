@@ -94,7 +94,7 @@ def _threshold(value,name):
 
 def audit_openfoam_log(
     path, *, fields, max_initial_residual, max_final_residual,
-    window=3, max_global_continuity=None
+    window=3, max_global_continuity=None, include_plot_series=False
 ):
     """Fail closed for absent fields, incomplete logs, or out-of-bound samples.
 
@@ -108,6 +108,8 @@ def audit_openfoam_log(
         raise ValueError("fields must be a nonempty, unique sequence of solver field names")
     if type(window) is not int or not 1 <= window <= 100:
         raise ValueError("window must be integer 1..100")
+    if type(include_plot_series) is not bool:
+        raise ValueError("include_plot_series must be boolean")
     a=_threshold(max_initial_residual,"max_initial_residual")
     b=_threshold(max_final_residual,"max_final_residual")
     c=None if max_global_continuity is None else _threshold(max_global_continuity,"max_global_continuity")
@@ -148,6 +150,13 @@ def audit_openfoam_log(
             "recent_initial_residual_samples": [v[0] for v in recent],
             "recent_final_residual_samples": [v[1] for v in recent],
         }
+        if include_plot_series:
+            samples = values[-1000:]
+            summary[name].update({
+                "plot_first_sample_index": len(values) - len(samples) + 1,
+                "plot_initial_residual_samples": [v[0] for v in samples],
+                "plot_final_residual_samples": [v[1] for v in samples],
+            })
     continuity=[]
     for m in _CONTINUITY.finditer(content):
         local=float(m.group(1));global_error=float(m.group(2))
@@ -178,5 +187,6 @@ def audit_openfoam_log(
         "violations":anomalies,
         "log_sha256":hashlib.sha256(data).hexdigest(),
         "residual_sample_axis":"linear_solver_log_order_not_simple_iterations",
+        "plot_series_max_samples": 1000 if include_plot_series else None,
         "boundary":"Numerical log screening only; not mass-balance integration, mesh convergence, cleanroom validation or certification",
     }

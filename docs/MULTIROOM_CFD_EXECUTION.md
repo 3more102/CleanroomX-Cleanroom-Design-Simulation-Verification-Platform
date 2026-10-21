@@ -656,3 +656,61 @@ test consumes **genuinely computed** saved solver iterations and checks
 source identity, classification and the HOLD gate. The real Tk GUI test
 validates numerical controls, rejection of invalid tolerance values,
 source-linked export and the correct iteration-history notebook tab.
+
+
+## Independent SIMPLE relaxation numerical sensitivity (21 October 2026)
+
+The connected **all-doors-open** input generator now offers explicit, bounded
+SIMPLE under-relaxation factors, retaining historical defaults:
+pressure field `p=0.3` and velocity equation `U=0.7`. Alternative
+`--pressure-relaxation` is limited to 0.05–0.7 and
+`--velocity-relaxation` to 0.1–0.95; nonfinite or out-of-range values
+are rejected **before** a new case directory is created.
+
+Each factor is recorded in `case.numerical_controls` and the hashed
+`system/fvSolution` dictionary. Every other solver input remains unchanged.
+Each case is **new**, so no solver receipt or output is overwritten.
+
+Matched-pair example (ten iterations are a **short numerical exercise only**):
+
+```bash
+source /opt/openfoam10/etc/bashrc
+
+cleanroomx-cfd-pipeline multizone-generate examples/gui_demo.cleanroomx.json /tmp/cx-simple-default \
+  --door-mode open --kinematic-viscosity-m2-s 1.5e-5 \
+  --max-iterations 10 --output-interval 5
+
+cleanroomx-cfd-pipeline multizone-generate examples/gui_demo.cleanroomx.json /tmp/cx-simple-alternative \
+  --door-mode open --kinematic-viscosity-m2-s 1.5e-5 \
+  --max-iterations 10 --output-interval 5 \
+  --pressure-relaxation 0.2 --velocity-relaxation 0.5
+
+cleanroomx-cfd-pipeline multizone-run /tmp/cx-simple-default
+cleanroomx-cfd-pipeline multizone-run /tmp/cx-simple-alternative
+
+cleanroomx-cfd-pipeline multizone-compare-relaxation \
+  /tmp/cx-simple-default /tmp/cx-simple-alternative \
+  --density-kg-m3 1.2 --reference-room-id corridor \
+  --output /tmp/cx-relaxation-numerical-comparison.json
+```
+
+A paired comparison **requires actual successful, SHA-256 verified executions**
+of both cases with identical project, mesh, equipment, physical boundaries,
+transport inputs, solver residual controls and saved SIMPLE iteration labels.
+Only `fvSolution` may differ. It validates that the selected relaxation
+factors appear in the real generated dictionary, and verifies source hashes,
+actual mesh statistics and computed cell centres before comparing recorded
+room pressure, mean speed, doorway flux, residuals and mass-balance diagnostics.
+No interpolated solver iterations or invented result fields are permitted.
+
+This study is **numerical sensitivity, not numerical convergence proof**.
+Smaller residuals, changed pressures or lower imbalance cannot independently
+establish physically correct results, a valid turbulence model or the closed-door
+5 Pa design cascade. The report always retains `engineering_release: HOLD`,
+`numerical_convergence_or_improvement_proven: false` and
+`closed_door_5pa_demonstrated: false`.
+
+Foundation v10 CI executes two *independent* ten-iteration cases as a real
+engineering-contract test, while generator and CLI tests verify the bounded
+settings and reject unsolved or noncomparable cases. The ten-iteration
+experiment itself is **not a converged reference solution**.

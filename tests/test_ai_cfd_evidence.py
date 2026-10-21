@@ -206,3 +206,26 @@ def test_user_cannot_supply_released_cfd_evidence_to_formatter():
     }
     with pytest.raises(ValueError, match="Invalid"):
         format_cfd_evidence(bogus)
+
+
+
+def test_headless_review_can_attach_matching_cfd_evidence(tmp_path, capsys):
+    from cleanroomx.ai_assistant_cli import build_offline_review, main
+
+    project_path, project, export, report = _saved_project_and_export(tmp_path)
+    envelope = build_offline_review(project_path, cfd_export=export, actions=True)
+    assert envelope["network_used"] is False
+    assert envelope["model_used"] is False
+    assert envelope["context"]["cfd_evidence"]["engineering_release"] == "HOLD"
+    assert envelope["action_plan"]["schema"] == "cleanroomx.ai-assistant-action-plan"
+
+    assert main([str(project_path), "--cfd-export", str(export)]) == 0
+    assert "RECORDED CFD EXPORT REVIEW" in capsys.readouterr().out
+
+    report["provenance"]["project_source_sha256"] = "f" * 64
+    (export / "report.json").write_text(json.dumps(report), encoding="utf-8")
+    (export / "engineering-review.json").write_text(
+        json.dumps(review_recorded_multizone(report)), encoding="utf-8"
+    )
+    assert main([str(project_path), "--cfd-export", str(export)]) == 2
+    assert "different saved project revision" in capsys.readouterr().err

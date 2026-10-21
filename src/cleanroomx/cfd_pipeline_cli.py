@@ -71,6 +71,12 @@ def build_parser():
     multizone.add_argument("--cell-size-z-m", type=float, default=0.3)
     multizone.add_argument("--max-iterations", type=int, default=150)
     multizone.add_argument("--output-interval", type=int, default=50)
+    multizone.add_argument(
+        "--pressure-relaxation", type=float, default=0.3,
+        help="SIMPLE pressure field relaxation 0.05..0.7; numerical sensitivity ONLY")
+    multizone.add_argument(
+        "--velocity-relaxation", type=float, default=0.7,
+        help="SIMPLE velocity equation relaxation 0.1..0.95; numerical sensitivity ONLY")
     multi_run=sub.add_parser("multizone-run",help="Opt-in blockMesh/checkMesh/simpleFoam for the connected case")
     multi_run.add_argument("directory")
     multi_run.add_argument("--timeout-seconds", type=int, default=3600)
@@ -154,6 +160,8 @@ def main():
             kinematic_viscosity_m2_s=args.kinematic_viscosity_m2_s,
             max_iterations=args.max_iterations,
             output_interval=args.output_interval,
+            pressure_relaxation=args.pressure_relaxation,
+            velocity_relaxation=args.velocity_relaxation,
         )
         print(dumps_strict_json(result))
         return 0

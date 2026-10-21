@@ -158,7 +158,7 @@ def markdown_assistant_review(review: dict[str, Any]) -> str:
         f"Review state: **{markdown_text(review['decision'])}**",
         f"Errors: **{summary['error_count']}**; warnings: **{summary['warning_count']}**; "
         f"informational: **{summary['info_count']}**",
-        f"Project SHA-256: \`{source['sha256']}\`",
+        f"Project SHA-256: `{source['sha256']}`",
         "",
         "## Prioritized evidence-backed findings",
         "",
@@ -170,7 +170,7 @@ def markdown_assistant_review(review: dict[str, Any]) -> str:
             f"### {finding['diagnostic_sequence']}. {markdown_text(finding['severity'])} "
             f"— {markdown_text(finding['rule'])}",
             "",
-            f"- Evidence: \`{finding['evidence_ref']}\`",
+            f"- Evidence: `{finding['evidence_ref']}`",
             f"- Finding: {markdown_text(finding['finding'])}",
             f"- Suggested action: {markdown_text(finding['suggested_action'])}",
             "",

@@ -26,6 +26,13 @@ them as project documents. Loading an AI workspace asks before replacing
 in-memory conversations. The save dialog refuses to overwrite unrelated JSON
 (including normal CleanroomX project files).
 
+The window also includes **Next actions (offline)**. This creates a digest-bound,
+read-only worklist from exactly the canonical diagnostic findings already
+available to CleanroomX. It sorts errors before warnings before informational
+findings, records the project snapshot identity, and marks every action as
+**proposal not executed**. This is not autonomous optimization, does not
+rewrite project files, and does not imply compliance.
+
 The window has two independent functions:
 
 1. **Review project (offline):** deterministic review of the canonical
@@ -138,7 +145,7 @@ numerical-vs-physical validation distinction, and measured decision criteria.
 Run:
 
 ```bash
-python -m pytest tests/test_ai_assistant.py tests/test_ai_assistant_chat.py -q
+python -m pytest tests/test_ai_assistant.py tests/test_ai_assistant_chat.py tests/test_ai_assistant_plan.py -q
 python -m pytest tests/test_gui.py -q
 # With a graphical display/Xvfb:
 python -m pytest tests/test_ai_assistant_ui.py -q

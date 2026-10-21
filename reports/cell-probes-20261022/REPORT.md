@@ -23,13 +23,14 @@ overwrites an existing file. New imports/cases/runs clear cached probes.
 
 | Check | Passed | Failed | Skipped |
 |---|---:|---:|---:|
-| Probe logic, original archive arrays, streamline/result/VTK compatibility | 65 | 0 | 0 |
+| Probe logic, original archive arrays, streamline/result/VTK compatibility | 67 | 0 | 0 |
 | Actual Tk probe, responsive section/residual panels, live monitor, cancellation and WSL contracts | 37 | 0 | 0 |
 
 The archive checks reimported the original 13,210-cell case through its normal
 hash/input/log/field verification. All 52,840 cell-centre readings across saved
 iterations **25, 50, 75 and 100** matched their original p/U arrays and preserved
-the original row indices. Checks also reject reuse after changing air density
+the original row indices. Decimal 0.1 m face tests also check both sides at
+one floating-point step from each face, without tolerance snapping. Checks reject reuse after changing air density
 or the reporting reference room while keeping the same run receipt.
 
 The native GUI tests use an explicitly synthetic field to check software

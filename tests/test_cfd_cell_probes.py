@@ -77,6 +77,23 @@ def test_anisotropic_translated_voxels_return_original_array_indices():
     assert field.probe_at([-9.375, 15., -2.]) is None
 
 
+@pytest.mark.parametrize("origin", [0., -.9])
+def test_decimal_faces_preserve_half_open_ownership_without_snapping_nearby_points(origin):
+    report = _report()
+    report["voxel_pitch_m"] = [.1, 1., 1.]
+    report["cells"] = [dict(report["cells"][0], center_m=[round(origin+(i+.5)*.1, 2), .5, .5])
+                       for i in range(8)]
+    field = RecordedCellProbeIndex(report)
+    for i in range(1, 8):
+        face = round(origin+i*.1, 1)
+        assert field.probe_at([face, .5, .5])["cell_index"] == i
+        before = math.nextafter(face, -math.inf)
+        after = math.nextafter(face, math.inf)
+        assert field.probe_at([before, .5, .5])["cell_index"] == i-1
+        assert field.probe_at([after, .5, .5])["cell_index"] == i
+    assert field.probe_at([round(origin+.8, 1), .5, .5]) is None
+
+
 @pytest.mark.parametrize("point", [[math.nan, 0, 0], [0, math.inf, 0],
                                    [True, 0, 0], [0, 0], "0,0,0", None])
 def test_invalid_probe_coordinates_rejected(point):

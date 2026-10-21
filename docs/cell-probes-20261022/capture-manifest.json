@@ -6,7 +6,7 @@
   "image_sha256": "2930a1b8100b83a2cd7eb12551177b15223b53f5f4542ca90954ce4e8ce83247",
   "implementation_sha256": {
     "scripts/capture_cell_probe_gui.py": "a69e746bc61795bcd58cb468b18790517df1f82e613953b0c8171ae8c4fa4f07",
-    "src/cleanroomx/cfd_cell_probes.py": "9baf37d8aa46b1e20b4b78c4121338680ae6920e937e61b786c81713684f88e9",
+    "src/cleanroomx/cfd_cell_probes.py": "f38b1f3ecae43357b4b6ad654b99c68677ed9da77799e284ad382ac816100531",
     "src/cleanroomx/cfd_multizone_gui.py": "cc9e5b6d2ca7c3e136874bc04587a7e357f8783334bb4ae13c3452236f840b25"
   },
   "kind": "actual_Tk_window_pixels",

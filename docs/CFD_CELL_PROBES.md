@@ -35,6 +35,9 @@ walls, an excluded room and positions outside the field return no reading.
 Voxels use `[centre - pitch/2, centre + pitch/2)` on each axis: the cell on the
 positive-coordinate side owns a shared face. A voxel's unoccupied upper face
 does not inherit the preceding cell's reading.
+Lookup evaluates the recorded decimal coordinate/pitch representations, so
+binary division cannot move an exact 0.1 m grid face into the preceding cell.
+Nearby points are not snapped to faces.
 
 The pressure is already converted from kinematic pressure using the imported
 air density and reporting room mean. Probes do not convert it again. Speed is

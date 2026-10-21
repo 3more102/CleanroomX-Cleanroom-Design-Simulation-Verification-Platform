@@ -7,6 +7,7 @@ they do not establish convergence, pointwise accuracy or cleanroom acceptance.
 from __future__ import annotations
 
 import copy
+from decimal import Context, Decimal, localcontext, ROUND_FLOOR
 import json
 import math
 from pathlib import Path
@@ -75,6 +76,8 @@ class RecordedCellProbeIndex:
             "solver_reported_convergence": report["solver_reported_convergence"],
         }
         self.grid = ComputedVelocityGrid(report)
+        self._base_decimal = tuple(Decimal(str(v)) for v in self.grid.base)
+        self._pitch_decimal = tuple(Decimal(str(v)) for v in self.grid.pitch)
         self.cells = []
         self.indices = {}
         for index, cell in enumerate(report["cells"]):
@@ -89,11 +92,13 @@ class RecordedCellProbeIndex:
             self.cells.append((center, velocity, pressure, room))
 
     def _key(self, point):
-        values = tuple((point[i] - self.grid.base[i]) / self.grid.pitch[i] + 0.5
-                       for i in range(3))
-        if not all(math.isfinite(value) for value in values):
-            return None
-        return tuple(math.floor(value) for value in values)
+        # Binary division can put an exact decimal face (e.g. 0.6 on a 0.1 m
+        # grid) just below its integer index. Use the coordinates' recorded
+        # decimal representations, without snapping nearby points to a face.
+        with localcontext(Context(prec=50)):
+            return tuple(int(((Decimal(str(point[i])) - self._base_decimal[i])
+                              / self._pitch_decimal[i] + Decimal("0.5"))
+                             .to_integral_value(rounding=ROUND_FLOOR)) for i in range(3))
 
     def probe_at(self, xyz_m, *, room_id="all"):
         """Return the containing cell's recorded value, or None for no fluid."""

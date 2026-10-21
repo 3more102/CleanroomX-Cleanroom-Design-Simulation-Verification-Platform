@@ -153,6 +153,16 @@ def test_cli_explicit_open_door_mode_required():
     ])
     assert choice.pressure_relaxation==.2
     assert choice.velocity_relaxation==.5
+    pair=parser.parse_args([
+        "multizone-compare-relaxation","baseline","variant",
+        "--density-kg-m3","1.25","--reference-room-id","ante",
+        "--output","new-comparison.json",
+    ])
+    assert pair.baseline_directory=="baseline"
+    assert pair.variant_directory=="variant"
+    assert pair.density_kg_m3==1.25
+    assert pair.reference_room_id=="ante"
+    assert pair.output=="new-comparison.json"
     assert parser.parse_args(["multizone-run","output"]).command=="multizone-run"
 
 
@@ -229,3 +239,39 @@ def test_relaxation_inputs_fail_before_case_creation(tmp_path,pressure,velocity)
             kinematic_viscosity_m2_s=1.5e-5,
             pressure_relaxation=pressure,velocity_relaxation=velocity)
     assert not output.exists()
+
+
+def test_paired_relaxation_comparison_refuses_unexecuted_and_changed_physics(tmp_path):
+    from cleanroomx.cfd_relaxation_comparison import compare_independent_relaxation_cases
+    common=dict(
+        door_mode="open",kinematic_viscosity_m2_s=1.5e-5,
+        max_iterations=10,output_interval=5)
+    baseline=tmp_path/"baseline"
+    variant=tmp_path/"variant"
+    generate_multizone_open_door_case(
+        bundled_demo_project_path(),baseline,**common)
+    generate_multizone_open_door_case(
+        bundled_demo_project_path(),variant,
+        pressure_relaxation=.2,velocity_relaxation=.5,**common)
+    with pytest.raises(ValueError,match="successful recorded"):
+        compare_independent_relaxation_cases(
+            baseline,variant,density_kg_m3=1.2,
+            reference_room_id="corridor")
+    incompatible=tmp_path/"viscosity-changed"
+    generate_multizone_open_door_case(
+        bundled_demo_project_path(),incompatible,
+        kinematic_viscosity_m2_s=2e-5,
+        door_mode="open",max_iterations=10,output_interval=5,
+        pressure_relaxation=.2,velocity_relaxation=.5)
+    with pytest.raises(ValueError,match="Only the hashed fvSolution"):
+        compare_independent_relaxation_cases(
+            baseline,incompatible,density_kg_m3=1.2,
+            reference_room_id="corridor")
+    same=tmp_path/"no-relaxation-difference"
+    generate_multizone_open_door_case(
+        bundled_demo_project_path(),same,**common)
+    with pytest.raises(ValueError,match="different recorded relaxation"):
+        compare_independent_relaxation_cases(
+            baseline,same,density_kg_m3=1.2,
+            reference_room_id="corridor")
+    assert list((variant).glob("run-receipt.json"))==[]

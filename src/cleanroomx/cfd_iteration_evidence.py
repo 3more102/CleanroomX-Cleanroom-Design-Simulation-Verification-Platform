@@ -100,7 +100,10 @@ def validate_recorded_history_consistency(history):
             net = _number(values, "net_m3_s")
             forward = _number(values, "forward_m3_s", nonnegative=True)
             reverse = _number(values, "reverse_m3_s", nonnegative=True)
-            _number(values, "target_delta_pa")
+            # Some supported cleanroom layouts intentionally leave their
+            # design target unspecified. Preserve None without inventing Pa.
+            if values.get("target_delta_pa") is not None:
+                _number(values, "target_delta_pa")
             _require(math.isclose(net, forward - reverse, rel_tol=1e-8, abs_tol=1e-9),
                      f"Recorded door {name} has inconsistent signed phi components")
             if previous is not None:

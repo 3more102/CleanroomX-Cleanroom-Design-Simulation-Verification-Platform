@@ -68,6 +68,16 @@ def test_tampering_with_both_last_drift_and_summary_does_not_bypass_audit(tmp_pa
     assert not target.exists()
 
 
+def test_unspecified_design_pressure_target_does_not_invent_pa():
+    reports = _series()
+    for report in reports:
+        report["doors"]["AB"]["design_delta_pressure_target_pa"] = None
+    history = compare_recorded_iterations(reports)
+    assert history["snapshots"][0]["doors"]["AB"]["target_delta_pa"] is None
+    assert validate_recorded_history_consistency(history) is True
+    assert triage_recorded_convergence(history)["engineering_release"] == "HOLD"
+
+
 def test_altered_snapshot_room_speed_cannot_be_exported(tmp_path):
     history = _valid()
     history["snapshots"][1]["rooms"]["A"]["mean_speed_m_s"] += 1

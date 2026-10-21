@@ -12,6 +12,9 @@ from typing import Sequence
 
 from .ai_assistant import build_assistant_context, format_offline_review
 from .ai_assistant_plan import build_assistant_action_plan, render_assistant_action_plan
+from .ai_assistant_specialist import (
+    SPECIALIST_FOCUSES, build_specialist_review, render_specialist_review,
+)
 from .ai_cfd_evidence import bound_cfd_evidence, format_cfd_evidence
 from .project import (
     capture_project_file_revision,
@@ -42,6 +45,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="Maximum number of diagnostic findings (1-50).",
     )
     parser.add_argument(
+        "--specialist", choices=SPECIALIST_FOCUSES,
+        help="Include an offline, evidence-bound specialist review.",
+    )
+    parser.add_argument(
         "--cfd-export",
         help=(
             "Existing multiroom CFD export directory containing report.json; "
@@ -56,6 +63,7 @@ def build_offline_review(
     actions: bool = False,
     max_findings: int = 15,
     cfd_export: str | Path | None = None,
+    specialist: str | None = None,
 ) -> dict:
     """Return a revision-checked, side-effect-free review envelope."""
     if type(max_findings) is not int or not 1 <= max_findings <= 50:
@@ -72,6 +80,10 @@ def build_offline_review(
             cfd_export, project=project, project_path=source,
         )
     plan = build_assistant_action_plan(context) if actions else None
+    specialist_review = (
+        build_specialist_review(context, focus=specialist)
+        if specialist is not None else None
+    )
     after = capture_project_file_revision(source)
     if not project_file_revision_matches(before, after):
         raise RuntimeError(
@@ -86,6 +98,7 @@ def build_offline_review(
         "network_used": False,
         "context": context,
         "action_plan": plan,
+        "specialist_review": specialist_review,
     }
 
 
@@ -94,7 +107,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         result = build_offline_review(
             args.project, actions=args.actions, max_findings=args.max_findings,
-            cfd_export=args.cfd_export,
+            cfd_export=args.cfd_export, specialist=args.specialist,
         )
         if args.output_format == "json":
             output = json.dumps(
@@ -107,6 +120,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 output += "\n\n" + format_cfd_evidence(result["context"]["cfd_evidence"])
             if result["action_plan"] is not None:
                 output += "\n\n" + render_assistant_action_plan(result["action_plan"])
+            if result["specialist_review"] is not None:
+                output += "\n\n" + render_specialist_review(result["specialist_review"])
             output += "\n\nSource revision: " + result["source_revision_sha256"]
             output += "\nNo model request or solver execution was performed."
     except (OSError, ValueError, TypeError, KeyError, RuntimeError) as exc:

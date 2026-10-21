@@ -161,6 +161,46 @@ def test_alternative_simple_relaxation_executes_as_an_independent_provenanced_ca
     # Deliberately no assertion that this setting converges better or
     # achieves 5 Pa: that requires a controlled study of full solver runs.
     assert report["scenario"]=="all_doors_open"
+    # Use an INDEPENDENT default-control OpenFOAM execution at precisely
+    # the same SIMPLE iteration labels for an apples-to-apples numerical
+    # sensitivity audit. This is *not* solver convergence or physical evidence.
+    baseline_dir=tmp_path/"baseline-relaxation"
+    generate_multizone_open_door_case(
+        bundled_demo_project_path(),baseline_dir,door_mode="open",
+        kinematic_viscosity_m2_s=1.5e-5,
+        max_iterations=10,output_interval=5,
+    )
+    baseline_run=run_multizone_open_door_case(
+        baseline_dir,timeout_seconds=120)
+    assert baseline_run["status"]=="executed_requires_convergence_review"
+    from cleanroomx.cfd_relaxation_comparison import (
+        compare_independent_relaxation_cases,
+        export_independent_relaxation_comparison,
+    )
+    compared=compare_independent_relaxation_cases(
+        baseline_dir,case,density_kg_m3=1.2,reference_room_id="corridor")
+    assert compared["scenario"]=="all_doors_open"
+    assert compared["selected_simple_iteration"]=="10"
+    assert compared["available_identical_saved_iterations"]==["5","10"]
+    assert compared["same_geometry_and_other_solver_inputs_verified"]
+    assert compared["comparison_status"]=="two_real_runs_numerical_differences_only"
+    assert compared["baseline"]["controls"]["pressure_field_relaxation"]==.3
+    assert compared["variant"]["controls"]["velocity_equation_relaxation"]==.5
+    assert compared["mesh_cells"]==13210
+    assert len(compared["door_comparison"])==3
+    assert len(compared["room_comparison"])==4
+    assert set(compared["solver_numerical_evidence"])=={"baseline","variant"}
+    assert compared["engineering_release"]=="HOLD"
+    assert not compared["numerical_convergence_or_improvement_proven"]
+    assert not compared["closed_door_5pa_demonstrated"]
+    out=tmp_path/"numerical-control-comparison.json"
+    assert export_independent_relaxation_comparison(compared,out)==out
+    assert json.loads(out.read_text())["source_project_sha256"]==(
+        generated["project_source_sha256"])
+    with pytest.raises(ValueError,match="two different"):
+        compare_independent_relaxation_cases(
+            baseline_dir,baseline_dir,density_kg_m3=1.2,
+            reference_room_id="corridor")
 
 
 def test_actual_fluxes_units_reference_and_door_pressure(computed_report,executed_case):

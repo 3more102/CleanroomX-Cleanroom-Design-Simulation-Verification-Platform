@@ -16,6 +16,7 @@ from .ai_assistant import (
     project_snapshot_sha256,
 )
 from .ai_assistant_chat import AssistantConversations
+from .ai_assistant_plan import build_assistant_action_plan, render_assistant_action_plan
 from .project import ProjectDocument
 
 
@@ -91,6 +92,10 @@ class AssistantWindow(tk.Toplevel):
             buttons, text="Review project (offline)", command=self.review_project
         )
         self.review_button.pack(side="left")
+        self.plan_button = ttk.Button(
+            buttons, text="Next actions (offline)", command=self.review_action_plan
+        )
+        self.plan_button.pack(side="left", padx=(6, 0))
         self.ask_button = ttk.Button(
             buttons, text="Ask AI", command=self.ask_ai
         )
@@ -244,6 +249,16 @@ class AssistantWindow(tk.Toplevel):
         except (OSError, ValueError, TypeError, KeyError) as exc:
             self._append("Offline review failed", str(exc))
             self.status.set("Could not obtain a canonical diagnostic snapshot.")
+
+    def review_action_plan(self) -> None:
+        try:
+            self._ensure_session()
+            plan = build_assistant_action_plan(self._snapshot())
+            self._append("Engineering next actions (not executed)", render_assistant_action_plan(plan))
+            self.status.set("Offline action plan proposed. No network or design changes.")
+        except (OSError, ValueError, TypeError, KeyError) as exc:
+            self._append("Action plan unavailable", str(exc))
+            self.status.set("Could not build a traceable engineering action plan.")
 
     def _on_return(self, _event: tk.Event) -> None:
         self.ask_ai()

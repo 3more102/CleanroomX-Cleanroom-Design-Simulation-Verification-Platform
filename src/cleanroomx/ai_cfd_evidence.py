@@ -246,6 +246,8 @@ def bound_cfd_evidence(
             for door in doors[:MAX_DOORS]
         ],
         "doors_truncated": len(doors) > MAX_DOORS,
+        "review_reasons_truncated": len(review["reasons"]) > 20,
+        "non_prescriptive_checks_truncated": len(review["non_prescriptive_checks"]) > 10,
         "review_reasons": [
             {
                 "code": str(reason["code"])[:120],

@@ -18,6 +18,10 @@ PARTICLE_SCHEMA = "cleanroomx.frozen-field-particle-screening.v1"
 MAX_PARTICLES = 20
 
 
+class ParticleRunCancelled(RuntimeError):
+    """Cooperative cancellation; no partial particle run is published."""
+
+
 def _vector(values, label):
     try:
         result = tuple(_finite(v, label) for v in values)
@@ -72,6 +76,7 @@ def trace_screening_particle(
     air_density_kg_m3=1.2, air_dynamic_viscosity_pa_s=1.81e-5,
     max_time_s=2.0, max_step_s=0.05, max_steps=4000,
     initial_velocity_m_s=None, gravity_m_s2=(0.0, 0.0, -9.80665),
+    cancel_check=None,
 ):
     """Integrate one-way sphere dynamics through occupied recorded fluid voxels.
 
@@ -115,6 +120,8 @@ def trace_screening_particle(
     max_reynolds = 0.0
     reason = "max_steps"
     for step in range(max_steps+1):
+        if cancel_check is not None and cancel_check():
+            raise ParticleRunCancelled("Particle integration cancelled")
         fluid = grid.cell_at(position)
         if fluid is None:
             raise ValueError("Particle integrator moved outside occupied CFD fluid")
@@ -226,6 +233,12 @@ def particle_positions_at_elapsed(tracks, elapsed_s):
         samples=track.get("points")
         if not isinstance(samples,list) or not samples:
             raise ValueError("Particle has no recorded integration vertices")
+        release=_finite(track.get("release_time_s",0.),"release time")
+        if not 0 <= release <= 60:
+            raise ValueError("Particle release time must be between 0 and 60 seconds")
+        age=time-release
+        if age < 0:
+            continue
         selected=None
         previous=-1.
         for entry in samples:
@@ -233,7 +246,7 @@ def particle_positions_at_elapsed(tracks, elapsed_s):
             if sample_time<previous:
                 raise ValueError("Recorded particle times must be monotone")
             previous=sample_time
-            if sample_time<=time+1e-12:
+            if sample_time<=age+1e-12:
                 selected=entry
             else:
                 break
@@ -241,6 +254,8 @@ def particle_positions_at_elapsed(tracks, elapsed_s):
             positions.append({
                 "xyz_m":list(_vector(selected["xyz_m"],"particle position")),
                 "sample_time_s":selected["elapsed_particle_s"],
+                "release_time_s":release,
+                "observation_sample_time_s":release+selected["elapsed_particle_s"],
                 "termination":track["termination"],
             })
     return positions

@@ -60,6 +60,19 @@ codes, privacy considerations, and limitations.
 - Compute apparent order, Richardson zero-grid estimate and fine-grid GCI using user-defined verification criteria; an acceptable GCI is **not** a claim of physically validated CFD.
 - See [three-grid convergence workflow](docs/CFD_GRID_CONVERGENCE.md).
 
+### Recorded-field particle sources
+
+- Multiple source definitions with explicit release start, duration, numerical
+  count, enablement and initial velocity, driven by recorded OpenFOAM U.
+- Reuses the existing one-way Stokes/Cunningham/inertia/gravity screening model.
+- Source-bound JSON configuration, cancellable atomic integration,
+  release-aware sample playback, numerical population accounting and replayed
+  trajectory JSON/CSV export; at most 20 numerical particles per run.
+- Counts are numerical samples, not calibrated airborne concentrations.
+  Boundary contact does not establish deposition or outlet escape.
+- [Source model and workflow](docs/CFD_PARTICLE_SOURCES.md) ·
+  [Current engineering evidence and limitations](docs/PROJECT_STATE.md).
+
 ### Engineering verification
 
 CleanroomX includes engineering workflows for:

@@ -213,6 +213,11 @@ def main():
             "source_closed_input_sha256":sha,
             "path_count":len(comparison["path_experiments"]),
             "factor_count":len(comparison["factors"]),
+            "highest_sampled_margin_loss_path":(
+                comparison["sampled_path_rankings"]["ranked_paths"][0]["path"]),
+            "highest_sampled_margin_loss_pa":(
+                comparison["sampled_path_rankings"]["ranked_paths"][0][
+                    "max_sampled_target_margin_loss_pa"]),
             "output":str(args.output),
         }))
         return 0

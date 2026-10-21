@@ -14,6 +14,7 @@ import re
 
 from .cfd_closed_door_comparison import compare_closed_network_with_open_cfd
 from .cfd_leakage_replay import network_inputs_sha256
+from .cfd_leakage_priority import compute_sampled_path_rankings
 from .pressure_network import RoomPressureNetwork, solve_room_pressure_network
 from .pressure_network_io import pressure_network_from_dict
 
@@ -244,6 +245,10 @@ def validate_individual_leakage_sensitivity(payload):
     _require(type(payload.get("baseline_result")) is dict,
              "Original unmodified network baseline result is required")
     _compare_results(payload["baseline_result"], common, "baseline", 1.0)
+    # Independent recalculation follows full numerical replay of all model rows.
+    expected_ranking=compute_sampled_path_rankings(common,experiments,factors)
+    _require(payload.get("sampled_path_rankings")==expected_ranking,
+             "Sampled path ranking disagrees with replayed network results")
     return True
 
 
@@ -282,6 +287,8 @@ def sweep_individual_leakage_sensitivity(
         "cfd_door_mapping": mapping,
         "baseline_result": json.loads(json.dumps(baseline, allow_nan=False)),
         "path_experiments": experiments,
+        "sampled_path_rankings": compute_sampled_path_rankings(
+            baseline,experiments,factors),
         "unchanged_mechanical_airflow": True,
         "not_physical_uncertainty_or_acceptance": True,
         "engineering_release": "HOLD",

@@ -786,3 +786,20 @@ steady pressure-flow network*, NOT a statistical uncertainty interval, actual
 closed-door CFD, experimental leakage characterization or cleanroom acceptance.
 Nominally meeting 5 Pa in the network does **not** establish measured 5 Pa
 or cleanroom certification. Engineering release remains **HOLD**.
+
+
+## Ranked sampled leakage-path screening (21 October 2026)
+
+The optional individual-path study now emits a deterministic sampled sensitivity
+ranking in the JSON report. Each network path is ranked by its largest observed
+loss of a door pressure-target margin in Pa among the chosen multipliers, with
+the responsible factor/door, minimum sampled margin, greatest room and door
+pressure shifts, and number of factor cases with missed nominal targets.
+Ranks are sorted by observed pressure-margin loss, then by path name.
+
+Export independently replays every network model and reconstructs this derived
+ranking. Forged values, status labels or orderings prevent publication.
+Zero sampled deterioration means only that the SELECTED factors yielded no
+loss, not that the path is harmless. These model results are not a statistical
+uncertainty interval, field measurement, physical failure probability,
+closed-door CFD or cleanroom acceptance. Engineering release remains HOLD.

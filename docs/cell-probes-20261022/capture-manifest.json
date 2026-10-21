@@ -1,0 +1,56 @@
+{
+  "engineering_release": "HOLD",
+  "file": "01-recorded-cell-probes.png",
+  "gui_callback_errors": [],
+  "height": 940,
+  "image_sha256": "2930a1b8100b83a2cd7eb12551177b15223b53f5f4542ca90954ce4e8ce83247",
+  "implementation_sha256": {
+    "scripts/capture_cell_probe_gui.py": "a69e746bc61795bcd58cb468b18790517df1f82e613953b0c8171ae8c4fa4f07",
+    "src/cleanroomx/cfd_cell_probes.py": "9baf37d8aa46b1e20b4b78c4121338680ae6920e937e61b786c81713684f88e9",
+    "src/cleanroomx/cfd_multizone_gui.py": "cc9e5b6d2ca7c3e136874bc04587a7e357f8783334bb4ae13c3452236f840b25"
+  },
+  "kind": "actual_Tk_window_pixels",
+  "mesh_cells": 13210,
+  "new_solver_execution": false,
+  "readout": "Cell 3324 | process | iteration 100 | U=(0.009484417079, -0.06765994602, -0.3732937818) m/s | speed=0.37949449270483987 m/s | p=0.02104337310866686 Pa relative to corridor | density=1.2 kg/m\u00b3 | NOT CONVERGED | cell-centred value; engineering HOLD",
+  "schema": "cleanroomx.recorded-cell-probe-capture.v1",
+  "selected_probe": {
+    "cell_center_m": [
+      3.25,
+      3.25,
+      1.35
+    ],
+    "cell_index": 3324,
+    "density_kg_m3": 1.2,
+    "engineering_release": "HOLD",
+    "pressure_pa_relative_to_reference": 0.02104337310866686,
+    "pressure_reference": {
+      "kinematic_pressure_m2_s2": 1.4923155367427776,
+      "method": "subtract computed volume-mean kinematic pressure, then multiply by density",
+      "room_id": "corridor"
+    },
+    "requested_location_m": [
+      3.2542372881355934,
+      3.2542372881355934,
+      1.35
+    ],
+    "room_id": "process",
+    "sampling": "containing_recorded_cell_no_interpolation",
+    "schema": "cleanroomx.recorded-cell-probe.v1",
+    "solver_reported_convergence": false,
+    "source_iteration": "100",
+    "source_manifest_sha256": "ff25c6a55936dac0c4a485a773e56395537fe817854c072b931e6fd157eb2ae7",
+    "source_run_receipt_sha256": "6ba3d3364006138e4e119404e23c514c007125befdc80c084e7ef0f68de1dde4",
+    "speed_m_s": 0.37949449270483987,
+    "velocity_m_s": [
+      0.009484417079,
+      -0.06765994602,
+      -0.3732937818
+    ]
+  },
+  "solver_reported_convergence": false,
+  "source_iteration": "100",
+  "source_manifest_sha256": "ff25c6a55936dac0c4a485a773e56395537fe817854c072b931e6fd157eb2ae7",
+  "source_run_receipt_sha256": "6ba3d3364006138e4e119404e23c514c007125befdc80c084e7ef0f68de1dde4",
+  "width": 1230
+}

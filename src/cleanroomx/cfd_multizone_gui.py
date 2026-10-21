@@ -26,6 +26,7 @@ from .cfd_multizone_results import (
     _recorded_outputs, analyze_multizone_case, export_multizone_report,
 )
 from .cfd_streamlines import trace_computed_streamline, export_computed_streamlines
+from .cfd_cell_probes import RecordedCellProbeIndex, export_recorded_cell_probes, MAX_PROBES
 from .cfd_multizone_review import review_recorded_multizone, export_engineering_review
 from .cfd_closed_door_comparison import (
     load_closed_door_network_scenario, compare_closed_network_with_open_cfd,
@@ -151,6 +152,13 @@ class MultizoneCFDWindow(tk.Toplevel):
         self.trace_paths = []
         self._section_samples = []
         self._section_to_pixel = None
+        self._section_to_world = None
+        self._cell_probe_index = None
+        self.cell_probes = []
+        self._active_cell_probe = None
+        self.section_click_mode = tk.StringVar(value="Streamline")
+        self.probe_coordinates = [tk.StringVar(value="") for _ in range(3)]
+        self.probe_status = tk.StringVar(value="Choose Probe cell and click a section, or enter XYZ in metres.")
         self.trace_status = tk.StringVar(value="Click a computed fluid cell to trace its steady 3D streamline.")
         self.status = tk.StringVar(value="Select a generated connected case. Enter the actual air density before importing fields.")
         self.active_log = None
@@ -250,7 +258,9 @@ class MultizoneCFDWindow(tk.Toplevel):
         self.tabs.pack(fill="both",expand=True,padx=12,pady=(0,12))
         summary_host=ttk.Frame(self.tabs)
         summary=create_scrollable_content(summary_host,padding=10)
-        fields=ttk.Frame(self.tabs,padding=8)
+        fields_host=ttk.Frame(self.tabs)
+        fields=create_scrollable_content(fields_host,padding=8)
+        self.fields_tab=fields_host
         residuals=ttk.Frame(self.tabs,padding=8)
         logs=ttk.Frame(self.tabs,padding=8)
         diagnostics=ttk.Frame(self.tabs,padding=8)
@@ -260,7 +270,7 @@ class MultizoneCFDWindow(tk.Toplevel):
         self.history_tab=history_host
         closed_host=ttk.Frame(self.tabs)
         closed_tab=create_scrollable_content(closed_host,padding=10)
-        for tab,label in ((summary_host,"Room comparison"),(fields,"Computed sections"),(residuals,"Residual histories"),(logs,"Solver logs"),(diagnostics,"Diagnostics / provenance"),(engineering,"Engineering review"),(history_host,"Iteration stability"),(closed_host,"Closed-door network")):
+        for tab,label in ((summary_host,"Room comparison"),(fields_host,"Computed sections"),(residuals,"Residual histories"),(logs,"Solver logs"),(diagnostics,"Diagnostics / provenance"),(engineering,"Engineering review"),(history_host,"Iteration stability"),(closed_host,"Closed-door network")):
             self.tabs.add(tab,text=label)
         self.live_solver = LiveSolverPanel(self.tabs)
         self.tabs.add(self.live_solver, text="Live solver")
@@ -424,16 +434,46 @@ class MultizoneCFDWindow(tk.Toplevel):
         ttk.Entry(controls,textvariable=self.position,width=8).pack(side="left",padx=4)
         ttk.Checkbutton(controls,text="Velocity vectors",variable=self.vectors,command=self.draw_section).pack(side="left",padx=4)
         ttk.Button(controls,text="Apply section",command=self.draw_section).pack(side="left",padx=6)
+        probe_controls=ttk.Frame(fields)
+        probe_controls.pack(fill="x",pady=(0,5))
+        ttk.Label(probe_controls,text="Section click:").pack(side="left")
+        for mode in ("Streamline", "Probe cell"):
+            ttk.Radiobutton(probe_controls,text=mode,value=mode,
+                            variable=self.section_click_mode).pack(side="left",padx=4)
+        for name, variable in zip("XYZ", self.probe_coordinates):
+            ttk.Label(probe_controls,text=name+" (m)").pack(side="left",padx=(6,2))
+            ttk.Entry(probe_controls,textvariable=variable,width=8).pack(side="left")
+        ttk.Button(probe_controls,text="Probe XYZ",command=self.probe_xyz).pack(side="left",padx=6)
+        ttk.Button(probe_controls,text="Clear probes",command=self.clear_cell_probes).pack(side="right",padx=4)
+        self.export_probes_button=ttk.Button(
+            probe_controls,text="Export probes",command=self.export_cell_probes,state="disabled")
+        self.export_probes_button.pack(side="right",padx=4)
+        probe_label=ttk.Label(fields,textvariable=self.probe_status,wraplength=1000)
+        probe_label.pack(anchor="w",pady=(0,5))
+        fields.bind("<Configure>",lambda event:probe_label.configure(
+            wraplength=max(300,event.width-30)),add="+")
+        self.probe_table=ttk.Treeview(fields,show="headings",height=3,
+            columns=("cell","room","center","velocity","speed","pressure"))
+        for key,label,width in (
+            ("cell","Cell (0-based)",95),("room","Room",95),
+            ("center","Cell centre XYZ (m)",185),("velocity","Ux, Uy, Uz (m/s)",205),
+            ("speed","Speed (m/s)",110),("pressure","Relative pressure (Pa)",160),
+        ):
+            self.probe_table.heading(key,text=label)
+            self.probe_table.column(key,width=width,minwidth=75)
+        self.probe_table.pack(fill="x",pady=(0,5))
+        self.probe_table.bind("<<TreeviewSelect>>",self.select_cell_probe)
         traces=ttk.Frame(fields)
         traces.pack(fill="x",pady=(0,5))
         ttk.Label(traces,textvariable=self.trace_status,wraplength=750).pack(side="left",fill="x",expand=True)
         ttk.Button(traces,text="Clear traces",command=self.clear_traces).pack(side="right",padx=4)
         ttk.Button(traces,text="Export 3D traces",command=self.export_traces).pack(side="right",padx=4)
         ttk.Button(traces,text="Open real VTK 3D",command=self.open_vtk_3d).pack(side="right",padx=4)
-        self.section_canvas=tk.Canvas(fields,background="#101b2b",highlightthickness=0)
+        self.section_canvas=tk.Canvas(fields,background="#101b2b",highlightthickness=0,height=390)
         self.section_canvas.pack(fill="both",expand=True)
         self.section_canvas.bind("<Configure>",lambda e:self.draw_section())
-        self.section_canvas.bind("<Button-1>",self.seed_streamline_at_click)
+        self.section_canvas.bind("<Button-1>",self.section_click)
+        ttk.Label(fields,text="Probes show the containing recorded cell value, without interpolation. XYZ uses the full imported field; cyan markers show selected cells on this section. Pressure uses the imported reference room.",wraplength=1050).pack(anchor="w",pady=5)
         ttk.Label(fields,text="Cells and arrows: computed layer. Gold paths: projection of 3D steady streamlines, NOT confined to this plane, NOT particle trajectories. Missing fluid voxels stop tracing.",wraplength=1100).pack(anchor="w",pady=5)
         self.numerical_status=tk.StringVar()
         ttk.Label(residuals,textvariable=self.numerical_status,wraplength=1100).pack(anchor="w",pady=(0,6))
@@ -698,8 +738,11 @@ class MultizoneCFDWindow(tk.Toplevel):
     def _clear_results(self):
         self.live_solver.reset()
         self.trace_paths.clear()
+        self._cell_probe_index = None
+        self.clear_cell_probes(redraw=False)
         self._section_samples = []
         self._section_to_pixel = None
+        self._section_to_world = None
         self.trace_status.set("Click a computed fluid cell to trace its steady 3D streamline.")
         self.engineering_review = None
         self.iteration_history = None
@@ -1326,6 +1369,100 @@ class MultizoneCFDWindow(tk.Toplevel):
         self.trace_status.set("Traces cleared. Click a computed fluid cell to seed another.")
         self.draw_section()
 
+    def clear_cell_probes(self, *, redraw=True):
+        self.cell_probes.clear()
+        self._active_cell_probe = None
+        self.probe_table.delete(*self.probe_table.get_children())
+        for variable in self.probe_coordinates:
+            variable.set("")
+        self.export_probes_button.configure(state="disabled")
+        self.probe_status.set("Choose Probe cell and click a section, or enter XYZ in metres.")
+        if redraw:
+            self.draw_section()
+
+    def _show_cell_probe(self, probe):
+        self._active_cell_probe = probe
+        reference=probe["pressure_reference"]["room_id"]
+        velocity=", ".join(repr(v) for v in probe["velocity_m_s"])
+        self.probe_status.set(
+            f"Cell {probe['cell_index']} | {probe['room_id']} | iteration {probe['source_iteration']} "
+            f"| U=({velocity}) m/s | speed={probe['speed_m_s']!r} m/s | "
+            f"p={probe['pressure_pa_relative_to_reference']!r} Pa relative to {reference} "
+            f"| density={probe['density_kg_m3']:g} kg/m³ | "
+            +("solver reported convergence" if probe["solver_reported_convergence"] else "NOT CONVERGED")
+            +" | cell-centred value; engineering HOLD")
+
+    def add_cell_probe(self, xyz_m, *, room_id="all"):
+        if self.report is None or self.running:
+            self.probe_status.set("Import recorded CFD fields before selecting a cell probe.")
+            return
+        try:
+            if self._cell_probe_index is None:
+                self._cell_probe_index=RecordedCellProbeIndex(self.report)
+            probe=self._cell_probe_index.probe_at(xyz_m,room_id=room_id)
+            if probe is None:
+                self.probe_status.set("No recorded fluid cell at this coordinate/filter; no nearest-cell value is substituted.")
+                return
+        except (ValueError,OverflowError) as exc:
+            self.probe_status.set(f"Cell probe rejected: {exc}")
+            return
+        if probe in self.cell_probes:
+            index=self.cell_probes.index(probe)
+        else:
+            if len(self.cell_probes)>=MAX_PROBES:
+                self.probe_status.set(f"Maximum {MAX_PROBES} probes; clear the list before selecting more.")
+                return
+            index=len(self.cell_probes)
+            self.cell_probes.append(probe)
+            self.probe_table.insert("","end",iid=str(index),values=(
+                probe["cell_index"],probe["room_id"],
+                ", ".join(f"{v:.7g}" for v in probe["cell_center_m"]),
+                ", ".join(f"{v:.7g}" for v in probe["velocity_m_s"]),
+                f"{probe['speed_m_s']:.9g}",f"{probe['pressure_pa_relative_to_reference']:.9g}"))
+        for variable, value in zip(self.probe_coordinates, probe["requested_location_m"]):
+            variable.set(repr(value))
+        self.probe_table.selection_set(str(index))
+        self.probe_table.see(str(index))
+        self.export_probes_button.configure(state="normal")
+        self._show_cell_probe(probe)
+        self.draw_section()
+        return probe
+
+    def select_cell_probe(self, _event=None):
+        selection=self.probe_table.selection()
+        if selection:
+            self._show_cell_probe(self.cell_probes[int(selection[0])])
+            self.draw_section()
+
+    def probe_xyz(self):
+        try:
+            point=[float(variable.get()) for variable in self.probe_coordinates]
+        except ValueError:
+            self.probe_status.set("Enter three finite XYZ coordinates in metres.")
+            return
+        return self.add_cell_probe(point)
+
+    def section_click(self, event):
+        if self.section_click_mode.get()=="Streamline":
+            return self.seed_streamline_at_click(event)
+        if self._section_to_world is not None and not self.running:
+            return self.add_cell_probe(self._section_to_world(event.x,event.y),room_id=self.room.get())
+
+    def export_cell_probes(self):
+        if self.report is None or not self.cell_probes or self.running:
+            return
+        path=filedialog.asksaveasfilename(
+            parent=self,title="Export recorded cell probes (new file)",
+            defaultextension=".json",filetypes=(("JSON","*.json"),))
+        if not path:
+            return
+        try:
+            saved=export_recorded_cell_probes(self.report,self.cell_probes,path)
+        except (ValueError,OSError) as exc:
+            self.probe_status.set(f"Probe export rejected: {exc}")
+            return
+        self.probe_status.set(f"Saved {len(self.cell_probes)} source-linked cell probes: {saved}. Engineering HOLD.")
+
     def seed_streamline_at_click(self, event):
         if self.report is None or self._section_to_pixel is None or self.running:
             return
@@ -1356,6 +1493,7 @@ class MultizoneCFDWindow(tk.Toplevel):
         c.delete("all")
         self._section_samples = []
         self._section_to_pixel = None
+        self._section_to_world = None
         if not self.report:
             return
         try:
@@ -1379,6 +1517,15 @@ class MultizoneCFDWindow(tk.Toplevel):
         self._section_half_size = (ha,hb)
         self._section_scale = scale
         self._section_to_pixel = point
+        section_position=float(self.position.get())
+        normal_axis="xyz".index(self.axis.get())
+        def world(px,py):
+            result=[0.0,0.0,0.0]
+            result[a]=lo[0]+(px-45)/scale
+            result[b]=lo[1]+(height-45-py)/scale
+            result[normal_axis]=section_position
+            return result
+        self._section_to_world=world
         values=[s["pressure_pa_relative_to_reference"] if self.field.get().startswith("Pressure") else math.sqrt(sum(v*v for v in s["velocity_m_s"])) for s in samples]
         low,high=min(values),max(values)
         for s,value in zip(samples,values):
@@ -1402,6 +1549,15 @@ class MultizoneCFDWindow(tk.Toplevel):
             elif len(xy) == 2:
                 c.create_oval(xy[0]-3,xy[1]-3,xy[0]+3,xy[1]+3,
                               fill="#ffe59a",outline="",tags="computed-3d-streamline-projection")
+        selected=self._active_cell_probe
+        if selected is not None and any(
+                s["room_id"]==selected["room_id"] and list(s["center_m"])==selected["cell_center_m"]
+                for s in samples):
+            x,y=point(selected["cell_center_m"][a],selected["cell_center_m"][b])
+            c.create_rectangle(x-ha*scale,y-hb*scale,x+ha*scale,y+hb*scale,
+                outline="#6fffff",width=3,tags="recorded-cell-probe")
+            c.create_line(x-6,y,x+6,y,fill="#6fffff",width=2,tags="recorded-cell-probe")
+            c.create_line(x,y-6,x,y+6,fill="#6fffff",width=2,tags="recorded-cell-probe")
         c.create_text(12,16,anchor="w",fill="white",text=f"{self.field.get()} • {low:.5g} to {high:.5g} • axes {'xyz'[a]}/{'xyz'[b]} (m) • {len(samples)} actual cells")
         c.create_text(12,36,anchor="w",fill="#b6cddd",text="" if self.report["solver_reported_convergence"] else "NOT CONVERGED • provisional numerical fields")
 

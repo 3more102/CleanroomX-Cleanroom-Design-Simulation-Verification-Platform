@@ -89,6 +89,53 @@ def test_actual_mesh_solver_outputs_and_provenance(executed_case,computed_report
         assert all(math.isfinite(v) for v in cell["velocity_m_s"])
 
 
+def test_actual_cell_probes_match_original_solver_arrays_and_gui(executed_case, computed_report, tmp_path):
+    """Read actual p/U arrays independently, then exercise the native probe UI."""
+    from cleanroomx.cfd_cell_probes import RecordedCellProbeIndex, export_recorded_cell_probes
+    report = computed_report
+    count = len(report["cells"])
+    selected = executed_case/report["time_name"]
+    pressure = read_ascii_field((selected/"p").read_text(), count, (0, 2, -2, 0, 0, 0, 0))
+    velocity = read_ascii_field((selected/"U").read_text(), count, (0, 1, -1, 0, 0, 0, 0), vector=True)
+    field = RecordedCellProbeIndex(report)
+    probes = []
+    for index in (0, count//3, count//2, count-1):
+        cell = report["cells"][index]
+        probe = field.probe_at(cell["center_m"])
+        assert probe["cell_index"] == index
+        assert probe["velocity_m_s"] == velocity[index]
+        assert probe["pressure_pa_relative_to_reference"] == (
+            report["density_kg_m3"]*(pressure[index]-report["pressure_reference"]["kinematic_pressure_m2_s2"]))
+        assert probe["solver_reported_convergence"] is report["solver_reported_convergence"]
+        probes.append(probe)
+    saved = export_recorded_cell_probes(report, probes, tmp_path/"real-field-probes.json")
+    assert json.loads(saved.read_text())["probes"] == probes
+    try:
+        desktop = tk.Tk()
+    except tk.TclError as exc:
+        if os.environ.get("DISPLAY"):
+            raise
+        pytest.skip(f"Actual Tk display required: {exc}")
+    desktop.withdraw()
+    errors = []
+    desktop.report_callback_exception = lambda *args: errors.append(args)
+    window = MultizoneCFDWindow(desktop, directory=executed_case)
+    try:
+        window.load_report(report)
+        window.tabs.select(window.fields_tab)
+        for probe in probes:
+            actual = window.add_cell_probe(probe["requested_location_m"])
+            assert actual == probe
+        desktop.update()
+        assert len(window.probe_table.get_children()) == len(probes)
+        window._clear_results()
+        assert not window.cell_probes
+        assert not errors
+    finally:
+        window.close()
+        desktop.destroy()
+
+
 def test_actual_gui_run_streams_residuals_before_canonical_field_import(tmp_path, monkeypatch):
     """Requires real Foundation v10; no fixture log stands in for a new run."""
     _require_runtime()

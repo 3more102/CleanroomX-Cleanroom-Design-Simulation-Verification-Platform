@@ -51,6 +51,11 @@ unverified until the normal completed-field import. See
 [usage and reading limits](docs/LIVE_CFD_MONITOR.md) and the
 [actual widget capture, explicitly replaying a recorded log](docs/live-solver-monitor-20261021/README.md).
 
+**Computed sections** also supports [recorded cell probes](docs/CFD_CELL_PROBES.md):
+click a fluid cell or enter XYZ to inspect its exact stored velocity vector,
+speed and relative pressure, then export source-linked selections. Missing
+fluid cells produce no reading. The original streamline mode remains available.
+
 The [executed cancellation and GUI lifecycle report](reports/native-cancellation-20261021/REPORT.md)
 includes the complete **2833 passed / 1 optional IFC skip** run, original
 cancelled-case archive and

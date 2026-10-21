@@ -1,0 +1,35 @@
+{
+  "actual_tk_focused": {
+    "failed": 0,
+    "passed": 37,
+    "skipped": 0
+  },
+  "archived_case_cells_per_snapshot": 13210,
+  "archived_cell_readings_checked": 52840,
+  "archived_saved_iterations": [
+    "25",
+    "50",
+    "75",
+    "100"
+  ],
+  "engineering_release": "HOLD",
+  "focused_backend": {
+    "failed": 0,
+    "passed": 65,
+    "skipped": 0
+  },
+  "new_solver_execution": false,
+  "schema": "cleanroomx.cell-probes-local-validation.v1",
+  "sha256": {
+    ".github/workflows/cfd-vtk.yml": "6466dc1fd7feaafef88b7e51697b6e778502c05a08a58c82a33d79230e68cb80",
+    ".github/workflows/ci.yml": "eb95b4ba43b22eceb1eeec90748c671186c619ce8080f70220b85ee16bf38b6b",
+    "docs/cell-probes-20261022/01-recorded-cell-probes.png": "2930a1b8100b83a2cd7eb12551177b15223b53f5f4542ca90954ce4e8ce83247",
+    "docs/cell-probes-20261022/capture-manifest.json": "c67ecb1726eb429d66f25965c7bf366e7556e23e23ae2fb5ef1da162ab0c356a",
+    "src/cleanroomx/cfd_cell_probes.py": "9baf37d8aa46b1e20b4b78c4121338680ae6920e937e61b786c81713684f88e9",
+    "src/cleanroomx/cfd_multizone_gui.py": "cc9e5b6d2ca7c3e136874bc04587a7e357f8783334bb4ae13c3452236f840b25",
+    "tests/test_cfd_cell_probes.py": "f32b6c34e1163193a94862bf7fe86bb92878ef5d0c7b2d47a8a46299a5de6132",
+    "tests/test_cfd_cell_probes_archive.py": "3cacbcfb3e9a57bb46b397c89d3dd125210b2782c149327e46194a73e0e83e47",
+    "tests/test_cfd_cell_probes_gui.py": "c552280dc5026e70e331b983a8bf29883fa184adb2b79668232b733e4fd5c0b7",
+    "tests/test_cfd_multizone_execution.py": "e62fece4de05323464a2c8be94e9eb86e6368fd92c438b41a92cb0348dbbe64d"
+  }
+}

@@ -373,6 +373,9 @@ jobs:
       - name: Verify startup failures and Windows launcher regressions
         shell: pwsh
         run: python -m pytest -q tests/test_gui_startup.py tests/test_gui_lifecycle.py tests/test_windows_launchers.py
+      - name: Exercise recorded cell probes on native Windows Tk
+        shell: pwsh
+        run: python -m pytest -q tests/test_cfd_cell_probes.py tests/test_cfd_cell_probes_archive.py tests/test_cfd_cell_probes_gui.py -ra
       - name: Parse WSL launcher and test bridge contracts on Windows
         shell: pwsh
         run: |

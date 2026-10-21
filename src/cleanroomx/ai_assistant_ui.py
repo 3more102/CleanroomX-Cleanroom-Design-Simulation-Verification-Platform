@@ -60,6 +60,10 @@ class AssistantWindow(tk.Toplevel):
         self._pending: Queue[dict] = Queue()
         self._busy = False
         self._closed = False
+        # Monotonic UI request identity: a cancelled model response must never
+        # commit into a chat or interrupt a subsequent request when it arrives.
+        self._next_request_id = 0
+        self._active_request_id: int | None = None
 
         content = ttk.Frame(self, padding=12)
         content.pack(fill="both", expand=True)
@@ -112,6 +116,11 @@ class AssistantWindow(tk.Toplevel):
             buttons, text="Ask AI", command=self.ask_ai
         )
         self.ask_button.pack(side="left", padx=8)
+        self.cancel_button = ttk.Button(
+            buttons, text="Cancel response", command=self.cancel_ai,
+            state="disabled",
+        )
+        self.cancel_button.pack(side="left")
         ttk.Label(buttons, text="Review focus:").pack(side="left", padx=(14, 5))
         self.review_focus = tk.StringVar(value="general")
         ttk.Combobox(
@@ -448,6 +457,25 @@ class AssistantWindow(tk.Toplevel):
     def _on_return(self, _event: tk.Event) -> None:
         self.ask_ai()
 
+    def cancel_ai(self) -> None:
+        """Discard a pending reply in this UI, without claiming HTTP cancellation.
+
+        The remote/local provider call may continue until its configured
+        timeout. Late worker messages are ignored by request ID.
+        """
+        if not self._busy:
+            return
+        self._active_request_id = None
+        self._busy = False
+        self.ask_button.configure(state="normal")
+        self.cancel_button.configure(state="disabled")
+        # A pending question was never committed to the ChatSessionStore.
+        self._redraw()
+        self.status.set(
+            "Pending AI response cancelled in this window. The provider "
+            "request may continue until timeout; no answer will be saved."
+        )
+
     def ask_ai(self) -> None:
         if self._busy:
             return
@@ -473,8 +501,12 @@ class AssistantWindow(tk.Toplevel):
             self._append("Assistant setup", str(exc))
             return
 
+        self._next_request_id += 1
+        request_id = self._next_request_id
+        self._active_request_id = request_id
         self._busy = True
         self.ask_button.configure(state="disabled")
+        self.cancel_button.configure(state="normal")
         self._append("You (pending)", question)
         self.question.delete(0, "end")
         snapshot_sha = context["project"]["in_memory_sha256"]
@@ -486,6 +518,7 @@ class AssistantWindow(tk.Toplevel):
 
         def worker() -> None:
             payload = {
+                "request_id": request_id,
                 "project_key": key,
                 "session_id": chat.id,
                 "revision": chat.revision,
@@ -521,8 +554,14 @@ class AssistantWindow(tk.Toplevel):
                 response = self._pending.get_nowait()
             except Empty:
                 break
+            # Ignore cancelled or superseded replies BEFORE modifying UI
+            # state or writing either half of a conversation exchange.
+            if response.get("request_id") != self._active_request_id:
+                continue
+            self._active_request_id = None
             self._busy = False
             self.ask_button.configure(state="normal")
+            self.cancel_button.configure(state="disabled")
             same_view = (
                 response["project_key"] == self._project_key_getter()
                 and response["session_id"] == self._session_id
@@ -576,6 +615,7 @@ class AssistantWindow(tk.Toplevel):
 
     def _close(self) -> None:
         self._closed = True
+        self._active_request_id = None
         self.destroy()
         if self._on_close is not None:
             self._on_close()

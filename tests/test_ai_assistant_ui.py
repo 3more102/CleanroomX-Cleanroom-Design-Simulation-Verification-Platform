@@ -243,3 +243,108 @@ def test_ai_window_next_actions_includes_bound_cfd_followups(monkeypatch):
     finally:
         window._close()
         root.destroy()
+
+
+def test_cancelled_model_reply_is_dropped_after_new_request(monkeypatch):
+    """Delayed provider replies cannot overwrite the newer conversation."""
+    from cleanroomx import ai_assistant_ui
+
+    root = _root()
+    root.withdraw()
+    project = new_project()
+    key = project_chat_key(None, unsaved_id="cancelled-model")
+    deferred = []
+
+    class DeferredThread:
+        def __init__(self, *, target, **_kwargs):
+            self.worker = target
+            deferred.append(self)
+        def start(self):
+            pass
+
+    monkeypatch.setattr(ai_assistant_ui.threading, "Thread", DeferredThread)
+    monkeypatch.setattr(
+        ai_assistant_ui, "ask_model",
+        lambda question, *_args, **_kwargs: "Reply: " + question,
+    )
+    window = AssistantWindow(
+        root, project_getter=lambda: project,
+        base_dir_getter=lambda: None, project_key_getter=lambda: key,
+    )
+    try:
+        session_id = window._session_id
+        window.question.insert(0, "Discard this question")
+        window.ask_ai()
+        assert window._busy
+        assert str(window.cancel_button.cget("state")) == "normal"
+        assert len(deferred) == 1
+
+        window.cancel_ai()
+        assert not window._busy
+        assert window._active_request_id is None
+        assert str(window.cancel_button.cget("state")) == "disabled"
+        assert "may continue until timeout" in window.status.get()
+        assert not window._conversations.require_session(session_id, key).messages
+
+        window.question.insert(0, "Keep this question")
+        window.ask_ai()
+        assert len(deferred) == 2
+        assert window._busy
+
+        # Old provider completes first, then the current request. Only the
+        # second request can be committed; no stale first Q/A may leak.
+        deferred[0].worker()
+        deferred[1].worker()
+        window._poll()
+
+        messages = window._conversations.require_session(session_id, key).messages
+        assert [item.content for item in messages] == [
+            "Keep this question", "Reply: Keep this question",
+        ]
+        assert "Discard this question" not in window.transcript.get("1.0", "end")
+        assert not window._busy
+        assert window._active_request_id is None
+        assert str(window.cancel_button.cget("state")) == "disabled"
+    finally:
+        window._close()
+        root.destroy()
+
+
+def test_cancelled_response_without_successor_does_not_change_chat(monkeypatch):
+    from cleanroomx import ai_assistant_ui
+
+    root = _root()
+    root.withdraw()
+    project = new_project()
+    key = project_chat_key(None, unsaved_id="cancel-alone")
+    workers = []
+
+    class DeferredThread:
+        def __init__(self, *, target, **_kwargs):
+            workers.append(target)
+        def start(self):
+            pass
+
+    monkeypatch.setattr(ai_assistant_ui.threading, "Thread", DeferredThread)
+    monkeypatch.setattr(
+        ai_assistant_ui, "ask_model",
+        lambda question, *_args, **_kwargs: "Late answer",
+    )
+    window = AssistantWindow(
+        root, project_getter=lambda: project,
+        base_dir_getter=lambda: None, project_key_getter=lambda: key,
+    )
+    try:
+        window.question.insert(0, "Old pending question")
+        window.ask_ai()
+        window.cancel_ai()
+        workers[0]()
+        window._poll()
+        assert not window._conversations.require_session(
+            window._session_id, key,
+        ).messages
+        assert "Late answer" not in window.transcript.get("1.0", "end")
+        assert "cancelled in this window" in window.status.get()
+    finally:
+        window._close()
+        root.destroy()

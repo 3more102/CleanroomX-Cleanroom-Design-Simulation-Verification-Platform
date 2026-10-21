@@ -7564,6 +7564,7 @@ class CleanroomXApp:
             project_key_getter=lambda: project_chat_key(
                 self.project_path, unsaved_id=self._assistant_unsaved_id
             ),
+            project_path_getter=lambda: self.project_path,
             on_close=lambda: setattr(self, "_ai_assistant_window", None),
         )
 

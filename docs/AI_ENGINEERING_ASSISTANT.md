@@ -93,6 +93,33 @@ Do not put API keys in project JSON, source control, screenshots or reports.
 Cloud requests may have usage charges. The engineering review never
 requires a paid service.
 
+## Offline AI evidence review from CLI
+
+For command-line workflows and CI you can use the same project-aware,
+read-only diagnostic context without needing a Tk display or any AI provider:
+
+```bash
+cleanroomx-ai-review path/to/project.json
+cleanroomx-ai-review path/to/project.json --actions --format json
+cleanroomx-ai-review path/to/project.json --max-findings 30
+```
+
+This command captures the saved project revision, builds the canonical
+diagnostics-based context, and verifies that the source revision did not change
+while preparing the result. The JSON envelope explicitly records
+`model_used: false`, `network_used: false` and
+`source_stable_during_review: true` on a successful run.
+A failed revision check returns exit code 2 and discards the result.
+No project files, solver inputs or engineering settings are modified.
+The action plan is a proposal and requires separate review and authorization.
+No compliance, CFD convergence or physical validation is implied.
+
+**Project-revision conversation isolation:** The GUI now sends previous AI
+conversation turns to the model only when both sides of an exchange are tied
+to the *same current in-memory project SHA-256*. Answers received after the
+project changed are excluded. The human-visible transcript remains available
+to audit earlier conversations; it is not silently treated as current evidence.
+
 ## Architecture and safeguards
 
 - `src/cleanroomx/ai_assistant.py`: bounded read-only context, deterministic
@@ -146,6 +173,7 @@ Run:
 
 ```bash
 python -m pytest tests/test_ai_assistant.py tests/test_ai_assistant_chat.py tests/test_ai_assistant_plan.py -q
+python -m pytest tests/test_ai_assistant_cli.py -q
 python -m pytest tests/test_gui.py -q
 # With a graphical display/Xvfb:
 python -m pytest tests/test_ai_assistant_ui.py -q

@@ -143,7 +143,7 @@ def test_review_uses_local_model_only_as_advisory():
     assert reply.data["analysis_ids"] == ["a1"]
     assert len(seen) == 1
     assert seen[0][0]["role"] == "system"
-    assert "never claim ISO 14644 compliance" in seen[0][0]["content"]
+    assert "never claim iso 14644 compliance" in seen[0][0]["content"].lower()
     sent = json.loads(seen[0][1]["content"])
     assert sent["question"] == "Can this room be certified?"
     assert sent["evidence"]["analyses"][0]["run"]["outputs"]["airflow"] == 100

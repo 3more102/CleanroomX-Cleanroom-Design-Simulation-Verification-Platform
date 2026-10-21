@@ -17,6 +17,7 @@ from urllib.request import Request, urlopen
 
 from .project import ProjectDocument
 from .project_diagnostics import analyze_project_diagnostics
+from .run_history import run_history_records
 
 MAX_QUESTION_CHARS = 4000
 MAX_RESPONSE_BYTES = 1_000_000
@@ -109,6 +110,9 @@ def build_assistant_context(
     diagnostics = analyze_project_diagnostics(project, base_dir=base_dir)
     findings = diagnostics["issues"]
     latest = diagnostics.get("verification_history", {}).get("latest_by_analysis", [])
+    # The run ledger has already been integrity-checked by the canonical
+    # diagnostics service. Re-read through the validating API, not raw metadata.
+    records = run_history_records(project.metadata)
     return {
         "schema": "cleanroomx.ai-assistant-context",
         "schema_version": 1,
@@ -136,6 +140,19 @@ def build_assistant_context(
             ],
             "findings_truncated": len(findings) > max_findings,
         },
+        "recent_runs": [
+            {
+                "analysis_id": str(record["analysis_id"])[:80],
+                "analysis_name": str(record["analysis_name"])[:160],
+                "analysis_kind": str(record["analysis_kind"])[:80],
+                "recorded_status": str(record["status"])[:80],
+                "completed_at_utc": record["completed_at_utc"],
+                "record_sha256": record["record_sha256"],
+                "recorded_status_is_convergence_proof": False,
+            }
+            for record in records[-15:]
+        ],
+        "recent_runs_truncated": len(records) > 15,
         "retained_verification": [
             {
                 "analysis_id": item.get("analysis_id"),
@@ -149,6 +166,7 @@ def build_assistant_context(
             "No raw CFD field, solver residual or design input is included.",
             "Retained verification summaries do not prove physical cleanroom acceptance.",
             "The project identity is an in-memory digest, not an authenticated signature.",
+            "Recorded run status is not CFD convergence or physical validation.",
             "The assistant cannot execute analyses or change project state.",
         ],
     }
@@ -180,6 +198,16 @@ def format_offline_review(context: dict[str, Any]) -> str:
         lines.append("Additional findings omitted from assistant context.")
     if not d["findings"]:
         lines.append("No configured project diagnostic findings were reported.")
+    runs = context.get("recent_runs", [])
+    lines.append("\\nRetained analysis runs listed: " + str(len(runs)))
+    for run in runs[-5:]:
+        lines.append(
+            "  " + str(run["analysis_id"]) + ": " + str(run["recorded_status"])
+            + " (" + str(run["completed_at_utc"]) + ", run-record "
+            + str(run["record_sha256"])[:12] + ")"
+        )
+    if context.get("recent_runs_truncated"):
+        lines.append("Additional recorded runs omitted from assistant context.")
     lines.append(
         "\nThis does not establish solver convergence, cleanroom certification "
         "or physical validation."

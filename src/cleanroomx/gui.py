@@ -6424,9 +6424,10 @@ class CleanroomXApp:
             parent=self.root,
         )
 
-    def show_multizone_cfd(self):
+    def show_multizone_cfd(self, directory: str | Path | None = None):
         from .cfd_multizone_gui import MultizoneCFDWindow
-        window = MultizoneCFDWindow(self.root, directory=getattr(self, "_last_multizone_case", None))
+        selected = directory if directory is not None else getattr(self, "_last_multizone_case", None)
+        window = MultizoneCFDWindow(self.root, directory=selected)
         return window
 
     def export_project_engineering_dossier(self) -> None:
@@ -7565,6 +7566,7 @@ class CleanroomXApp:
                 self.project_path, unsaved_id=self._assistant_unsaved_id
             ),
             project_path_getter=lambda: self.project_path,
+            open_cfd_case=lambda case: self.show_multizone_cfd(directory=case),
             on_close=lambda: setattr(self, "_ai_assistant_window", None),
         )
 

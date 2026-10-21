@@ -6,6 +6,10 @@ from .cfd_openfoam import export_openfoam_cases, run_openfoam_cases
 from .cfd_project_rooms import generate_project_room_cases, run_project_room_cases
 from .cfd_project_audit import audit_project_room_cases
 from .cfd_multizone import generate_multizone_open_door_case, run_multizone_open_door_case
+from .cfd_relaxation_comparison import (
+    compare_independent_relaxation_cases,
+    export_independent_relaxation_comparison,
+)
 from .cfd_multizone_results import analyze_multizone_case, export_multizone_report
 from .cfd_vtk import populate_study_from_vtk
 from .cfd_visualization import render_cfd_cross_section
@@ -77,6 +81,14 @@ def build_parser():
     multizone.add_argument(
         "--velocity-relaxation", type=float, default=0.7,
         help="SIMPLE velocity equation relaxation 0.1..0.95; numerical sensitivity ONLY")
+    sensitivity=sub.add_parser(
+        "multizone-compare-relaxation",
+        help="Compare TWO executed matched-source OpenFOAM relaxation cases; engineering HOLD")
+    sensitivity.add_argument("baseline_directory")
+    sensitivity.add_argument("variant_directory")
+    sensitivity.add_argument("--density-kg-m3",type=float,default=1.2)
+    sensitivity.add_argument("--reference-room-id",default="corridor")
+    sensitivity.add_argument("--output",help="Create a NEW noncertifying comparison JSON file")
     multi_run=sub.add_parser("multizone-run",help="Opt-in blockMesh/checkMesh/simpleFoam for the connected case")
     multi_run.add_argument("directory")
     multi_run.add_argument("--timeout-seconds", type=int, default=3600)
@@ -163,6 +175,15 @@ def main():
             pressure_relaxation=args.pressure_relaxation,
             velocity_relaxation=args.velocity_relaxation,
         )
+        print(dumps_strict_json(result))
+        return 0
+    if args.command=="multizone-compare-relaxation":
+        result=compare_independent_relaxation_cases(
+            args.baseline_directory,args.variant_directory,
+            density_kg_m3=args.density_kg_m3,
+            reference_room_id=args.reference_room_id)
+        if args.output:
+            export_independent_relaxation_comparison(result,args.output)
         print(dumps_strict_json(result))
         return 0
     if args.command=="multizone-run":

@@ -26,6 +26,10 @@ def _owns_wheel(widget: tk.Misc) -> bool:
     if isinstance(widget, _NATIVE_WHEEL):
         return True
     if isinstance(widget, tk.Canvas):
+        # A chart bound by this tab remains a plain presentation canvas.
+        # Do not mistake our own wheel callback for an application zoom handler.
+        if getattr(widget, "_cleanroomx_tab_wheel_binding", False):
+            return False
         return (bool(widget.cget("yscrollcommand"))
                 or bool(widget.cget("xscrollcommand"))
                 or any(bool(widget.bind(sequence)) for sequence in _WHEEL_EVENTS))
@@ -84,6 +88,8 @@ def create_scrollable_content(host: ttk.Frame, *, padding: int = 10) -> ttk.Fram
                 if _owns_wheel(child):
                     continue
                 registered.add(child)
+                if isinstance(child, tk.Canvas):
+                    child._cleanroomx_tab_wheel_binding = True
                 child.bind("<MouseWheel>", on_vertical, add="+")
                 child.bind("<Shift-MouseWheel>", on_horizontal, add="+")
                 child.bind("<Button-4>", linux_wheel("y", -1), add="+")

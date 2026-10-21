@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from hashlib import sha256
 import json
+import math
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +31,21 @@ CFD_ASSISTANT_VERSION = 1
 
 def _sha256(value: bytes) -> str:
     return sha256(value).hexdigest()
+
+
+def _optional_finite(value: Any, field: str) -> float | None:
+    if value is None:
+        return None
+    if type(value) not in (int, float) or not math.isfinite(value):
+        raise ValueError(field + " must be finite numeric CFD evidence or null")
+    return float(value)
+
+
+def _fraction(value: Any, field: str) -> float | None:
+    numeric = _optional_finite(value, field)
+    if numeric is not None and not 0.0 <= numeric <= 1.0:
+        raise ValueError(field + " must lie between zero and one")
+    return numeric
 
 
 def _identity(value: Any, name: str) -> str:
@@ -155,7 +171,7 @@ def bound_cfd_evidence(
         "saved_project_source_sha256": source_sha,
         "source_manifest_sha256": review["source_manifest_sha256"],
         "source_run_receipt_sha256": review["source_run_receipt_sha256"],
-        "source_iteration": review["source_iteration"],
+        "source_iteration": review["source_iteration"][:64],
         "scenario": review["scenario"],
         "engineering_release": "HOLD",
         "closed_door_5pa_demonstrated": False,
@@ -187,13 +203,27 @@ def bound_cfd_evidence(
                 "mean_pressure_pa_relative_to_reference": (
                     room["mean_pressure_pa_relative_to_reference"]
                 ),
-                "mean_speed_m_s": room.get("mean_speed_m_s"),
-                "max_speed_m_s": room.get("max_speed_m_s"),
-                "mean_downward_velocity_m_s": room.get("mean_downward_velocity_m_s"),
-                "upward_volume_fraction": room.get("upward_volume_fraction"),
-                "downward_volume_fraction": room.get("downward_volume_fraction"),
-                "supply_inflow_m3_s": room.get("supply_inflow_m3_s"),
-                "return_outflow_m3_s": room.get("return_outflow_m3_s"),
+                "mean_speed_m_s": _optional_finite(
+                    room.get("mean_speed_m_s"), "room mean speed"
+                ),
+                "max_speed_m_s": _optional_finite(
+                    room.get("max_speed_m_s"), "room max speed"
+                ),
+                "mean_downward_velocity_m_s": _optional_finite(
+                    room.get("mean_downward_velocity_m_s"), "room downward velocity"
+                ),
+                "upward_volume_fraction": _fraction(
+                    room.get("upward_volume_fraction"), "room upward fraction"
+                ),
+                "downward_volume_fraction": _fraction(
+                    room.get("downward_volume_fraction"), "room downward fraction"
+                ),
+                "supply_inflow_m3_s": _optional_finite(
+                    room.get("supply_inflow_m3_s"), "room supply airflow"
+                ),
+                "return_outflow_m3_s": _optional_finite(
+                    room.get("return_outflow_m3_s"), "room return airflow"
+                ),
                 "net_outward_imbalance_m3_s": room["net_outward_imbalance_m3_s"],
             }
             for rid, room in ordered_rooms[:MAX_ROOMS]
@@ -203,8 +233,8 @@ def bound_cfd_evidence(
         "doors": [
             {
                 "door": str(door["door"])[:120],
-                "from_room": door["from_room"],
-                "to_room": door["to_room"],
+                "from_room": str(door["from_room"])[:80],
+                "to_room": str(door["to_room"])[:80],
                 "target_delta_pa": door["target_delta_pa"],
                 "observed_delta_pa": door["observed_delta_pa"],
                 "delta_minus_target_pa": door["delta_minus_target_pa"],
@@ -217,7 +247,10 @@ def bound_cfd_evidence(
         ],
         "doors_truncated": len(doors) > MAX_DOORS,
         "review_reasons": [
-            {"code": reason["code"], "message": reason["message"]}
+            {
+                "code": str(reason["code"])[:120],
+                "message": str(reason["message"])[:400],
+            }
             for reason in review["reasons"][:20]
         ],
         "non_prescriptive_checks": [

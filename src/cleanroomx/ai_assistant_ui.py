@@ -101,13 +101,6 @@ class AssistantWindow(tk.Toplevel):
             buttons, text="Next actions (offline)", command=self.review_action_plan
         )
         self.plan_button.pack(side="left", padx=(6, 0))
-        self.cfd_button = ttk.Button(
-            buttons, text="Review CFD export...", command=self.review_cfd_export
-        )
-        self.cfd_button.pack(side="left", padx=(6, 0))
-        ttk.Button(
-            buttons, text="Clear CFD", command=self.clear_cfd_export
-        ).pack(side="left", padx=(6, 0))
         self.ask_button = ttk.Button(
             buttons, text="Ask AI", command=self.ask_ai
         )
@@ -119,6 +112,20 @@ class AssistantWindow(tk.Toplevel):
             values=("general", "cfd", "hvac", "particles", "verification"),
             width=16,
         ).pack(side="left")
+
+        evidence_buttons = ttk.Frame(content)
+        evidence_buttons.pack(fill="x", pady=(0, 6))
+        ttk.Label(evidence_buttons, text="Recorded CFD:").pack(side="left")
+        self.cfd_button = ttk.Button(
+            evidence_buttons, text="Review CFD export...",
+            command=self.review_cfd_export,
+        )
+        self.cfd_button.pack(side="left", padx=(8, 0))
+        ttk.Button(
+            evidence_buttons, text="Clear evidence",
+            command=self.clear_cfd_export,
+        ).pack(side="left", padx=(8, 0))
+
         self.status = tk.StringVar(
             value="Local Ollama by default. Save chats explicitly to preserve them."
         )

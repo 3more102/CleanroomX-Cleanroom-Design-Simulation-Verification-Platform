@@ -125,7 +125,7 @@ def test_invalid_model_identifier_and_boolean_timeout_fail_closed(monkeypatch):
     with pytest.raises(AssistantConfigurationError, match="bounded model"):
         ask_model(
             "Review", context,
-            configuration=AssistantConfiguration("ollama", "bad\\nmodel", LOCAL_URL),
+            configuration=AssistantConfiguration("ollama", "bad\nmodel", LOCAL_URL),
         )
     with pytest.raises(ValueError, match="integer"):
         ask_model(

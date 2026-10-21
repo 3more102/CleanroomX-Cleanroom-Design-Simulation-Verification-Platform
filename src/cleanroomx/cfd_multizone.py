@@ -223,8 +223,17 @@ def _cell_vertices(cell: tuple[int, int, int]) -> tuple[tuple[int, int, int], ..
             (i,j,k+1), (i+1,j,k+1), (i+1,j+1,k+1), (i,j+1,k+1))
 
 
+def _numerical_relaxation(value: float, label: str, low: float, high: float) -> float:
+    """Bound a relaxation control before generating any solver inputs."""
+    if type(value) not in (int, float) or not math.isfinite(value) or not low <= value <= high:
+        raise ValueError(f"{label} must be finite and between {low:g} and {high:g}")
+    return float(value)
+
+
 def _build_case(project, *, pitch: tuple[float, float, float],
-                viscosity_m2_s: float, iterations: int, interval: int) -> tuple[dict, dict]:
+                viscosity_m2_s: float, iterations: int, interval: int,
+                pressure_relaxation: float = 0.3,
+                velocity_relaxation: float = 0.7) -> tuple[dict, dict]:
     geom, spatial = _geometry(project, pitch)
     voxels = geom["occupancy"]
     rooms, devices = geom["rooms"], geom["devices"]
@@ -393,7 +402,8 @@ def _build_case(project, *, pitch: tuple[float, float, float],
         "p { solver GAMG; tolerance 1e-8; relTol 0.05; smoother GaussSeidel; }\n"
         "U { solver smoothSolver; smoother symGaussSeidel; tolerance 1e-8; relTol 0.1; }\n"
         "}\nSIMPLE { nNonOrthogonalCorrectors 0; residualControl { p 1e-5; U 1e-6; } }\n"
-        "relaxationFactors { fields { p 0.3; } equations { U 0.7; } }")
+        f"relaxationFactors {{ fields {{ p {pressure_relaxation:.12g}; }} "
+        f"equations {{ U {velocity_relaxation:.12g}; }} }}")
     files = {
         "system/blockMeshDict": mesh,
         "system/controlDict": _header("dictionary","controlDict",control,"system"),
@@ -410,6 +420,13 @@ def _build_case(project, *, pitch: tuple[float, float, float],
     evidence = {
         "model": "hypothetical interconnected OPEN-door isothermal laminar CFD geometry",
         "door_mode": "open",
+        "numerical_controls": {
+            "pressure_field_relaxation": pressure_relaxation,
+            "velocity_equation_relaxation": velocity_relaxation,
+            "residual_control_p": 1e-5,
+            "residual_control_U": 1e-6,
+            "interpretation": "SIMPLE relaxation settings for numerical experiments, not physical boundary conditions or proof of convergence",
+        },
         "voxel_pitch_m": list(pitch),
         "origin_m": list(geom["origin"]),
         "grid_extent_cells": list(geom["dimensions"]),
@@ -443,6 +460,8 @@ def generate_multizone_open_door_case(
     kinematic_viscosity_m2_s: float,
     max_iterations: int = 150,
     output_interval: int = 50,
+    pressure_relaxation: float = 0.3,
+    velocity_relaxation: float = 0.7,
 ) -> dict:
     """Export one conformal connected multizone geometry (not actual CFD results)."""
     if door_mode != "open":
@@ -455,6 +474,10 @@ def generate_multizone_open_door_case(
         ("cell_size_x_m","cell_size_y_m","cell_size_z_m"),
         (cell_size_x_m,cell_size_y_m,cell_size_z_m)))
     viscosity=_finite_positive(kinematic_viscosity_m2_s,"kinematic_viscosity_m2_s")
+    pressure_relaxation=_numerical_relaxation(
+        pressure_relaxation,"pressure_relaxation",0.05,0.7)
+    velocity_relaxation=_numerical_relaxation(
+        velocity_relaxation,"velocity_relaxation",0.1,0.95)
     source=Path(project_path).resolve(strict=True)
     if not source.is_file():
         raise ValueError("Project source must be a regular file")
@@ -465,7 +488,9 @@ def generate_multizone_open_door_case(
     project=load_project_document(source)
     files,metadata=_build_case(
         project,pitch=pitch,viscosity_m2_s=viscosity,
-        iterations=max_iterations,interval=output_interval
+        iterations=max_iterations,interval=output_interval,
+        pressure_relaxation=pressure_relaxation,
+        velocity_relaxation=velocity_relaxation,
     )
     if source.read_bytes() != source_bytes:
         raise ValueError("Project changed during multizone generation")

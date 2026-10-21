@@ -95,6 +95,13 @@ class AssistantWindow(tk.Toplevel):
             buttons, text="Ask AI", command=self.ask_ai
         )
         self.ask_button.pack(side="left", padx=8)
+        ttk.Label(buttons, text="Review focus:").pack(side="left", padx=(14, 5))
+        self.review_focus = tk.StringVar(value="general")
+        ttk.Combobox(
+            buttons, textvariable=self.review_focus, state="readonly",
+            values=("general", "cfd", "hvac", "particles", "verification"),
+            width=16,
+        ).pack(side="left")
         self.status = tk.StringVar(
             value="Local Ollama by default. Save chats explicitly to preserve them."
         )
@@ -263,8 +270,10 @@ class AssistantWindow(tk.Toplevel):
         self._append("You (pending)", question)
         self.question.delete(0, "end")
         snapshot_sha = context["project"]["in_memory_sha256"]
+        focus = self.review_focus.get()
         self.status.set(
             "Asking " + cfg.provider + " (" + cfg.model + "), snapshot " + snapshot_sha[:12]
+            + ", focus: " + focus
         )
 
         def worker() -> None:
@@ -280,7 +289,8 @@ class AssistantWindow(tk.Toplevel):
             }
             try:
                 payload["answer"] = ask_model(
-                    question, context, configuration=cfg, history=history
+                    question, context, configuration=cfg, history=history,
+                    focus=focus,
                 )
                 payload["kind"] = "ok"
             except Exception as exc:
@@ -293,6 +303,10 @@ class AssistantWindow(tk.Toplevel):
     def _poll(self) -> None:
         if self._closed:
             return
+        # A Save As / Open Project / New Project can change the active binding
+        # while the assistant is open. Do not show another project's transcript.
+        if self._project_key_getter() != self._active_project_key:
+            self._ensure_session()
         while True:
             try:
                 response = self._pending.get_nowait()

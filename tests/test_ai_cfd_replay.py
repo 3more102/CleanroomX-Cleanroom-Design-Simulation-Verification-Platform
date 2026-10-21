@@ -170,3 +170,28 @@ def test_cli_json_exposes_case_replay_without_model_or_solver(recorded, monkeypa
     assert result["model_used"] is False
     assert result["network_used"] is False
     assert result["context"]["cfd_case_replay"]["engineering_release"] == "HOLD"
+
+
+def test_saved_project_mutation_during_case_replay_is_rejected(recorded, monkeypatch):
+    path, project, export, case, report = recorded
+    def analyzer(*_args, **_kwargs):
+        path.write_bytes(path.read_bytes() + b'\n')
+        return {**report, 'cells': [], 'residual_history': []}
+    monkeypatch.setattr(ai_cfd_replay, 'analyze_multizone_case', analyzer)
+    with pytest.raises(ValueError, match='project changed during case replay'):
+        ai_cfd_replay.replay_recorded_cfd(
+            export, case, project=project, project_path=path,
+        )
+
+
+def test_export_mutation_during_case_replay_is_rejected(recorded, monkeypatch):
+    path, project, export, case, report = recorded
+    def analyzer(*_args, **_kwargs):
+        source = export / 'report.json'
+        source.write_bytes(source.read_bytes() + b'\n')
+        return {**report, 'cells': [], 'residual_history': []}
+    monkeypatch.setattr(ai_cfd_replay, 'analyze_multizone_case', analyzer)
+    with pytest.raises(ValueError, match='changed during case replay'):
+        ai_cfd_replay.replay_recorded_cfd(
+            export, case, project=project, project_path=path,
+        )

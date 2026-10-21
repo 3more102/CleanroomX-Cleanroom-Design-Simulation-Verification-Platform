@@ -27,11 +27,16 @@ in-memory conversations. The save dialog refuses to overwrite unrelated JSON
 (including normal CleanroomX project files).
 
 The window also includes **Next actions (offline)**. This creates a digest-bound,
-read-only worklist from exactly the canonical diagnostic findings already
-available to CleanroomX. It sorts errors before warnings before informational
-findings, records the project snapshot identity, and marks every action as
-**proposal not executed**. This is not autonomous optimization, does not
-rewrite project files, and does not imply compliance.
+read-only worklist from canonical project diagnostics. If an exported CFD report
+is attached, this combined priority list additionally incorporates canonical
+CFD engineering HOLD reasons and non-prescriptive verification checks, tagged
+with their source kind and originating CFD report SHA-256. Diagnostic errors
+precede warnings and informational checks. Every item remains a **proposal not
+executed**; no file edits, solver runs, certification or autonomous optimization
+are performed. The separate **Recorded CFD next checks** list adds detailed
+CFD-specific evidence gaps and should not be confused with an additional
+simulation run. These SHA-256 identifiers bind JSON bytes, not solver
+authenticity or physical acceptance.
 
 The window has two independent functions:
 
@@ -177,6 +182,9 @@ A failed revision check returns exit code 2 and discards the result.
 No project files, solver inputs or engineering settings are modified.
 Adding `--cfd-export` requires the exported CFD project source SHA-256 to match the same stable saved project, and includes the canonical engineering HOLD review. It does not read raw solver fields or run a simulation.
 The action plan is a proposal and requires separate review and authorization.
+When combined with `--cfd-export`, `--actions` includes source-tagged recorded
+CFD HOLD reasons and outstanding review checks; `--cfd-actions` independently
+produces the detailed CFD-only follow-up plan. Both are read-only and non-executing.
 No compliance, CFD convergence or physical validation is implied.
 
 **Project-revision conversation isolation:** The GUI now sends previous AI

@@ -17,6 +17,7 @@ from .ai_assistant_specialist import (
 )
 from .ai_cfd_evidence import bound_cfd_evidence, format_cfd_evidence
 from .ai_cfd_replay import replay_recorded_cfd
+from .ai_cfd_handoff import prepare_cfd_run_handoff, render_cfd_run_handoff
 from .ai_cfd_followup import build_cfd_followup_plan, render_cfd_followup_plan
 from .project import (
     capture_project_file_revision,
@@ -69,6 +70,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--cfd-case",
         help="Recheck a retained OpenFOAM case against --cfd-export without running a solver.",
     )
+    parser.add_argument(
+        "--cfd-handoff",
+        help="Preview a generated, unexecuted connected CFD case for a separate GUI run.",
+    )
     return parser
 
 
@@ -78,6 +83,7 @@ def build_offline_review(
     max_findings: int = 15,
     cfd_export: str | Path | None = None,
     cfd_case: str | Path | None = None,
+    cfd_handoff: str | Path | None = None,
     cfd_actions: bool = False,
     specialist: str | None = None,
 ) -> dict:
@@ -115,6 +121,11 @@ def build_offline_review(
         build_specialist_review(context, focus=specialist)
         if specialist is not None else None
     )
+    handoff = (
+        prepare_cfd_run_handoff(
+            cfd_handoff, project=project, project_path=source,
+        ) if cfd_handoff is not None else None
+    )
     after = capture_project_file_revision(source)
     if not project_file_revision_matches(before, after):
         raise ProjectReviewChangedError(
@@ -131,6 +142,7 @@ def build_offline_review(
         "action_plan": plan,
         "cfd_followup_plan": cfd_plan,
         "specialist_review": specialist_review,
+        "cfd_run_handoff": handoff,
     }
 
 
@@ -139,7 +151,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         result = build_offline_review(
             args.project, actions=args.actions, max_findings=args.max_findings,
-            cfd_export=args.cfd_export, cfd_case=args.cfd_case, cfd_actions=args.cfd_actions, specialist=args.specialist,
+            cfd_export=args.cfd_export, cfd_case=args.cfd_case,
+            cfd_handoff=args.cfd_handoff, cfd_actions=args.cfd_actions,
+            specialist=args.specialist,
         )
         if args.output_format == "json":
             output = json.dumps(
@@ -158,6 +172,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                     + "\nProducer authenticated: false; engineering release: HOLD"
                     + "\n" + replay["note"]
                 )
+            if result["cfd_run_handoff"] is not None:
+                output += "\n\n" + render_cfd_run_handoff(result["cfd_run_handoff"])
             if result["action_plan"] is not None:
                 output += "\n\n" + render_assistant_action_plan(result["action_plan"])
             if result["cfd_followup_plan"] is not None:

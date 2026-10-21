@@ -245,6 +245,106 @@ def test_ai_window_next_actions_includes_bound_cfd_followups(monkeypatch):
         root.destroy()
 
 
+def test_gui_generated_case_handoff_requires_explicit_confirmation(tmp_path, monkeypatch):
+    """The assistant never runs OpenFOAM; handoff only opens the existing GUI."""
+    root = _root()
+    root.withdraw()
+    project = new_project()
+    key = project_chat_key(None, unsaved_id="handoff")
+    opened = []
+    validated = []
+    proposal = {"schema": "cleanroomx.ai-cfd-run-handoff"}
+    case = tmp_path / "generated"
+    monkeypatch.setattr(
+        "cleanroomx.ai_assistant_ui.filedialog.askdirectory",
+        lambda **_kwargs: str(case),
+    )
+    monkeypatch.setattr(
+        "cleanroomx.ai_assistant_ui.prepare_cfd_run_handoff",
+        lambda *_args, **_kwargs: proposal,
+    )
+    monkeypatch.setattr(
+        "cleanroomx.ai_assistant_ui.render_cfd_run_handoff",
+        lambda *_args: "CASE PREVIEW — NOT EXECUTED",
+    )
+    def validate(_proposal, *, project, project_path):
+        validated.append((project, project_path))
+        return case
+    monkeypatch.setattr(
+        "cleanroomx.ai_assistant_ui.revalidate_cfd_run_handoff", validate,
+    )
+    window = AssistantWindow(
+        root, project_getter=lambda: project,
+        base_dir_getter=lambda: None, project_key_getter=lambda: key,
+        project_path_getter=lambda: tmp_path / "saved.json",
+        open_cfd_case=opened.append,
+    )
+    try:
+        monkeypatch.setattr(
+            "cleanroomx.ai_assistant_ui.messagebox.askyesno",
+            lambda *_args, **_kwargs: False,
+        )
+        window.handoff_cfd_case()
+        assert opened == []
+        assert validated == []
+        assert "CASE PREVIEW" in window.transcript.get("1.0", "end")
+        assert "not confirmed" in window.status.get()
+
+        monkeypatch.setattr(
+            "cleanroomx.ai_assistant_ui.messagebox.askyesno",
+            lambda *_args, **_kwargs: True,
+        )
+        window.handoff_cfd_case()
+        assert opened == [case]
+        assert len(validated) == 1
+        assert "Solver NOT started" in window.status.get()
+    finally:
+        window._close()
+        root.destroy()
+
+
+def test_gui_handoff_blocks_mutation_between_preview_and_consent(tmp_path, monkeypatch):
+    root = _root()
+    root.withdraw()
+    key = project_chat_key(None, unsaved_id="handoff-stale")
+    opened = []
+    monkeypatch.setattr(
+        "cleanroomx.ai_assistant_ui.filedialog.askdirectory",
+        lambda **_kwargs: str(tmp_path / "generated"),
+    )
+    monkeypatch.setattr(
+        "cleanroomx.ai_assistant_ui.prepare_cfd_run_handoff",
+        lambda *_args, **_kwargs: {"schema": "cleanroomx.ai-cfd-run-handoff"},
+    )
+    monkeypatch.setattr(
+        "cleanroomx.ai_assistant_ui.render_cfd_run_handoff",
+        lambda *_args: "Read-only preview",
+    )
+    monkeypatch.setattr(
+        "cleanroomx.ai_assistant_ui.messagebox.askyesno",
+        lambda *_args, **_kwargs: True,
+    )
+    def reject(*_args, **_kwargs):
+        raise ValueError("CFD case changed since preview")
+    monkeypatch.setattr(
+        "cleanroomx.ai_assistant_ui.revalidate_cfd_run_handoff", reject,
+    )
+    window = AssistantWindow(
+        root, project_getter=new_project,
+        base_dir_getter=lambda: None, project_key_getter=lambda: key,
+        project_path_getter=lambda: tmp_path / "saved.json",
+        open_cfd_case=opened.append,
+    )
+    try:
+        window.handoff_cfd_case()
+        assert opened == []
+        assert "changed since preview" in window.transcript.get("1.0", "end")
+        assert "failed safely" in window.status.get()
+    finally:
+        window._close()
+        root.destroy()
+
+
 def test_cancelled_model_reply_is_dropped_after_new_request(monkeypatch):
     """Delayed provider replies cannot overwrite the newer conversation."""
     from cleanroomx import ai_assistant_ui

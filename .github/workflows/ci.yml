@@ -49,6 +49,7 @@ jobs:
           tests/test_ai_cfd_evidence.py
           tests/test_ai_cfd_replay.py
           tests/test_ai_cfd_followup.py
+          tests/test_ai_cfd_handoff.py
       - name: Run v0.95 solver-result-integrity compatibility regressions
         run: >-
           python -m pytest -q

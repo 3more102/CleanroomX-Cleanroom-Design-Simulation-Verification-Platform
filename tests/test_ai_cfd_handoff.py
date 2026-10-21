@@ -138,3 +138,37 @@ def test_duplicate_manifest_keys_fail_strict_json_validation(generated):
     )
     with pytest.raises(ValueError, match="duplicate|Duplicate"):
         prepare_cfd_run_handoff(case, project=project, project_path=source)
+
+
+def test_cli_can_preview_generated_case_without_solver_or_network(generated, capsys):
+    import json
+
+    from cleanroomx.ai_assistant_cli import main
+
+    source, _project, case = generated
+    before = (case / "manifest.json").read_bytes()
+    assert main([str(source), "--cfd-handoff", str(case), "--format", "json"]) == 0
+    output = json.loads(capsys.readouterr().out)
+    assert output["model_used"] is False
+    assert output["network_used"] is False
+    assert output["cfd_run_handoff"]["solver_executed"] is False
+    assert output["cfd_run_handoff"]["engineering_release"] == "HOLD"
+    assert output["cfd_run_handoff"]["state"] == "proposal_not_executed"
+    assert (case / "manifest.json").read_bytes() == before
+    assert not (case / "run-receipt.json").exists()
+
+    assert main([str(source), "--cfd-handoff", str(case)]) == 0
+    rendered = capsys.readouterr().out
+    assert "GENERATED CFD CASE HANDOFF" in rendered
+    assert "No model request or solver execution was performed." in rendered
+
+
+def test_cli_refuses_tampered_case_instead_of_reporting_handoff(generated, capsys):
+    from cleanroomx.ai_assistant_cli import main
+
+    source, _project, case = generated
+    (case / "system" / "fvSolution").write_text("not the saved input", encoding="utf-8")
+    assert main([str(source), "--cfd-handoff", str(case)]) == 2
+    output = capsys.readouterr()
+    assert "Solver input changed" in output.err
+    assert "GENERATED CFD CASE HANDOFF" not in output.out

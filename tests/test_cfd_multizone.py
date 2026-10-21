@@ -274,4 +274,25 @@ def test_paired_relaxation_comparison_refuses_unexecuted_and_changed_physics(tmp
         compare_independent_relaxation_cases(
             baseline,same,density_kg_m3=1.2,
             reference_room_id="corridor")
-    assert list((variant).glob("run-receipt.json"))==[]
+    # A changed hidden SIMPLE convergence limit must NOT be mislabelled as a
+    # pressure/velocity relaxation-only comparison, even with a new hash.
+    hidden=tmp_path/"hidden-solver-tolerance"
+    generate_multizone_open_door_case(
+        bundled_demo_project_path(),hidden,
+        pressure_relaxation=.2,velocity_relaxation=.5,**common)
+    solution=hidden/"system/fvSolution"
+    original=solution.read_text()
+    assert "residualControl { p 1e-5; U 1e-6; }" in original
+    solution.write_text(original.replace(
+        "residualControl { p 1e-5; U 1e-6; }",
+        "residualControl { p 1e-4; U 1e-6; }"))
+    manifest_file=hidden/"manifest.json"
+    manifest=json.loads(manifest_file.read_text())
+    manifest["files"]["system/fvSolution"]=hashlib.sha256(
+        solution.read_bytes()).hexdigest()
+    manifest_file.write_text(json.dumps(manifest))
+    with pytest.raises(ValueError,match="Only the declared SIMPLE"):
+        compare_independent_relaxation_cases(
+            baseline,hidden,density_kg_m3=1.2,
+            reference_room_id="corridor")
+    assert list(variant.glob("run-receipt.json"))==[]

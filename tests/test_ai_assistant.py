@@ -184,3 +184,28 @@ def test_focus_is_explicit_and_model_system_guidance_is_restricted(monkeypatch):
     )
     assert response == "Check recorded residuals first."
     assert "mesh independence" in requests[0]["messages"][0]["content"]
+
+
+def test_critical_findings_are_not_lost_before_context_truncation(monkeypatch):
+    issue = lambda number, severity: {
+        "sequence": number, "severity": severity,
+        "rule": "rule." + str(number), "message": "message",
+        "suggested_action": "Review the input.", "element": {"type": "project"},
+    }
+    synthetic = {
+        "issues": [issue(n, "info") for n in range(1, 21)] + [
+            issue(21, "error")
+        ],
+        "summary": {
+            "status": "error", "complete": True, "issue_count": 21,
+            "error_count": 1, "warning_count": 0, "info_count": 20,
+        },
+        "verification_history": {"latest_by_analysis": []},
+    }
+    monkeypatch.setattr(
+        "cleanroomx.ai_assistant.analyze_project_diagnostics",
+        lambda *_args, **_kwargs: synthetic,
+    )
+    context = build_assistant_context(new_project(), max_findings=5)
+    assert context["diagnostics"]["findings"][0]["rule"] == "rule.21"
+    assert context["diagnostics"]["findings_truncated"] is True

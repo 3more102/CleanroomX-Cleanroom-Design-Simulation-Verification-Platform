@@ -138,6 +138,7 @@ read-only diagnostic context without needing a Tk display or any AI provider:
 cleanroomx-ai-review path/to/project.json
 cleanroomx-ai-review path/to/project.json --actions --format json
 cleanroomx-ai-review path/to/project.json --max-findings 30
+cleanroomx-ai-review path/to/project.json --cfd-export path/to/export --format json
 ```
 
 This command captures the saved project revision, builds the canonical
@@ -147,6 +148,7 @@ while preparing the result. The JSON envelope explicitly records
 `source_stable_during_review: true` on a successful run.
 A failed revision check returns exit code 2 and discards the result.
 No project files, solver inputs or engineering settings are modified.
+Adding `--cfd-export` requires the exported CFD project source SHA-256 to match the same stable saved project, and includes the canonical engineering HOLD review. It does not read raw solver fields or run a simulation.
 The action plan is a proposal and requires separate review and authorization.
 No compliance, CFD convergence or physical validation is implied.
 

@@ -8,6 +8,16 @@
 
 The current stable release is **v0.102.1**.
 
+## AI engineering assistant (development)
+
+The desktop now includes **Tools > AI Engineering Assistant...** with a
+read-only, offline review of canonical project diagnostics and an optional
+model-assisted Q&A window. By default, model requests use local Ollama;
+external cloud transmission needs explicit configuration and opt-in. The
+assistant cannot modify designs or certify numerical results.
+
+See [AI Engineering Assistant setup and staged roadmap](docs/AI_ENGINEERING_ASSISTANT.md).
+
 ## Active connected-CFD engineering workflow
 
 The development branch in [PR #1363](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/pull/1363)

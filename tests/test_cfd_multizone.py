@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 
 import pytest
 
@@ -143,6 +144,15 @@ def test_cli_explicit_open_door_mode_required():
     ])
     assert args.command=="multizone-generate"
     assert args.cell_size_y_m==.1
+    assert args.pressure_relaxation==.3
+    assert args.velocity_relaxation==.7
+    choice=parser.parse_args([
+        "multizone-generate","demo.json","output","--door-mode","open",
+        "--kinematic-viscosity-m2-s","1.5e-5",
+        "--pressure-relaxation","0.2","--velocity-relaxation","0.5",
+    ])
+    assert choice.pressure_relaxation==.2
+    assert choice.velocity_relaxation==.5
     assert parser.parse_args(["multizone-run","output"]).command=="multizone-run"
 
 
@@ -174,3 +184,48 @@ def test_unconfigured_shared_wall_never_becomes_an_unintended_passage():
     devices[:]=[d for d in devices if d["id"]!="door-preparation-ante"]
     with pytest.raises(ValueError,match="Unconfigured shared"):
         _geometry(project,(.5,.1,.3))
+
+
+def test_explicit_solver_relaxation_changes_only_solver_dictionary_and_manifest(tmp_path):
+    # Generated inputs only: NO solver is executed by this synthetic fixture.
+    standard=generate_multizone_open_door_case(
+        bundled_demo_project_path(),tmp_path/"standard",
+        door_mode="open",kinematic_viscosity_m2_s=1.5e-5,
+        max_iterations=10,output_interval=5)
+    variant=generate_multizone_open_door_case(
+        bundled_demo_project_path(),tmp_path/"variant",
+        door_mode="open",kinematic_viscosity_m2_s=1.5e-5,
+        max_iterations=10,output_interval=5,
+        pressure_relaxation=.2,velocity_relaxation=.5)
+    assert standard["case"]["numerical_controls"]["pressure_field_relaxation"]==.3
+    assert standard["case"]["numerical_controls"]["velocity_equation_relaxation"]==.7
+    assert variant["case"]["numerical_controls"]["pressure_field_relaxation"]==.2
+    assert variant["case"]["numerical_controls"]["velocity_equation_relaxation"]==.5
+    assert "relaxationFactors { fields { p 0.3; } equations { U 0.7; } }" in (
+        tmp_path/"standard/system/fvSolution").read_text()
+    assert "relaxationFactors { fields { p 0.2; } equations { U 0.5; } }" in (
+        tmp_path/"variant/system/fvSolution").read_text()
+    assert standard["files"]["system/fvSolution"]!=variant["files"]["system/fvSolution"]
+    for key in standard["files"]:
+        if key!="system/fvSolution":
+            assert standard["files"][key]==variant["files"][key]
+    from cleanroomx.cfd_multizone import verify_multizone_inputs
+    assert verify_multizone_inputs(tmp_path/"variant")[1]==variant
+    content=tmp_path/"variant/system/fvSolution"
+    content.write_text(content.read_text().replace("p 0.2;","p 0.3;"))
+    with pytest.raises(ValueError,match="Solver input changed"):
+        verify_multizone_inputs(tmp_path/"variant")
+
+
+@pytest.mark.parametrize("pressure,velocity",[
+    (math.nan,.5),(.2,math.inf),(.2,True),(True,.5),("0.2",.5),
+    (0.,.5),(.02,.5),(.71,.5),(.2,0),(.2,.09),(.2,.96),
+])
+def test_relaxation_inputs_fail_before_case_creation(tmp_path,pressure,velocity):
+    output=tmp_path/"new-numerical-case"
+    with pytest.raises(ValueError,match="relaxation"):
+        generate_multizone_open_door_case(
+            bundled_demo_project_path(),output,door_mode="open",
+            kinematic_viscosity_m2_s=1.5e-5,
+            pressure_relaxation=pressure,velocity_relaxation=velocity)
+    assert not output.exists()

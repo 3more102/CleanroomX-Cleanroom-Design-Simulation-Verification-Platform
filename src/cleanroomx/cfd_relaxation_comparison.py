@@ -84,6 +84,14 @@ def compare_independent_relaxation_cases(
         if (f"fields {{ p {p:.12g}; }}" not in solution or
             f"equations {{ U {u:.12g}; }}" not in solution):
             raise ValueError("fvSolution relaxation disagrees with source manifest")
+    # Never let a generated-but-never-executed numerical case be mistaken
+    # for a CFD result. The canonical importer independently verifies every
+    # receipt stage/log/field hash, even when this first guard passes.
+    for case_dir in (ra,rb):
+        receipt=case_dir/"run-receipt.json"
+        if receipt.is_symlink() or not receipt.is_file():
+            raise ValueError(
+                "Both numerical variants require successful recorded OpenFOAM execution receipts")
     density=_finite(density_kg_m3,"air density")
     if density<=0:
         raise ValueError("Air density must be positive")

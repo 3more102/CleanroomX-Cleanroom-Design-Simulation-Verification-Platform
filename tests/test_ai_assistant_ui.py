@@ -132,6 +132,9 @@ def test_ai_window_attaches_matching_cfd_export_to_snapshot_only(tmp_path, monke
         assert window._snapshot()["cfd_evidence"]["engineering_release"] == "HOLD"
         assert observed[-1] == (export, tmp_path / "facility.json")
         assert "Recorded CFD: HOLD" in window.transcript.get("1.0", "end")
+        window.clear_cfd_export()
+        assert window._cfd_export_dir is None
+        assert "cfd_evidence" not in window._snapshot()
     finally:
         window._close()
         root.destroy()

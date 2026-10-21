@@ -1,12 +1,23 @@
 """GUI scroll contracts: chart routing, native controls, and local binding."""
+import os
 import tkinter as tk
 from tkinter import ttk
 import pytest
 from cleanroomx.gui_scrollable import _owns_wheel, create_scrollable_content
 
 
+def _tk_root():
+    """Require an actual display; headless CI runs this in the Xvfb job."""
+    try:
+        return tk.Tk()
+    except tk.TclError as exc:
+        if os.environ.get("DISPLAY") or os.name == "nt":
+            raise
+        pytest.skip(f"Tk display unavailable (covered under Xvfb): {exc}")
+
+
 def test_scrollable_tabs_are_independent():
-    root = tk.Tk()
+    root = _tk_root()
     try:
         root.geometry("500x340")
         tabs = ttk.Notebook(root)
@@ -29,7 +40,7 @@ def test_scrollable_tabs_are_independent():
 
 
 def test_native_scroll_controls_keep_ownership():
-    root = tk.Tk()
+    root = _tk_root()
     try:
         host = ttk.Frame(root)
         host.pack()

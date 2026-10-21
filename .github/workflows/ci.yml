@@ -420,6 +420,22 @@ jobs:
           PY
           test "$doctor_rc" -eq 0
 
+
+  recorded-gui-gallery:
+    name: Recorded GUI Gallery Integrity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Verify actual archived GUI screenshots and capture manifest
+        run: python scripts/validate_recorded_gui_gallery.py
+      - name: Regression-test screenshot integrity and tamper rejection
+        run: python -m unittest discover -s tests -p 'test_recorded_gui_gallery.py' -v
+
   required-ci:
     name: Required CI Gate
     if: ${{ always() }}
@@ -428,6 +444,7 @@ jobs:
       - windows-launcher-smoke
       - native-bim-smoke
       - doctor-wheel-smoke
+      - recorded-gui-gallery
     runs-on: ubuntu-latest
     steps:
       - name: Verify all required CI jobs succeeded
@@ -436,11 +453,14 @@ jobs:
           WINDOWS_LAUNCHER_RESULT: ${{ needs.windows-launcher-smoke.result }}
           NATIVE_BIM_RESULT: ${{ needs.native-bim-smoke.result }}
           DOCTOR_WHEEL_RESULT: ${{ needs.doctor-wheel-smoke.result }}
+          RECORDED_GUI_GALLERY_RESULT: ${{ needs.recorded-gui-gallery.result }}
         run: |
           echo "Python matrix result: ${TEST_RESULT}"
           echo "Windows launcher result: ${WINDOWS_LAUNCHER_RESULT}"
           echo "Native BIM result: ${NATIVE_BIM_RESULT}"
+          echo "Recorded GUI gallery result: ${RECORDED_GUI_GALLERY_RESULT}"
           test "${TEST_RESULT}" = "success"
           test "${WINDOWS_LAUNCHER_RESULT}" = "success"
           test "${NATIVE_BIM_RESULT}" = "success"
           test "${DOCTOR_WHEEL_RESULT}" = "success"
+          test "${RECORDED_GUI_GALLERY_RESULT}" = "success"

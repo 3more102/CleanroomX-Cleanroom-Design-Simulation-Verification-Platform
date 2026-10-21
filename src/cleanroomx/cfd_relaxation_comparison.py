@@ -76,14 +76,31 @@ def compare_independent_relaxation_cases(
             if name!="system/fvSolution") or
         files_a.get("system/fvSolution")==files_b.get("system/fvSolution")):
         raise ValueError("Only the hashed fvSolution input may change")
-    # Check the actual dictionary, not merely the manifest text claim.
+    # Check the EXACT fvSolution dictionary, not a manifest description.
+    # Permit only two expected under-relaxation substitutions; silently
+    # edited linear-solver limits, residual control, or SIMPLE algorithms
+    # must make an otherwise matching pair incomparable.
+    solutions=[]
     for case_dir,controls in ((ra,controls_a),(rb,controls_b)):
         solution=(case_dir/"system/fvSolution").read_text(encoding="utf-8")
         p=controls["pressure_field_relaxation"]
         u=controls["velocity_equation_relaxation"]
-        if (f"fields {{ p {p:.12g}; }}" not in solution or
-            f"equations {{ U {u:.12g}; }}" not in solution):
+        pressure=f"fields {{ p {p:.12g}; }}"
+        velocity=f"equations {{ U {u:.12g}; }}"
+        if solution.count(pressure)!=1 or solution.count(velocity)!=1:
             raise ValueError("fvSolution relaxation disagrees with source manifest")
+        solutions.append(solution)
+    expected=solutions[0]
+    for item,entry,control in (
+        ("fields", "p", "pressure_field_relaxation"),
+        ("equations", "U", "velocity_equation_relaxation"),
+    ):
+        old=f"{item} {{ {entry} {controls_a[control]:.12g}; }}"
+        new=f"{item} {{ {entry} {controls_b[control]:.12g}; }}"
+        expected=expected.replace(old,new,1)
+    if expected!=solutions[1]:
+        raise ValueError(
+            "Only the declared SIMPLE pressure/velocity relaxation factors may differ")
     # Never let a generated-but-never-executed numerical case be mistaken
     # for a CFD result. The canonical importer independently verifies every
     # receipt stage/log/field hash, even when this first guard passes.

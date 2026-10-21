@@ -197,6 +197,16 @@ def test_alternative_simple_relaxation_executes_as_an_independent_provenanced_ca
     assert export_independent_relaxation_comparison(compared,out)==out
     assert json.loads(out.read_text())["source_project_sha256"]==(
         generated["project_source_sha256"])
+    from cleanroomx.cfd_pipeline_cli import main as cfd_pipeline_main
+    cli_out=tmp_path/"cli-paired-relaxation.json"
+    assert cfd_pipeline_main([
+        "multizone-compare-relaxation",str(baseline_dir),str(case),
+        "--density-kg-m3","1.2","--reference-room-id","corridor",
+        "--output",str(cli_out),
+    ])==0
+    assert json.loads(cli_out.read_text())["engineering_release"]=="HOLD"
+    with pytest.raises(FileExistsError):
+        export_independent_relaxation_comparison(compared,out)
     with pytest.raises(ValueError,match="two different"):
         compare_independent_relaxation_cases(
             baseline_dir,baseline_dir,density_kg_m3=1.2,

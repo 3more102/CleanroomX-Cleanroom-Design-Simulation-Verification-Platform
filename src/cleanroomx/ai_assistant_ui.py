@@ -17,6 +17,7 @@ from .ai_assistant import (
 )
 from .ai_assistant_chat import AssistantConversations
 from .ai_cfd_evidence import bound_cfd_evidence, format_cfd_evidence
+from .ai_cfd_followup import build_cfd_followup_plan, render_cfd_followup_plan
 from .ai_assistant_plan import build_assistant_action_plan, render_assistant_action_plan
 from .ai_assistant_specialist import build_specialist_review, render_specialist_review
 from .project import ProjectDocument
@@ -344,8 +345,15 @@ class AssistantWindow(tk.Toplevel):
     def review_action_plan(self) -> None:
         try:
             self._ensure_session()
-            plan = build_assistant_action_plan(self._snapshot())
+            context = self._snapshot()
+            plan = build_assistant_action_plan(context)
             self._append("Engineering next actions (not executed)", render_assistant_action_plan(plan))
+            if "cfd_evidence" in context:
+                cfd_plan = build_cfd_followup_plan(context["cfd_evidence"])
+                self._append(
+                    "Recorded CFD next checks (not executed)",
+                    render_cfd_followup_plan(cfd_plan),
+                )
             self.status.set("Offline action plan proposed. No network or design changes.")
         except (OSError, ValueError, TypeError, KeyError) as exc:
             self._append("Action plan unavailable", str(exc))

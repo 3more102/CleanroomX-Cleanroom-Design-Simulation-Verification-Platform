@@ -233,3 +233,62 @@ def test_project_room_audit_hashes_the_same_manifest_snapshot(tmp_path):
     assert report["input_manifest_sha256"] == hashlib.sha256(
         manifest.read_bytes()
     ).hexdigest()
+
+
+
+def test_openfoam_logs_require_terminal_end_after_all_solver_output(tmp_path):
+    """End in the middle cannot validate appended/incomplete solver output."""
+    root = _generated(tmp_path)
+    _log_fixtures(root)
+    mesh = root / "room_process/checkMesh.log"
+    mesh.write_text(mesh.read_text() + "Mesh might be incomplete\n")
+    report = _audit(root)
+    assert report["status"] == "incomplete_or_failed"
+    assert "checkMesh: missing terminal End marker" in report[
+        "cases"]["process"]["violations"]
+    assert report["cases"]["process"]["mesh_logs"]["checkMesh"][
+        "has_end_marker"] is False
+
+    mesh.write_text("Mesh OK.\nEnd\n")
+    log = root / "room_ante/simpleFoam.log"
+    log.write_text(log.read_text() + (
+        "Solving for Ux, Initial residual = 1e-12, "
+        "Final residual = 1e-12\n"
+    ))
+    report = _audit(root)
+    assert report["status"] == "incomplete_or_failed"
+    assert "solver log has no terminal End marker" in report[
+        "cases"]["ante"]["violations"]
+
+
+def test_openfoam_recent_residual_samples_preserve_source_order(tmp_path):
+    """Log-order drift evidence must not pretend to be SIMPLE iterations."""
+    root = _generated(tmp_path)
+    _log_fixtures(root)
+    source = root / "room_process/simpleFoam.log"
+    levels = (1e-8, 2e-8, 3e-8, 4e-8)
+    rows = []
+    for value in levels:
+        rows.append(
+            f"GAMG: Solving for p, Initial residual = {value}, "
+            "Final residual = 1e-9, No Iterations 1\n"
+        )
+        rows.append(
+            "smoothSolver: Solving for Ux, Initial residual = 1e-8, "
+            "Final residual = 1e-9, No Iterations 1\n"
+        )
+        rows.append(
+            "time step continuity errors : sum local = 1e-9, "
+            "global = -1e-9, cumulative = -2e-9\n"
+        )
+    source.write_text("".join(rows) + "End\n")
+    report = _audit(root)
+    assert report["status"] == "numerically_screened_requires_engineering_review"
+    residuals = report["cases"]["process"]["solver_residuals"]
+    recent = residuals["fields"]["p"]
+    assert recent["recent_initial_residual_samples"] == list(levels[-3:])
+    assert recent["recent_final_residual_samples"] == [1e-9] * 3
+    assert recent["worst_recent_initial_residual"] == 4e-8
+    assert residuals["residual_sample_axis"] == (
+        "linear_solver_log_order_not_simple_iterations"
+    )

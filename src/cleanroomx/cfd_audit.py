@@ -26,6 +26,15 @@ _FATAL=re.compile(r"FOAM FATAL|floating point exception|segmentation fault|nan\b
 MAX_LOG_BYTES=32*1024*1024
 
 
+def has_terminal_end_marker(content):
+    """Only whitespace is allowed after the final OpenFOAM End line."""
+    if type(content) is not str:
+        raise ValueError("Solver log content must be text")
+    lines = content.splitlines()
+    return bool(lines) and next((line.strip() for line in reversed(lines)
+                                 if line.strip()), None) == "End"
+
+
 def read_bounded_regular_log(path):
     """Read one bounded log through a stable regular-file descriptor.
 
@@ -108,7 +117,7 @@ def audit_openfoam_log(
     except UnicodeDecodeError as exc:
         raise ValueError("Log must be UTF-8") from exc
     fatal=bool(_FATAL.search(content))
-    complete=bool(re.search(r"(?m)^\s*End\s*$",content))
+    complete=has_terminal_end_marker(content)
     measurements={f:[] for f in fields}
     anomalies=[]
     for match in _RESIDUAL.finditer(content):
@@ -134,6 +143,10 @@ def audit_openfoam_log(
             "recent_window_count":len(recent),
             "worst_recent_initial_residual":worst_initial,
             "worst_recent_final_residual":worst_final,
+            # Samples are in linear-solver log order, NOT identified CFD
+            # SIMPLE iterations and NOT evidence of physical convergence.
+            "recent_initial_residual_samples": [v[0] for v in recent],
+            "recent_final_residual_samples": [v[1] for v in recent],
         }
     continuity=[]
     for m in _CONTINUITY.finditer(content):
@@ -164,5 +177,6 @@ def audit_openfoam_log(
         "recent_max_abs_global_continuity":max((abs(e["global"]) for e in continuity[-window:]),default=None),
         "violations":anomalies,
         "log_sha256":hashlib.sha256(data).hexdigest(),
+        "residual_sample_axis":"linear_solver_log_order_not_simple_iterations",
         "boundary":"Numerical log screening only; not mass-balance integration, mesh convergence, cleanroom validation or certification",
     }

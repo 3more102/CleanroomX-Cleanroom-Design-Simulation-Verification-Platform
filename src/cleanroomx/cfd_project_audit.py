@@ -9,7 +9,9 @@ import hashlib
 from pathlib import Path
 import re
 
-from .cfd_audit import audit_openfoam_log, read_bounded_regular_log
+from .cfd_audit import (
+    audit_openfoam_log, has_terminal_end_marker, read_bounded_regular_log,
+)
 from .cfd_project_rooms import CASE_RE, PROJECT_CFD_SCHEMA
 from .strict_json import load_strict_json_snapshot
 
@@ -91,9 +93,10 @@ def audit_project_room_cases(
         for program in ("blockMesh", "checkMesh"):
             try:
                 content, sha = _bounded_log(directory_path / (program + ".log"))
-                evidence[program] = {"sha256": sha, "has_end_marker": bool(
-                    re.search(r"(?m)^\s*End\s*$", content)
-                )}
+                evidence[program] = {
+                    "sha256": sha,
+                    "has_end_marker": has_terminal_end_marker(content),
+                }
                 if not evidence[program]["has_end_marker"]:
                     issues.append(f"{program}: missing terminal End marker")
                 if re.search(r"FOAM FATAL|floating point exception|segmentation fault", content, re.I):

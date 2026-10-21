@@ -38,3 +38,22 @@ fails before reading solver logs.
 
 This detects missing receipts and altered source snapshots; it does not
 authenticate the manifest author or demonstrate physical validation.
+
+## Residual sequence and terminal evidence (follow-up)
+
+`simpleFoam.log` now must have `End` as its last non-whitespace
+line, not merely somewhere inside the log. The same rule is applied
+to `blockMesh.log` and `checkMesh.log`. This prevents appended
+incomplete or contradictory data from being ignored after a prior End.
+
+For each explicitly selected field, the numerical audit also retains
+`recent_initial_residual_samples` and
+`recent_final_residual_samples` from the inspected tail window.
+Values use the order of the actual captured solver log, identified by
+`residual_sample_axis = linear_solver_log_order_not_simple_iterations`.
+
+These series are intended for numerical trend review and subsequent
+charting; they are **not** indexed by saved SIMPLE iterations, are not
+an independent convergence criterion, and cannot establish cleanroom
+compliance. Thresholds remain supplied by the operator. Existing
+JSON reports gain fields but preserve the established screening status.

@@ -12,6 +12,7 @@ from typing import Sequence
 
 from .ai_assistant import build_assistant_context, format_offline_review
 from .ai_assistant_plan import build_assistant_action_plan, render_assistant_action_plan
+from .ai_cfd_evidence import bound_cfd_evidence, format_cfd_evidence
 from .project import (
     capture_project_file_revision,
     load_project_document_with_revision,
@@ -40,11 +41,21 @@ def build_parser() -> argparse.ArgumentParser:
         "--max-findings", type=int, default=15,
         help="Maximum number of diagnostic findings (1-50).",
     )
+    parser.add_argument(
+        "--cfd-export",
+        help=(
+            "Existing multiroom CFD export directory containing report.json; "
+            "requires an exact matching saved project source revision."
+        ),
+    )
     return parser
 
 
 def build_offline_review(
-    project_path: str | Path, *, actions: bool = False, max_findings: int = 15,
+    project_path: str | Path, *,
+    actions: bool = False,
+    max_findings: int = 15,
+    cfd_export: str | Path | None = None,
 ) -> dict:
     """Return a revision-checked, side-effect-free review envelope."""
     if type(max_findings) is not int or not 1 <= max_findings <= 50:
@@ -56,6 +67,10 @@ def build_offline_review(
     context = build_assistant_context(
         project, base_dir=source.parent, max_findings=max_findings
     )
+    if cfd_export is not None:
+        context["cfd_evidence"] = bound_cfd_evidence(
+            cfd_export, project=project, project_path=source,
+        )
     plan = build_assistant_action_plan(context) if actions else None
     after = capture_project_file_revision(source)
     if not project_file_revision_matches(before, after):
@@ -78,7 +93,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
         result = build_offline_review(
-            args.project, actions=args.actions, max_findings=args.max_findings
+            args.project, actions=args.actions, max_findings=args.max_findings,
+            cfd_export=args.cfd_export,
         )
         if args.output_format == "json":
             output = json.dumps(
@@ -87,6 +103,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
         else:
             output = format_offline_review(result["context"])
+            if "cfd_evidence" in result["context"]:
+                output += "\n\n" + format_cfd_evidence(result["context"]["cfd_evidence"])
             if result["action_plan"] is not None:
                 output += "\n\n" + render_assistant_action_plan(result["action_plan"])
             output += "\n\nSource revision: " + result["source_revision_sha256"]

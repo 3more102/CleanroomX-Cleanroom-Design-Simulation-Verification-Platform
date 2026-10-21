@@ -561,3 +561,46 @@ def test_assistant_snapshot_rejects_save_as_during_cfd_read(
     finally:
         window._close()
         root.destroy()
+
+
+def test_stale_assistant_reply_remains_marked_after_redraw(monkeypatch):
+    """Persisted UI rendering must not promote old-revision AI advice."""
+    from cleanroomx import ai_assistant_ui
+
+    root = _root()
+    root.withdraw()
+    project = new_project("Before request")
+    key = project_chat_key(None, unsaved_id="stale-reply")
+    delayed = []
+
+    class DeferredThread:
+        def __init__(self, *, target, **_kwargs):
+            delayed.append(target)
+        def start(self):
+            pass
+
+    monkeypatch.setattr(ai_assistant_ui.threading, "Thread", DeferredThread)
+    monkeypatch.setattr(
+        ai_assistant_ui, "ask_model",
+        lambda *_args, **_kwargs: "Advice based on old project",
+    )
+    window = AssistantWindow(
+        root, project_getter=lambda: project,
+        base_dir_getter=lambda: None, project_key_getter=lambda: key,
+    )
+    try:
+        window.question.insert(0, "Review project")
+        window.ask_ai()
+        project.name = "After request"
+        delayed[0]()
+        window._poll()
+        chat = window._conversations.require_session(window._session_id, key)
+        assert [message.role for message in chat.messages] == ["user", "assistant"]
+        assert chat.messages[1].metadata["stale_project_on_receipt"] is True
+        assert "STALE project/CFD snapshot" in window.transcript.get("1.0", "end")
+        window._redraw()
+        assert "STALE project/CFD snapshot" in window.transcript.get("1.0", "end")
+        assert "Advice based on old project" in window.transcript.get("1.0", "end")
+    finally:
+        window._close()
+        root.destroy()

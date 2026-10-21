@@ -74,8 +74,10 @@ rechecks the active project revision around diagnostic/CFD evidence collection,
 and rejects a snapshot if a project switch, in-memory edit, or saved source
 path change occurred during collection. The same ProjectDocument instance is
 used for diagnostics and any imported CFD export. If the project changes
-*after* an accepted snapshot while a model is responding, the GUI warns that
-the suggestion concerns an older snapshot.
+*after* an accepted snapshot while a model is responding, the GUI marks the
+resulting suggestion **STALE project/CFD snapshot**. The warning persists when
+the conversation is redrawn, saved, or reopened; stale exchanges are not used
+as model history for a current revision.
 
 ## Local model (default, no external cloud upload)
 

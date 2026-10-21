@@ -214,10 +214,15 @@ class AssistantWindow(tk.Toplevel):
             self._session_id, self._active_project_key
         )
         for message in chat.messages:
-            self._append(
-                "You" if message.role == "user" else "AI suggestion (unverified)",
-                message.content,
-            )
+            # Stale answers are retained for audit, but MUST remain visibly
+            # marked even after chats are saved, reloaded or switched.
+            if message.role == "user":
+                speaker = "You"
+            elif message.metadata.get("stale_project_on_receipt") is True:
+                speaker = "AI suggestion (STALE project/CFD snapshot; unverified)"
+            else:
+                speaker = "AI suggestion (unverified)"
+            self._append(speaker, message.content)
 
     def _on_session_selected(self, _event: tk.Event) -> None:
         selection = self.session_choice.current()

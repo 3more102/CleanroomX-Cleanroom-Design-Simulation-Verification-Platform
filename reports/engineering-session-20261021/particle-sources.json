@@ -1,0 +1,41 @@
+{
+  "schema": "cleanroomx.recorded-u-particle-sources.v1",
+  "source_iteration": "100",
+  "source_manifest_sha256": "ff25c6a55936dac0c4a485a773e56395537fe817854c072b931e6fd157eb2ae7",
+  "source_run_receipt_sha256": "6ba3d3364006138e4e119404e23c514c007125befdc80c084e7ef0f68de1dde4",
+  "observation_end_s": 2.0,
+  "sources": [
+    {
+      "source_id": "Source_process",
+      "enabled": true,
+      "position_m": [
+        2.75,
+        0.05,
+        0.75
+      ],
+      "particle_count": 4,
+      "start_time_s": 0.0,
+      "duration_s": 0.6,
+      "diameter_um": 5.0,
+      "particle_density_kg_m3": 1000.0,
+      "initial_velocity_m_s": null
+    },
+    {
+      "source_id": "Source_preparation",
+      "enabled": true,
+      "position_m": [
+        8.25,
+        0.05,
+        0.75
+      ],
+      "particle_count": 4,
+      "start_time_s": 0.3,
+      "duration_s": 0.6,
+      "diameter_um": 5.0,
+      "particle_density_kg_m3": 1000.0,
+      "initial_velocity_m_s": null
+    }
+  ],
+  "release_rule": "uniform_inclusive_endpoints_or_simultaneous_zero_duration",
+  "numerical_counts_not_physical_emission_rates": true
+}

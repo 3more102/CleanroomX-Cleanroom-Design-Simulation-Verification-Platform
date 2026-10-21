@@ -115,6 +115,58 @@ def test_scheduled_sources_use_actual_executed_openfoam_velocity(computed_report
     assert export_particle_source_csv(computed_report, run, tmp_path/"scheduled-tracks.csv").is_file()
 
 
+def test_original_polymesh_vtk_load_is_verified_against_real_solver_fields(executed_case, computed_report, tmp_path):
+    pytest.importorskip("vtk")
+    from cleanroomx.cfd_multizone_mesh import load_recorded_multizone_mesh, recorded_mesh_edge_actor
+    mesh = load_recorded_multizone_mesh(executed_case, computed_report)
+    assert mesh.GetNumberOfCells() == len(computed_report["cells"]) == 13210
+    assert mesh.GetCellData().GetArray("U").GetTuple3(0) == pytest.approx(computed_report["cells"][0]["velocity_m_s"])
+    actor = recorded_mesh_edge_actor(mesh, computed_report, room_id="process", plane_axis="z", plane_position_m=1.35)
+    actor.GetMapper().Update()
+    assert actor.GetMapper().GetInput().GetNumberOfLines() > 0
+    wrong = dict(computed_report, solver_reported_convergence=not computed_report["solver_reported_convergence"])
+    with pytest.raises(ValueError, match="differs from"):
+        load_recorded_multizone_mesh(executed_case, wrong)
+    damaged = tmp_path/"changed-mesh"
+    shutil.copytree(executed_case, damaged)
+    with (damaged/"constant/polyMesh/points").open("a") as stream:
+        stream.write("\n// changed after solver execution\n")
+    with pytest.raises(ValueError, match="Computed output changed"):
+        load_recorded_multizone_mesh(damaged, computed_report)
+
+
+def test_actual_vtk_original_mesh_worker_and_room_layer_selection(executed_case, computed_report):
+    pytest.importorskip("vtk")
+    import time
+    from cleanroomx.cfd_multizone_vtk import open_multizone_vtk_window, _recorded_cell_actor, select_recorded_cells
+    root = tk.Tk()
+    errors = []
+    root.report_callback_exception = lambda *args: errors.append(args)
+    viewer = open_multizone_vtk_window(root, computed_report, [], case_directory=executed_case)
+    try:
+        assert viewer._cleanroomx_load_verified_mesh()
+        deadline = time.monotonic()+15
+        while viewer._cleanroomx_mesh_state["busy"] and time.monotonic()<deadline:
+            root.update()
+            time.sleep(.01)
+        assert not viewer._cleanroomx_mesh_state["busy"]
+        assert viewer._cleanroomx_mesh_state["dataset"].GetNumberOfCells() == 13210
+        assert viewer._cleanroomx_mesh_var.get()
+        viewer._cleanroomx_room_var.set("process")
+        viewer._cleanroomx_plane_var.set("z")
+        viewer._cleanroomx_plane_position_var.set("1.35")
+        viewer._cleanroomx_refresh_scene()
+        root.update()
+        assert "Selection rejected" not in viewer._cleanroomx_view_status.get()
+        selected = select_recorded_cells(computed_report, room_id="process", plane_axis="z", plane_position_m=1.35)
+        actor = _recorded_cell_actor(viewer._cleanroomx_vtk_renderer)
+        assert actor.GetMapper().GetInput().GetNumberOfPoints() == len(selected)
+        assert errors == []
+    finally:
+        viewer.destroy()
+        root.destroy()
+
+
 def test_true_openfoam_saved_iteration_history_uses_p_u_and_phi_snapshots(
     executed_case, computed_report, tmp_path,
 ):

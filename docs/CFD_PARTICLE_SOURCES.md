@@ -25,6 +25,10 @@ OpenFOAM **SIMPLE iteration** recorded in the source provenance.
 
 The integrator retains its documented Stokes/Cunningham drag, inertia,
 buoyancy-adjusted gravity and piecewise-constant occupied-voxel U lookup.
+The source workflow uses the existing screening assumptions: air density
+1.2 kg/m³, dynamic viscosity 1.81×10⁻⁵ Pa·s, mean free path 66 nm and gravity
+(0, 0, −9.80665) m/s². The trajectory records these values. These fixed near-ambient
+air assumptions must be reviewed for any other gas/thermal operating condition.
 There is no interpolation across solid cells. Boundary contact remains
 **unresolved**: it is not classified as outlet escape, deposition or rebound.
 High slip Reynolds is reported by the existing model-validity warning.
@@ -35,6 +39,10 @@ High slip Reynolds is reported by the existing model-validity warning.
 
 1. Import a genuinely executed connected OpenFOAM case in **Multiroom CFD**.
 2. In **Computed sections**, choose **Open real VTK 3D**.
+   The iso/top/front camera presets change only the viewpoint. Toggle
+   **Recorded cells** and **Computed U arrows** to reveal interior particle
+   paths. **Load verified mesh** reads original polyMesh topology on a worker;
+   **Original mesh edges** follows the selected computed room/layer.
 3. Choose **Particle sources...**. Enable **Pick source in 3D** in the viewer
    and click an actual computed fluid point to prefill a new source.
 4. Set count, release start/duration, size, density and optional initial

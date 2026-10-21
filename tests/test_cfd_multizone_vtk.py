@@ -15,6 +15,7 @@ from cleanroomx.cfd_multizone_vtk import (
     computed_trace_polydata, sampled_velocity_glyph_actor, select_recorded_cells,
     seed_streamline_from_displayed_point, _recorded_cell_actor,
     seed_particle_from_displayed_point, computed_particle_polydata,
+    set_recorded_view_camera,
 )
 from cleanroomx.cfd_streamlines import trace_computed_streamline
 
@@ -46,6 +47,23 @@ def test_native_vtk_points_are_recorded_velocity_and_pressure_not_fabricated():
             cell["velocity_m_s"])
         assert data.GetPointData().GetArray("Computed speed (m/s)").GetTuple1(i) == pytest.approx(1.)
         assert data.GetPointData().GetArray("Computed pressure relative (Pa)").GetTuple1(i) == pytest.approx(i-1)
+
+
+def test_camera_presets_and_field_visibility_preserve_recorded_data():
+    report = _source()
+    renderer = build_multizone_vtk_renderer(report, [], field_points=False)
+    actor = _recorded_cell_actor(renderer)
+    assert not actor.GetVisibility()
+    assert actor.GetMapper().GetInput().GetNumberOfPoints() == len(report["cells"])
+    for preset in ("iso", "top", "front"):
+        set_recorded_view_camera(renderer, preset)
+        camera = renderer.GetActiveCamera()
+        assert all(math.isfinite(x) for x in camera.GetPosition())
+        assert actor.GetMapper().GetInput().GetPoint(0) == pytest.approx(report["cells"][0]["center_m"])
+    with pytest.raises(ValueError, match="Camera preset"):
+        set_recorded_view_camera(renderer, "invalid")
+    with pytest.raises(ValueError, match="visibility"):
+        build_multizone_vtk_renderer(report, [], field_points="false")
 
 
 def test_native_vtk_3d_trace_comes_only_from_this_solver_run():

@@ -1965,6 +1965,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         inspector = ttk.Frame(self._body, padding=(10, 8))
         self._inspector_frame = inspector
         self._body.add(inspector, weight=2)
+        self._body.bind("<Configure>", self._keep_inspector_readable, add="+")
         inspector_header = ttk.Frame(
             inspector,
             style="CX.PanelHeader.TFrame",
@@ -2144,6 +2145,18 @@ class SpatialDesignWorkspace(ttk.Frame):
             return False
         return str(frame) in {str(item) for item in body.panes()}
 
+    def _keep_inspector_readable(self, _event=None) -> None:
+        """Protect room/device properties from a large view's requested width."""
+        if not self.inspector_visible():
+            return
+        width = self._body.winfo_width()
+        if width < 560:
+            return
+        position = self._body.sashpos(0)
+        bounded = max(260, min(position, width-280))
+        if bounded != position:
+            self._body.sashpos(0, bounded)
+
     def set_inspector_visible(self, visible: bool) -> None:
         frame = getattr(self, "_inspector_frame", None)
         body = getattr(self, "_body", None)
@@ -2154,6 +2167,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._inspector_visible.set(requested)
         if requested and not present:
             body.add(frame, weight=2)
+            self._keep_inspector_readable()
         elif not requested and present:
             body.forget(frame)
         state = "shown" if requested else "hidden"

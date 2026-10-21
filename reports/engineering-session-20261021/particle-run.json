@@ -1,0 +1,2424 @@
+{
+  "schema": "cleanroomx.scheduled-particle-screening.v1",
+  "configuration": {
+    "schema": "cleanroomx.recorded-u-particle-sources.v1",
+    "source_iteration": "100",
+    "source_manifest_sha256": "ff25c6a55936dac0c4a485a773e56395537fe817854c072b931e6fd157eb2ae7",
+    "source_run_receipt_sha256": "6ba3d3364006138e4e119404e23c514c007125befdc80c084e7ef0f68de1dde4",
+    "observation_end_s": 2.0,
+    "sources": [
+      {
+        "source_id": "Source_process",
+        "enabled": true,
+        "position_m": [
+          2.75,
+          0.05,
+          0.75
+        ],
+        "particle_count": 4,
+        "start_time_s": 0.0,
+        "duration_s": 0.6,
+        "diameter_um": 5.0,
+        "particle_density_kg_m3": 1000.0,
+        "initial_velocity_m_s": null
+      },
+      {
+        "source_id": "Source_preparation",
+        "enabled": true,
+        "position_m": [
+          8.25,
+          0.05,
+          0.75
+        ],
+        "particle_count": 4,
+        "start_time_s": 0.3,
+        "duration_s": 0.6,
+        "diameter_um": 5.0,
+        "particle_density_kg_m3": 1000.0,
+        "initial_velocity_m_s": null
+      }
+    ],
+    "release_rule": "uniform_inclusive_endpoints_or_simultaneous_zero_duration",
+    "numerical_counts_not_physical_emission_rates": true
+  },
+  "tracks": [
+    {
+      "schema": "cleanroomx.frozen-field-particle-screening.v1",
+      "source_schema": "cleanroomx.multizone-results.v1",
+      "source_iteration": "100",
+      "source_manifest_sha256": "ff25c6a55936dac0c4a485a773e56395537fe817854c072b931e6fd157eb2ae7",
+      "source_run_receipt_sha256": "6ba3d3364006138e4e119404e23c514c007125befdc80c084e7ef0f68de1dde4",
+      "model": "one_way_stokes_cunningham_gravity_frozen_recorded_u",
+      "validated_particle_transport": false,
+      "frozen_steady_velocity_no_solver_transient": true,
+      "turbulent_dispersion_modeled": false,
+      "deposition_or_resuspension_modeled": false,
+      "diameter_um": 5.0,
+      "particle_density_kg_m3": 1000.0,
+      "air_density_kg_m3": 1.2,
+      "air_dynamic_viscosity_pa_s": 1.81e-05,
+      "cunningham_slip_correction": 1.0331848,
+      "particle_relaxation_s": 7.928060159607118e-05,
+      "initial_particle_velocity_m_s": [
+        0.201109445,
+        -0.05395350515,
+        -0.7483770333
+      ],
+      "gravity_m_s2": [
+        0.0,
+        0.0,
+        -9.80665
+      ],
+      "max_steps": 4000,
+      "slip_mean_free_path_m": 6.6e-08,
+      "max_time_s": 2.0,
+      "max_step_s": 0.05,
+      "max_slip_reynolds": 0.4351235603610571,
+      "stokes_regime_warning": false,
+      "termination": "fluid_boundary_contact_unresolved",
+      "points": [
+        {
+          "xyz_m": [
+            2.75,
+            0.05,
+            0.75
+          ],
+          "elapsed_particle_s": 0.0,
+          "particle_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7483770333
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7483770333
+          ],
+          "slip_reynolds": 0.0,
+          "room_id": "process"
+        },
+        {
+          "xyz_m": [
+            2.755172698655373,
+            0.04861227192217611,
+            0.7307312216419911
+          ],
+          "elapsed_particle_s": 0.025720814133683576,
+          "particle_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7491535774391082
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7483770333
+          ],
+          "slip_reynolds": 0.0002574179466656698,
+          "room_id": "process"
+        },
+        {
+          "xyz_m": [
+            2.7603404251443537,
+            0.047225877773770894,
+            0.7114809035555041
+          ],
+          "elapsed_particle_s": 0.0514169045832439,
+          "particle_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7491535774391082
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7483770333
+          ],
+          "slip_reynolds": 0.0002574179466656698,
+          "room_id": "process"
+        },
+        {
+          "xyz_m": [
+            2.7655081516333344,
+            0.045839483625365676,
+            0.6922305854690171
+          ],
+          "elapsed_particle_s": 0.07711299503280422,
+          "particle_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7491535774391082
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7483770333
+          ],
+          "slip_reynolds": 0.0002574179466656698,
+          "room_id": "process"
+        },
+        {
+          "xyz_m": [
+            2.770675878122315,
+            0.04445308947696046,
+            0.67298026738253
+          ],
+          "elapsed_particle_s": 0.10280908548236455,
+          "particle_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7491535774391082
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7483770333
+          ],
+          "slip_reynolds": 0.0002574179466656698,
+          "room_id": "process"
+        },
+        {
+          "xyz_m": [
+            2.7758436046112958,
+            0.04306669532855524,
+            0.653729949296043
+          ],
+          "elapsed_particle_s": 0.12850517593192487,
+          "particle_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7491535774391082
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7483770333
+          ],
+          "slip_reynolds": 0.0002574179466656698,
+          "room_id": "process"
+        },
+        {
+          "xyz_m": [
+            2.7810113311002764,
+            0.04168030118015002,
+            0.634479631209556
+          ],
+          "elapsed_particle_s": 0.15420126638148518,
+          "particle_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7491535774391082
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7483770333
+          ],
+          "slip_reynolds": 0.0002574179466656698,
+          "room_id": "process"
+        },
+        {
+          "xyz_m": [
+            2.786179057589257,
+            0.040293907031744805,
+            0.6152293131230689
+          ],
+          "elapsed_particle_s": 0.17989735683104552,
+          "particle_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7491535774391082
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7483770333
+          ],
+          "slip_reynolds": 0.0002574179466656698,
+          "room_id": "process"
+        },
+        {
+          "xyz_m": [
+            2.7913467840782378,
+            0.03890751288333959,
+            0.5959789950365819
+          ],
+          "elapsed_particle_s": 0.20559344728060586,
+          "particle_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7491535774391082
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.2761424343,
+            -1.149623554,
+            -0.03022684039
+          ],
+          "slip_reynolds": 0.4351235603610571,
+          "room_id": "process"
+        },
+        {
+          "xyz_m": [
+            2.7960074278256823,
+            0.019566634162532837,
+            0.5953981265673163
+          ],
+          "elapsed_particle_s": 0.22249266966852013,
+          "particle_velocity_m_s": [
+            0.2761424343,
+            -1.149623554,
+            -0.03100338452910814
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.2761424343,
+            -1.149623554,
+            -0.03022684039
+          ],
+          "slip_reynolds": 0.0002574179466656825,
+          "room_id": "process"
+        },
+        {
+          "xyz_m": [
+            2.8006739409745256,
+            0.00013922002909874664,
+            0.5948742023760544
+          ],
+          "elapsed_particle_s": 0.23939160503378676,
+          "particle_velocity_m_s": [
+            0.2761424343,
+            -1.149623554,
+            -0.03100338452910814
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.2761424343,
+            -1.149623554,
+            -0.03022684039
+          ],
+          "slip_reynolds": 0.0002574179466656825,
+          "room_id": "process"
+        },
+        {
+          "xyz_m": [
+            2.8007073818948105,
+            3.1908043885580696e-10,
+            0.5948704478581613
+          ],
+          "elapsed_particle_s": 0.23951270529267926,
+          "particle_velocity_m_s": [
+            0.2761424343,
+            -1.149623554,
+            -0.03100338452910814
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.2761424343,
+            -1.149623554,
+            -0.03022684039
+          ],
+          "slip_reynolds": 0.0002574179466656825,
+          "room_id": "process"
+        }
+      ],
+      "injection_source_id": "Source_process",
+      "source_particle_index": 1,
+      "release_time_s": 0.0
+    },
+    {
+      "schema": "cleanroomx.frozen-field-particle-screening.v1",
+      "source_schema": "cleanroomx.multizone-results.v1",
+      "source_iteration": "100",
+      "source_manifest_sha256": "ff25c6a55936dac0c4a485a773e56395537fe817854c072b931e6fd157eb2ae7",
+      "source_run_receipt_sha256": "6ba3d3364006138e4e119404e23c514c007125befdc80c084e7ef0f68de1dde4",
+      "model": "one_way_stokes_cunningham_gravity_frozen_recorded_u",
+      "validated_particle_transport": false,
+      "frozen_steady_velocity_no_solver_transient": true,
+      "turbulent_dispersion_modeled": false,
+      "deposition_or_resuspension_modeled": false,
+      "diameter_um": 5.0,
+      "particle_density_kg_m3": 1000.0,
+      "air_density_kg_m3": 1.2,
+      "air_dynamic_viscosity_pa_s": 1.81e-05,
+      "cunningham_slip_correction": 1.0331848,
+      "particle_relaxation_s": 7.928060159607118e-05,
+      "initial_particle_velocity_m_s": [
+        0.201109445,
+        -0.05395350515,
+        -0.7483770333
+      ],
+      "gravity_m_s2": [
+        0.0,
+        0.0,
+        -9.80665
+      ],
+      "max_steps": 4000,
+      "slip_mean_free_path_m": 6.6e-08,
+      "max_time_s": 1.8,
+      "max_step_s": 0.05,
+      "max_slip_reynolds": 0.4351235603610571,
+      "stokes_regime_warning": false,
+      "termination": "fluid_boundary_contact_unresolved",
+      "points": [
+        {
+          "xyz_m": [
+            2.75,
+            0.05,
+            0.75
+          ],
+          "elapsed_particle_s": 0.0,
+          "particle_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7483770333
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7483770333
+          ],
+          "slip_reynolds": 0.0,
+          "room_id": "process"
+        },
+        {
+          "xyz_m": [
+            2.755172698655373,
+            0.04861227192217611,
+            0.7307312216419911
+          ],
+          "elapsed_particle_s": 0.025720814133683576,
+          "particle_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7491535774391082
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7483770333
+          ],
+          "slip_reynolds": 0.0002574179466656698,
+          "room_id": "process"
+        },
+        {
+          "xyz_m": [
+            2.7603404251443537,
+            0.047225877773770894,
+            0.7114809035555041
+          ],
+          "elapsed_particle_s": 0.0514169045832439,
+          "particle_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7491535774391082
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7483770333
+          ],
+          "slip_reynolds": 0.0002574179466656698,
+          "room_id": "process"
+        },
+        {
+          "xyz_m": [
+            2.7655081516333344,
+            0.045839483625365676,
+            0.6922305854690171
+          ],
+          "elapsed_particle_s": 0.07711299503280422,
+          "particle_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7491535774391082
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7483770333
+          ],
+          "slip_reynolds": 0.0002574179466656698,
+          "room_id": "process"
+        },
+        {
+          "xyz_m": [
+            2.770675878122315,
+            0.04445308947696046,
+            0.67298026738253
+          ],
+          "elapsed_particle_s": 0.10280908548236455,
+          "particle_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7491535774391082
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7483770333
+          ],
+          "slip_reynolds": 0.0002574179466656698,
+          "room_id": "process"
+        },
+        {
+          "xyz_m": [
+            2.7758436046112958,
+            0.04306669532855524,
+            0.653729949296043
+          ],
+          "elapsed_particle_s": 0.12850517593192487,
+          "particle_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7491535774391082
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7483770333
+          ],
+          "slip_reynolds": 0.0002574179466656698,
+          "room_id": "process"
+        },
+        {
+          "xyz_m": [
+            2.7810113311002764,
+            0.04168030118015002,
+            0.634479631209556
+          ],
+          "elapsed_particle_s": 0.15420126638148518,
+          "particle_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7491535774391082
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7483770333
+          ],
+          "slip_reynolds": 0.0002574179466656698,
+          "room_id": "process"
+        },
+        {
+          "xyz_m": [
+            2.786179057589257,
+            0.040293907031744805,
+            0.6152293131230689
+          ],
+          "elapsed_particle_s": 0.17989735683104552,
+          "particle_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7491535774391082
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7483770333
+          ],
+          "slip_reynolds": 0.0002574179466656698,
+          "room_id": "process"
+        },
+        {
+          "xyz_m": [
+            2.7913467840782378,
+            0.03890751288333959,
+            0.5959789950365819
+          ],
+          "elapsed_particle_s": 0.20559344728060586,
+          "particle_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7491535774391082
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.2761424343,
+            -1.149623554,
+            -0.03022684039
+          ],
+          "slip_reynolds": 0.4351235603610571,
+          "room_id": "process"
+        },
+        {
+          "xyz_m": [
+            2.7960074278256823,
+            0.019566634162532837,
+            0.5953981265673163
+          ],
+          "elapsed_particle_s": 0.22249266966852013,
+          "particle_velocity_m_s": [
+            0.2761424343,
+            -1.149623554,
+            -0.03100338452910814
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.2761424343,
+            -1.149623554,
+            -0.03022684039
+          ],
+          "slip_reynolds": 0.0002574179466656825,
+          "room_id": "process"
+        },
+        {
+          "xyz_m": [
+            2.8006739409745256,
+            0.00013922002909874664,
+            0.5948742023760544
+          ],
+          "elapsed_particle_s": 0.23939160503378676,
+          "particle_velocity_m_s": [
+            0.2761424343,
+            -1.149623554,
+            -0.03100338452910814
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.2761424343,
+            -1.149623554,
+            -0.03022684039
+          ],
+          "slip_reynolds": 0.0002574179466656825,
+          "room_id": "process"
+        },
+        {
+          "xyz_m": [
+            2.8007073818948105,
+            3.1908043885580696e-10,
+            0.5948704478581613
+          ],
+          "elapsed_particle_s": 0.23951270529267926,
+          "particle_velocity_m_s": [
+            0.2761424343,
+            -1.149623554,
+            -0.03100338452910814
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.2761424343,
+            -1.149623554,
+            -0.03022684039
+          ],
+          "slip_reynolds": 0.0002574179466656825,
+          "room_id": "process"
+        }
+      ],
+      "injection_source_id": "Source_process",
+      "source_particle_index": 2,
+      "release_time_s": 0.19999999999999998
+    },
+    {
+      "schema": "cleanroomx.frozen-field-particle-screening.v1",
+      "source_schema": "cleanroomx.multizone-results.v1",
+      "source_iteration": "100",
+      "source_manifest_sha256": "ff25c6a55936dac0c4a485a773e56395537fe817854c072b931e6fd157eb2ae7",
+      "source_run_receipt_sha256": "6ba3d3364006138e4e119404e23c514c007125befdc80c084e7ef0f68de1dde4",
+      "model": "one_way_stokes_cunningham_gravity_frozen_recorded_u",
+      "validated_particle_transport": false,
+      "frozen_steady_velocity_no_solver_transient": true,
+      "turbulent_dispersion_modeled": false,
+      "deposition_or_resuspension_modeled": false,
+      "diameter_um": 5.0,
+      "particle_density_kg_m3": 1000.0,
+      "air_density_kg_m3": 1.2,
+      "air_dynamic_viscosity_pa_s": 1.81e-05,
+      "cunningham_slip_correction": 1.0331848,
+      "particle_relaxation_s": 7.928060159607118e-05,
+      "initial_particle_velocity_m_s": [
+        0.06807019497,
+        -0.07088309359,
+        -0.8038495271
+      ],
+      "gravity_m_s2": [
+        0.0,
+        0.0,
+        -9.80665
+      ],
+      "max_steps": 4000,
+      "slip_mean_free_path_m": 6.6e-08,
+      "max_time_s": 1.7,
+      "max_step_s": 0.05,
+      "max_slip_reynolds": 0.43074435148998347,
+      "stokes_regime_warning": false,
+      "termination": "fluid_boundary_contact_unresolved",
+      "points": [
+        {
+          "xyz_m": [
+            8.25,
+            0.05,
+            0.75
+          ],
+          "elapsed_particle_s": 0.0,
+          "particle_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8038495271
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8038495271
+          ],
+          "slip_reynolds": 0.0,
+          "room_id": "preparation"
+        },
+        {
+          "xyz_m": [
+            8.251679478457616,
+            0.04825111961635937,
+            0.730147728929754
+          ],
+          "elapsed_particle_s": 0.02467274345779064,
+          "particle_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8046260712391081
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8038495271
+          ],
+          "slip_reynolds": 0.0002574179466656698,
+          "room_id": "preparation"
+        },
+        {
+          "xyz_m": [
+            8.25335736141529,
+            0.046503900664301184,
+            0.7103142559563421
+          ],
+          "elapsed_particle_s": 0.04932204787675966,
+          "particle_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8046260712391081
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8038495271
+          ],
+          "slip_reynolds": 0.0002574179466656698,
+          "room_id": "preparation"
+        },
+        {
+          "xyz_m": [
+            8.255035244372964,
+            0.044756681712243,
+            0.6904807829829303
+          ],
+          "elapsed_particle_s": 0.07397135229572868,
+          "particle_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8046260712391081
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8038495271
+          ],
+          "slip_reynolds": 0.0002574179466656698,
+          "room_id": "preparation"
+        },
+        {
+          "xyz_m": [
+            8.256713127330638,
+            0.043009462760184816,
+            0.6706473100095184
+          ],
+          "elapsed_particle_s": 0.0986206567146977,
+          "particle_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8046260712391081
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8038495271
+          ],
+          "slip_reynolds": 0.0002574179466656698,
+          "room_id": "preparation"
+        },
+        {
+          "xyz_m": [
+            8.258391010288312,
+            0.04126224380812663,
+            0.6508138370361065
+          ],
+          "elapsed_particle_s": 0.12326996113366673,
+          "particle_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8046260712391081
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8038495271
+          ],
+          "slip_reynolds": 0.0002574179466656698,
+          "room_id": "preparation"
+        },
+        {
+          "xyz_m": [
+            8.260068893245986,
+            0.03951502485606845,
+            0.6309803640626946
+          ],
+          "elapsed_particle_s": 0.14791926555263574,
+          "particle_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8046260712391081
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8038495271
+          ],
+          "slip_reynolds": 0.0002574179466656698,
+          "room_id": "preparation"
+        },
+        {
+          "xyz_m": [
+            8.26174677620366,
+            0.037767805904010264,
+            0.6111468910892828
+          ],
+          "elapsed_particle_s": 0.17256856997160475,
+          "particle_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8046260712391081
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8038495271
+          ],
+          "slip_reynolds": 0.0002574179466656698,
+          "room_id": "preparation"
+        },
+        {
+          "xyz_m": [
+            8.263424659161334,
+            0.03602058695195208,
+            0.5913134181158709
+          ],
+          "elapsed_particle_s": 0.19721787439057376,
+          "particle_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8046260712391081
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.2872587763,
+            -1.143610621,
+            -0.104851898
+          ],
+          "slip_reynolds": 0.43074435148998347,
+          "room_id": "preparation"
+        },
+        {
+          "xyz_m": [
+            8.268257308651643,
+            0.01679711190572529,
+            0.5894745890370557
+          ],
+          "elapsed_particle_s": 0.21410169933534795,
+          "particle_velocity_m_s": [
+            0.2872587763,
+            -1.143610621,
+            -0.10562844213910814
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.2872587763,
+            -1.143610621,
+            -0.104851898
+          ],
+          "slip_reynolds": 0.00025741794666568363,
+          "room_id": "preparation"
+        },
+        {
+          "xyz_m": [
+            8.272476504954401,
+            3.7420987489267254e-10,
+            0.5879231407635521
+          ],
+          "elapsed_particle_s": 0.22878948836342433,
+          "particle_velocity_m_s": [
+            0.2872587763,
+            -1.143610621,
+            -0.10562844213910814
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.2872587763,
+            -1.143610621,
+            -0.104851898
+          ],
+          "slip_reynolds": 0.00025741794666568363,
+          "room_id": "preparation"
+        }
+      ],
+      "injection_source_id": "Source_preparation",
+      "source_particle_index": 1,
+      "release_time_s": 0.3
+    },
+    {
+      "schema": "cleanroomx.frozen-field-particle-screening.v1",
+      "source_schema": "cleanroomx.multizone-results.v1",
+      "source_iteration": "100",
+      "source_manifest_sha256": "ff25c6a55936dac0c4a485a773e56395537fe817854c072b931e6fd157eb2ae7",
+      "source_run_receipt_sha256": "6ba3d3364006138e4e119404e23c514c007125befdc80c084e7ef0f68de1dde4",
+      "model": "one_way_stokes_cunningham_gravity_frozen_recorded_u",
+      "validated_particle_transport": false,
+      "frozen_steady_velocity_no_solver_transient": true,
+      "turbulent_dispersion_modeled": false,
+      "deposition_or_resuspension_modeled": false,
+      "diameter_um": 5.0,
+      "particle_density_kg_m3": 1000.0,
+      "air_density_kg_m3": 1.2,
+      "air_dynamic_viscosity_pa_s": 1.81e-05,
+      "cunningham_slip_correction": 1.0331848,
+      "particle_relaxation_s": 7.928060159607118e-05,
+      "initial_particle_velocity_m_s": [
+        0.201109445,
+        -0.05395350515,
+        -0.7483770333
+      ],
+      "gravity_m_s2": [
+        0.0,
+        0.0,
+        -9.80665
+      ],
+      "max_steps": 4000,
+      "slip_mean_free_path_m": 6.6e-08,
+      "max_time_s": 1.6,
+      "max_step_s": 0.05,
+      "max_slip_reynolds": 0.4351235603610571,
+      "stokes_regime_warning": false,
+      "termination": "fluid_boundary_contact_unresolved",
+      "points": [
+        {
+          "xyz_m": [
+            2.75,
+            0.05,
+            0.75
+          ],
+          "elapsed_particle_s": 0.0,
+          "particle_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7483770333
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7483770333
+          ],
+          "slip_reynolds": 0.0,
+          "room_id": "process"
+        },
+        {
+          "xyz_m": [
+            2.755172698655373,
+            0.04861227192217611,
+            0.7307312216419911
+          ],
+          "elapsed_particle_s": 0.025720814133683576,
+          "particle_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7491535774391082
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7483770333
+          ],
+          "slip_reynolds": 0.0002574179466656698,
+          "room_id": "process"
+        },
+        {
+          "xyz_m": [
+            2.7603404251443537,
+            0.047225877773770894,
+            0.7114809035555041
+          ],
+          "elapsed_particle_s": 0.0514169045832439,
+          "particle_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7491535774391082
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7483770333
+          ],
+          "slip_reynolds": 0.0002574179466656698,
+          "room_id": "process"
+        },
+        {
+          "xyz_m": [
+            2.7655081516333344,
+            0.045839483625365676,
+            0.6922305854690171
+          ],
+          "elapsed_particle_s": 0.07711299503280422,
+          "particle_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7491535774391082
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7483770333
+          ],
+          "slip_reynolds": 0.0002574179466656698,
+          "room_id": "process"
+        },
+        {
+          "xyz_m": [
+            2.770675878122315,
+            0.04445308947696046,
+            0.67298026738253
+          ],
+          "elapsed_particle_s": 0.10280908548236455,
+          "particle_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7491535774391082
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7483770333
+          ],
+          "slip_reynolds": 0.0002574179466656698,
+          "room_id": "process"
+        },
+        {
+          "xyz_m": [
+            2.7758436046112958,
+            0.04306669532855524,
+            0.653729949296043
+          ],
+          "elapsed_particle_s": 0.12850517593192487,
+          "particle_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7491535774391082
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7483770333
+          ],
+          "slip_reynolds": 0.0002574179466656698,
+          "room_id": "process"
+        },
+        {
+          "xyz_m": [
+            2.7810113311002764,
+            0.04168030118015002,
+            0.634479631209556
+          ],
+          "elapsed_particle_s": 0.15420126638148518,
+          "particle_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7491535774391082
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7483770333
+          ],
+          "slip_reynolds": 0.0002574179466656698,
+          "room_id": "process"
+        },
+        {
+          "xyz_m": [
+            2.786179057589257,
+            0.040293907031744805,
+            0.6152293131230689
+          ],
+          "elapsed_particle_s": 0.17989735683104552,
+          "particle_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7491535774391082
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7483770333
+          ],
+          "slip_reynolds": 0.0002574179466656698,
+          "room_id": "process"
+        },
+        {
+          "xyz_m": [
+            2.7913467840782378,
+            0.03890751288333959,
+            0.5959789950365819
+          ],
+          "elapsed_particle_s": 0.20559344728060586,
+          "particle_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7491535774391082
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.2761424343,
+            -1.149623554,
+            -0.03022684039
+          ],
+          "slip_reynolds": 0.4351235603610571,
+          "room_id": "process"
+        },
+        {
+          "xyz_m": [
+            2.7960074278256823,
+            0.019566634162532837,
+            0.5953981265673163
+          ],
+          "elapsed_particle_s": 0.22249266966852013,
+          "particle_velocity_m_s": [
+            0.2761424343,
+            -1.149623554,
+            -0.03100338452910814
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.2761424343,
+            -1.149623554,
+            -0.03022684039
+          ],
+          "slip_reynolds": 0.0002574179466656825,
+          "room_id": "process"
+        },
+        {
+          "xyz_m": [
+            2.8006739409745256,
+            0.00013922002909874664,
+            0.5948742023760544
+          ],
+          "elapsed_particle_s": 0.23939160503378676,
+          "particle_velocity_m_s": [
+            0.2761424343,
+            -1.149623554,
+            -0.03100338452910814
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.2761424343,
+            -1.149623554,
+            -0.03022684039
+          ],
+          "slip_reynolds": 0.0002574179466656825,
+          "room_id": "process"
+        },
+        {
+          "xyz_m": [
+            2.8007073818948105,
+            3.1908043885580696e-10,
+            0.5948704478581613
+          ],
+          "elapsed_particle_s": 0.23951270529267926,
+          "particle_velocity_m_s": [
+            0.2761424343,
+            -1.149623554,
+            -0.03100338452910814
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.2761424343,
+            -1.149623554,
+            -0.03022684039
+          ],
+          "slip_reynolds": 0.0002574179466656825,
+          "room_id": "process"
+        }
+      ],
+      "injection_source_id": "Source_process",
+      "source_particle_index": 3,
+      "release_time_s": 0.39999999999999997
+    },
+    {
+      "schema": "cleanroomx.frozen-field-particle-screening.v1",
+      "source_schema": "cleanroomx.multizone-results.v1",
+      "source_iteration": "100",
+      "source_manifest_sha256": "ff25c6a55936dac0c4a485a773e56395537fe817854c072b931e6fd157eb2ae7",
+      "source_run_receipt_sha256": "6ba3d3364006138e4e119404e23c514c007125befdc80c084e7ef0f68de1dde4",
+      "model": "one_way_stokes_cunningham_gravity_frozen_recorded_u",
+      "validated_particle_transport": false,
+      "frozen_steady_velocity_no_solver_transient": true,
+      "turbulent_dispersion_modeled": false,
+      "deposition_or_resuspension_modeled": false,
+      "diameter_um": 5.0,
+      "particle_density_kg_m3": 1000.0,
+      "air_density_kg_m3": 1.2,
+      "air_dynamic_viscosity_pa_s": 1.81e-05,
+      "cunningham_slip_correction": 1.0331848,
+      "particle_relaxation_s": 7.928060159607118e-05,
+      "initial_particle_velocity_m_s": [
+        0.06807019497,
+        -0.07088309359,
+        -0.8038495271
+      ],
+      "gravity_m_s2": [
+        0.0,
+        0.0,
+        -9.80665
+      ],
+      "max_steps": 4000,
+      "slip_mean_free_path_m": 6.6e-08,
+      "max_time_s": 1.5,
+      "max_step_s": 0.05,
+      "max_slip_reynolds": 0.43074435148998347,
+      "stokes_regime_warning": false,
+      "termination": "fluid_boundary_contact_unresolved",
+      "points": [
+        {
+          "xyz_m": [
+            8.25,
+            0.05,
+            0.75
+          ],
+          "elapsed_particle_s": 0.0,
+          "particle_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8038495271
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8038495271
+          ],
+          "slip_reynolds": 0.0,
+          "room_id": "preparation"
+        },
+        {
+          "xyz_m": [
+            8.251679478457616,
+            0.04825111961635937,
+            0.730147728929754
+          ],
+          "elapsed_particle_s": 0.02467274345779064,
+          "particle_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8046260712391081
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8038495271
+          ],
+          "slip_reynolds": 0.0002574179466656698,
+          "room_id": "preparation"
+        },
+        {
+          "xyz_m": [
+            8.25335736141529,
+            0.046503900664301184,
+            0.7103142559563421
+          ],
+          "elapsed_particle_s": 0.04932204787675966,
+          "particle_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8046260712391081
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8038495271
+          ],
+          "slip_reynolds": 0.0002574179466656698,
+          "room_id": "preparation"
+        },
+        {
+          "xyz_m": [
+            8.255035244372964,
+            0.044756681712243,
+            0.6904807829829303
+          ],
+          "elapsed_particle_s": 0.07397135229572868,
+          "particle_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8046260712391081
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8038495271
+          ],
+          "slip_reynolds": 0.0002574179466656698,
+          "room_id": "preparation"
+        },
+        {
+          "xyz_m": [
+            8.256713127330638,
+            0.043009462760184816,
+            0.6706473100095184
+          ],
+          "elapsed_particle_s": 0.0986206567146977,
+          "particle_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8046260712391081
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8038495271
+          ],
+          "slip_reynolds": 0.0002574179466656698,
+          "room_id": "preparation"
+        },
+        {
+          "xyz_m": [
+            8.258391010288312,
+            0.04126224380812663,
+            0.6508138370361065
+          ],
+          "elapsed_particle_s": 0.12326996113366673,
+          "particle_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8046260712391081
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8038495271
+          ],
+          "slip_reynolds": 0.0002574179466656698,
+          "room_id": "preparation"
+        },
+        {
+          "xyz_m": [
+            8.260068893245986,
+            0.03951502485606845,
+            0.6309803640626946
+          ],
+          "elapsed_particle_s": 0.14791926555263574,
+          "particle_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8046260712391081
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8038495271
+          ],
+          "slip_reynolds": 0.0002574179466656698,
+          "room_id": "preparation"
+        },
+        {
+          "xyz_m": [
+            8.26174677620366,
+            0.037767805904010264,
+            0.6111468910892828
+          ],
+          "elapsed_particle_s": 0.17256856997160475,
+          "particle_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8046260712391081
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8038495271
+          ],
+          "slip_reynolds": 0.0002574179466656698,
+          "room_id": "preparation"
+        },
+        {
+          "xyz_m": [
+            8.263424659161334,
+            0.03602058695195208,
+            0.5913134181158709
+          ],
+          "elapsed_particle_s": 0.19721787439057376,
+          "particle_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8046260712391081
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.2872587763,
+            -1.143610621,
+            -0.104851898
+          ],
+          "slip_reynolds": 0.43074435148998347,
+          "room_id": "preparation"
+        },
+        {
+          "xyz_m": [
+            8.268257308651643,
+            0.01679711190572529,
+            0.5894745890370557
+          ],
+          "elapsed_particle_s": 0.21410169933534795,
+          "particle_velocity_m_s": [
+            0.2872587763,
+            -1.143610621,
+            -0.10562844213910814
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.2872587763,
+            -1.143610621,
+            -0.104851898
+          ],
+          "slip_reynolds": 0.00025741794666568363,
+          "room_id": "preparation"
+        },
+        {
+          "xyz_m": [
+            8.272476504954401,
+            3.7420987489267254e-10,
+            0.5879231407635521
+          ],
+          "elapsed_particle_s": 0.22878948836342433,
+          "particle_velocity_m_s": [
+            0.2872587763,
+            -1.143610621,
+            -0.10562844213910814
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.2872587763,
+            -1.143610621,
+            -0.104851898
+          ],
+          "slip_reynolds": 0.00025741794666568363,
+          "room_id": "preparation"
+        }
+      ],
+      "injection_source_id": "Source_preparation",
+      "source_particle_index": 2,
+      "release_time_s": 0.5
+    },
+    {
+      "schema": "cleanroomx.frozen-field-particle-screening.v1",
+      "source_schema": "cleanroomx.multizone-results.v1",
+      "source_iteration": "100",
+      "source_manifest_sha256": "ff25c6a55936dac0c4a485a773e56395537fe817854c072b931e6fd157eb2ae7",
+      "source_run_receipt_sha256": "6ba3d3364006138e4e119404e23c514c007125befdc80c084e7ef0f68de1dde4",
+      "model": "one_way_stokes_cunningham_gravity_frozen_recorded_u",
+      "validated_particle_transport": false,
+      "frozen_steady_velocity_no_solver_transient": true,
+      "turbulent_dispersion_modeled": false,
+      "deposition_or_resuspension_modeled": false,
+      "diameter_um": 5.0,
+      "particle_density_kg_m3": 1000.0,
+      "air_density_kg_m3": 1.2,
+      "air_dynamic_viscosity_pa_s": 1.81e-05,
+      "cunningham_slip_correction": 1.0331848,
+      "particle_relaxation_s": 7.928060159607118e-05,
+      "initial_particle_velocity_m_s": [
+        0.201109445,
+        -0.05395350515,
+        -0.7483770333
+      ],
+      "gravity_m_s2": [
+        0.0,
+        0.0,
+        -9.80665
+      ],
+      "max_steps": 4000,
+      "slip_mean_free_path_m": 6.6e-08,
+      "max_time_s": 1.4,
+      "max_step_s": 0.05,
+      "max_slip_reynolds": 0.4351235603610571,
+      "stokes_regime_warning": false,
+      "termination": "fluid_boundary_contact_unresolved",
+      "points": [
+        {
+          "xyz_m": [
+            2.75,
+            0.05,
+            0.75
+          ],
+          "elapsed_particle_s": 0.0,
+          "particle_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7483770333
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7483770333
+          ],
+          "slip_reynolds": 0.0,
+          "room_id": "process"
+        },
+        {
+          "xyz_m": [
+            2.755172698655373,
+            0.04861227192217611,
+            0.7307312216419911
+          ],
+          "elapsed_particle_s": 0.025720814133683576,
+          "particle_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7491535774391082
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7483770333
+          ],
+          "slip_reynolds": 0.0002574179466656698,
+          "room_id": "process"
+        },
+        {
+          "xyz_m": [
+            2.7603404251443537,
+            0.047225877773770894,
+            0.7114809035555041
+          ],
+          "elapsed_particle_s": 0.0514169045832439,
+          "particle_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7491535774391082
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7483770333
+          ],
+          "slip_reynolds": 0.0002574179466656698,
+          "room_id": "process"
+        },
+        {
+          "xyz_m": [
+            2.7655081516333344,
+            0.045839483625365676,
+            0.6922305854690171
+          ],
+          "elapsed_particle_s": 0.07711299503280422,
+          "particle_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7491535774391082
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7483770333
+          ],
+          "slip_reynolds": 0.0002574179466656698,
+          "room_id": "process"
+        },
+        {
+          "xyz_m": [
+            2.770675878122315,
+            0.04445308947696046,
+            0.67298026738253
+          ],
+          "elapsed_particle_s": 0.10280908548236455,
+          "particle_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7491535774391082
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7483770333
+          ],
+          "slip_reynolds": 0.0002574179466656698,
+          "room_id": "process"
+        },
+        {
+          "xyz_m": [
+            2.7758436046112958,
+            0.04306669532855524,
+            0.653729949296043
+          ],
+          "elapsed_particle_s": 0.12850517593192487,
+          "particle_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7491535774391082
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7483770333
+          ],
+          "slip_reynolds": 0.0002574179466656698,
+          "room_id": "process"
+        },
+        {
+          "xyz_m": [
+            2.7810113311002764,
+            0.04168030118015002,
+            0.634479631209556
+          ],
+          "elapsed_particle_s": 0.15420126638148518,
+          "particle_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7491535774391082
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7483770333
+          ],
+          "slip_reynolds": 0.0002574179466656698,
+          "room_id": "process"
+        },
+        {
+          "xyz_m": [
+            2.786179057589257,
+            0.040293907031744805,
+            0.6152293131230689
+          ],
+          "elapsed_particle_s": 0.17989735683104552,
+          "particle_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7491535774391082
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7483770333
+          ],
+          "slip_reynolds": 0.0002574179466656698,
+          "room_id": "process"
+        },
+        {
+          "xyz_m": [
+            2.7913467840782378,
+            0.03890751288333959,
+            0.5959789950365819
+          ],
+          "elapsed_particle_s": 0.20559344728060586,
+          "particle_velocity_m_s": [
+            0.201109445,
+            -0.05395350515,
+            -0.7491535774391082
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.2761424343,
+            -1.149623554,
+            -0.03022684039
+          ],
+          "slip_reynolds": 0.4351235603610571,
+          "room_id": "process"
+        },
+        {
+          "xyz_m": [
+            2.7960074278256823,
+            0.019566634162532837,
+            0.5953981265673163
+          ],
+          "elapsed_particle_s": 0.22249266966852013,
+          "particle_velocity_m_s": [
+            0.2761424343,
+            -1.149623554,
+            -0.03100338452910814
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.2761424343,
+            -1.149623554,
+            -0.03022684039
+          ],
+          "slip_reynolds": 0.0002574179466656825,
+          "room_id": "process"
+        },
+        {
+          "xyz_m": [
+            2.8006739409745256,
+            0.00013922002909874664,
+            0.5948742023760544
+          ],
+          "elapsed_particle_s": 0.23939160503378676,
+          "particle_velocity_m_s": [
+            0.2761424343,
+            -1.149623554,
+            -0.03100338452910814
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.2761424343,
+            -1.149623554,
+            -0.03022684039
+          ],
+          "slip_reynolds": 0.0002574179466656825,
+          "room_id": "process"
+        },
+        {
+          "xyz_m": [
+            2.8007073818948105,
+            3.1908043885580696e-10,
+            0.5948704478581613
+          ],
+          "elapsed_particle_s": 0.23951270529267926,
+          "particle_velocity_m_s": [
+            0.2761424343,
+            -1.149623554,
+            -0.03100338452910814
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.2761424343,
+            -1.149623554,
+            -0.03022684039
+          ],
+          "slip_reynolds": 0.0002574179466656825,
+          "room_id": "process"
+        }
+      ],
+      "injection_source_id": "Source_process",
+      "source_particle_index": 4,
+      "release_time_s": 0.6
+    },
+    {
+      "schema": "cleanroomx.frozen-field-particle-screening.v1",
+      "source_schema": "cleanroomx.multizone-results.v1",
+      "source_iteration": "100",
+      "source_manifest_sha256": "ff25c6a55936dac0c4a485a773e56395537fe817854c072b931e6fd157eb2ae7",
+      "source_run_receipt_sha256": "6ba3d3364006138e4e119404e23c514c007125befdc80c084e7ef0f68de1dde4",
+      "model": "one_way_stokes_cunningham_gravity_frozen_recorded_u",
+      "validated_particle_transport": false,
+      "frozen_steady_velocity_no_solver_transient": true,
+      "turbulent_dispersion_modeled": false,
+      "deposition_or_resuspension_modeled": false,
+      "diameter_um": 5.0,
+      "particle_density_kg_m3": 1000.0,
+      "air_density_kg_m3": 1.2,
+      "air_dynamic_viscosity_pa_s": 1.81e-05,
+      "cunningham_slip_correction": 1.0331848,
+      "particle_relaxation_s": 7.928060159607118e-05,
+      "initial_particle_velocity_m_s": [
+        0.06807019497,
+        -0.07088309359,
+        -0.8038495271
+      ],
+      "gravity_m_s2": [
+        0.0,
+        0.0,
+        -9.80665
+      ],
+      "max_steps": 4000,
+      "slip_mean_free_path_m": 6.6e-08,
+      "max_time_s": 1.3,
+      "max_step_s": 0.05,
+      "max_slip_reynolds": 0.43074435148998347,
+      "stokes_regime_warning": false,
+      "termination": "fluid_boundary_contact_unresolved",
+      "points": [
+        {
+          "xyz_m": [
+            8.25,
+            0.05,
+            0.75
+          ],
+          "elapsed_particle_s": 0.0,
+          "particle_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8038495271
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8038495271
+          ],
+          "slip_reynolds": 0.0,
+          "room_id": "preparation"
+        },
+        {
+          "xyz_m": [
+            8.251679478457616,
+            0.04825111961635937,
+            0.730147728929754
+          ],
+          "elapsed_particle_s": 0.02467274345779064,
+          "particle_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8046260712391081
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8038495271
+          ],
+          "slip_reynolds": 0.0002574179466656698,
+          "room_id": "preparation"
+        },
+        {
+          "xyz_m": [
+            8.25335736141529,
+            0.046503900664301184,
+            0.7103142559563421
+          ],
+          "elapsed_particle_s": 0.04932204787675966,
+          "particle_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8046260712391081
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8038495271
+          ],
+          "slip_reynolds": 0.0002574179466656698,
+          "room_id": "preparation"
+        },
+        {
+          "xyz_m": [
+            8.255035244372964,
+            0.044756681712243,
+            0.6904807829829303
+          ],
+          "elapsed_particle_s": 0.07397135229572868,
+          "particle_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8046260712391081
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8038495271
+          ],
+          "slip_reynolds": 0.0002574179466656698,
+          "room_id": "preparation"
+        },
+        {
+          "xyz_m": [
+            8.256713127330638,
+            0.043009462760184816,
+            0.6706473100095184
+          ],
+          "elapsed_particle_s": 0.0986206567146977,
+          "particle_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8046260712391081
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8038495271
+          ],
+          "slip_reynolds": 0.0002574179466656698,
+          "room_id": "preparation"
+        },
+        {
+          "xyz_m": [
+            8.258391010288312,
+            0.04126224380812663,
+            0.6508138370361065
+          ],
+          "elapsed_particle_s": 0.12326996113366673,
+          "particle_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8046260712391081
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8038495271
+          ],
+          "slip_reynolds": 0.0002574179466656698,
+          "room_id": "preparation"
+        },
+        {
+          "xyz_m": [
+            8.260068893245986,
+            0.03951502485606845,
+            0.6309803640626946
+          ],
+          "elapsed_particle_s": 0.14791926555263574,
+          "particle_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8046260712391081
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8038495271
+          ],
+          "slip_reynolds": 0.0002574179466656698,
+          "room_id": "preparation"
+        },
+        {
+          "xyz_m": [
+            8.26174677620366,
+            0.037767805904010264,
+            0.6111468910892828
+          ],
+          "elapsed_particle_s": 0.17256856997160475,
+          "particle_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8046260712391081
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8038495271
+          ],
+          "slip_reynolds": 0.0002574179466656698,
+          "room_id": "preparation"
+        },
+        {
+          "xyz_m": [
+            8.263424659161334,
+            0.03602058695195208,
+            0.5913134181158709
+          ],
+          "elapsed_particle_s": 0.19721787439057376,
+          "particle_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8046260712391081
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.2872587763,
+            -1.143610621,
+            -0.104851898
+          ],
+          "slip_reynolds": 0.43074435148998347,
+          "room_id": "preparation"
+        },
+        {
+          "xyz_m": [
+            8.268257308651643,
+            0.01679711190572529,
+            0.5894745890370557
+          ],
+          "elapsed_particle_s": 0.21410169933534795,
+          "particle_velocity_m_s": [
+            0.2872587763,
+            -1.143610621,
+            -0.10562844213910814
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.2872587763,
+            -1.143610621,
+            -0.104851898
+          ],
+          "slip_reynolds": 0.00025741794666568363,
+          "room_id": "preparation"
+        },
+        {
+          "xyz_m": [
+            8.272476504954401,
+            3.7420987489267254e-10,
+            0.5879231407635521
+          ],
+          "elapsed_particle_s": 0.22878948836342433,
+          "particle_velocity_m_s": [
+            0.2872587763,
+            -1.143610621,
+            -0.10562844213910814
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.2872587763,
+            -1.143610621,
+            -0.104851898
+          ],
+          "slip_reynolds": 0.00025741794666568363,
+          "room_id": "preparation"
+        }
+      ],
+      "injection_source_id": "Source_preparation",
+      "source_particle_index": 3,
+      "release_time_s": 0.7
+    },
+    {
+      "schema": "cleanroomx.frozen-field-particle-screening.v1",
+      "source_schema": "cleanroomx.multizone-results.v1",
+      "source_iteration": "100",
+      "source_manifest_sha256": "ff25c6a55936dac0c4a485a773e56395537fe817854c072b931e6fd157eb2ae7",
+      "source_run_receipt_sha256": "6ba3d3364006138e4e119404e23c514c007125befdc80c084e7ef0f68de1dde4",
+      "model": "one_way_stokes_cunningham_gravity_frozen_recorded_u",
+      "validated_particle_transport": false,
+      "frozen_steady_velocity_no_solver_transient": true,
+      "turbulent_dispersion_modeled": false,
+      "deposition_or_resuspension_modeled": false,
+      "diameter_um": 5.0,
+      "particle_density_kg_m3": 1000.0,
+      "air_density_kg_m3": 1.2,
+      "air_dynamic_viscosity_pa_s": 1.81e-05,
+      "cunningham_slip_correction": 1.0331848,
+      "particle_relaxation_s": 7.928060159607118e-05,
+      "initial_particle_velocity_m_s": [
+        0.06807019497,
+        -0.07088309359,
+        -0.8038495271
+      ],
+      "gravity_m_s2": [
+        0.0,
+        0.0,
+        -9.80665
+      ],
+      "max_steps": 4000,
+      "slip_mean_free_path_m": 6.6e-08,
+      "max_time_s": 1.1,
+      "max_step_s": 0.05,
+      "max_slip_reynolds": 0.43074435148998347,
+      "stokes_regime_warning": false,
+      "termination": "fluid_boundary_contact_unresolved",
+      "points": [
+        {
+          "xyz_m": [
+            8.25,
+            0.05,
+            0.75
+          ],
+          "elapsed_particle_s": 0.0,
+          "particle_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8038495271
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8038495271
+          ],
+          "slip_reynolds": 0.0,
+          "room_id": "preparation"
+        },
+        {
+          "xyz_m": [
+            8.251679478457616,
+            0.04825111961635937,
+            0.730147728929754
+          ],
+          "elapsed_particle_s": 0.02467274345779064,
+          "particle_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8046260712391081
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8038495271
+          ],
+          "slip_reynolds": 0.0002574179466656698,
+          "room_id": "preparation"
+        },
+        {
+          "xyz_m": [
+            8.25335736141529,
+            0.046503900664301184,
+            0.7103142559563421
+          ],
+          "elapsed_particle_s": 0.04932204787675966,
+          "particle_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8046260712391081
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8038495271
+          ],
+          "slip_reynolds": 0.0002574179466656698,
+          "room_id": "preparation"
+        },
+        {
+          "xyz_m": [
+            8.255035244372964,
+            0.044756681712243,
+            0.6904807829829303
+          ],
+          "elapsed_particle_s": 0.07397135229572868,
+          "particle_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8046260712391081
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8038495271
+          ],
+          "slip_reynolds": 0.0002574179466656698,
+          "room_id": "preparation"
+        },
+        {
+          "xyz_m": [
+            8.256713127330638,
+            0.043009462760184816,
+            0.6706473100095184
+          ],
+          "elapsed_particle_s": 0.0986206567146977,
+          "particle_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8046260712391081
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8038495271
+          ],
+          "slip_reynolds": 0.0002574179466656698,
+          "room_id": "preparation"
+        },
+        {
+          "xyz_m": [
+            8.258391010288312,
+            0.04126224380812663,
+            0.6508138370361065
+          ],
+          "elapsed_particle_s": 0.12326996113366673,
+          "particle_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8046260712391081
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8038495271
+          ],
+          "slip_reynolds": 0.0002574179466656698,
+          "room_id": "preparation"
+        },
+        {
+          "xyz_m": [
+            8.260068893245986,
+            0.03951502485606845,
+            0.6309803640626946
+          ],
+          "elapsed_particle_s": 0.14791926555263574,
+          "particle_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8046260712391081
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8038495271
+          ],
+          "slip_reynolds": 0.0002574179466656698,
+          "room_id": "preparation"
+        },
+        {
+          "xyz_m": [
+            8.26174677620366,
+            0.037767805904010264,
+            0.6111468910892828
+          ],
+          "elapsed_particle_s": 0.17256856997160475,
+          "particle_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8046260712391081
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8038495271
+          ],
+          "slip_reynolds": 0.0002574179466656698,
+          "room_id": "preparation"
+        },
+        {
+          "xyz_m": [
+            8.263424659161334,
+            0.03602058695195208,
+            0.5913134181158709
+          ],
+          "elapsed_particle_s": 0.19721787439057376,
+          "particle_velocity_m_s": [
+            0.06807019497,
+            -0.07088309359,
+            -0.8046260712391081
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.2872587763,
+            -1.143610621,
+            -0.104851898
+          ],
+          "slip_reynolds": 0.43074435148998347,
+          "room_id": "preparation"
+        },
+        {
+          "xyz_m": [
+            8.268257308651643,
+            0.01679711190572529,
+            0.5894745890370557
+          ],
+          "elapsed_particle_s": 0.21410169933534795,
+          "particle_velocity_m_s": [
+            0.2872587763,
+            -1.143610621,
+            -0.10562844213910814
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.2872587763,
+            -1.143610621,
+            -0.104851898
+          ],
+          "slip_reynolds": 0.00025741794666568363,
+          "room_id": "preparation"
+        },
+        {
+          "xyz_m": [
+            8.272476504954401,
+            3.7420987489267254e-10,
+            0.5879231407635521
+          ],
+          "elapsed_particle_s": 0.22878948836342433,
+          "particle_velocity_m_s": [
+            0.2872587763,
+            -1.143610621,
+            -0.10562844213910814
+          ],
+          "recorded_gas_velocity_m_s": [
+            0.2872587763,
+            -1.143610621,
+            -0.104851898
+          ],
+          "slip_reynolds": 0.00025741794666568363,
+          "room_id": "preparation"
+        }
+      ],
+      "injection_source_id": "Source_preparation",
+      "source_particle_index": 4,
+      "release_time_s": 0.8999999999999999
+    }
+  ],
+  "source_iteration": "100",
+  "source_manifest_sha256": "ff25c6a55936dac0c4a485a773e56395537fe817854c072b931e6fd157eb2ae7",
+  "source_run_receipt_sha256": "6ba3d3364006138e4e119404e23c514c007125befdc80c084e7ef0f68de1dde4",
+  "diagnostics": {
+    "schema": "cleanroomx.particle-screening-diagnostics.v1",
+    "source_schema": "cleanroomx.multizone-results.v1",
+    "source_iteration": "100",
+    "source_manifest_sha256": "ff25c6a55936dac0c4a485a773e56395537fe817854c072b931e6fd157eb2ae7",
+    "source_run_receipt_sha256": "6ba3d3364006138e4e119404e23c514c007125befdc80c084e7ef0f68de1dde4",
+    "number_of_screening_tracks": 8,
+    "aggregate": {
+      "sum_polygonal_path_length_m": 1.5882136491534402,
+      "mean_polygonal_path_length_m": 0.19852670614418003,
+      "mean_recorded_elapsed_particle_s": 0.2341510968280518,
+      "first_observed_room_transitions": 0,
+      "tracks_with_stokes_regime_warning": 0,
+      "termination_counts": {
+        "fluid_boundary_contact_unresolved": 8,
+        "max_particle_time": 0,
+        "max_steps": 0
+      },
+      "recorded_room_ids": [
+        "preparation",
+        "process"
+      ]
+    },
+    "tracks": [
+      {
+        "particle_index": 1,
+        "start_room_id": "process",
+        "end_room_id": "process",
+        "diameter_um": 5.0,
+        "particle_density_kg_m3": 1000.0,
+        "sample_count": 12,
+        "recorded_sample_elapsed_s": 0.23951270529267926,
+        "polygonal_path_length_m": 0.1998926172077552,
+        "end_to_end_displacement_m": 0.17069392635488104,
+        "polygonal_tortuosity": 1.171058756901336,
+        "sample_labelled_time_by_room_s": {
+          "process": 0.23951270529267926
+        },
+        "first_observed_room_transitions": [],
+        "first_observed_transition_count": 0,
+        "termination": "fluid_boundary_contact_unresolved",
+        "max_slip_reynolds": 0.4351235603610571,
+        "stokes_regime_warning": false,
+        "boundary_contact_is_not_deposition": true
+      },
+      {
+        "particle_index": 2,
+        "start_room_id": "process",
+        "end_room_id": "process",
+        "diameter_um": 5.0,
+        "particle_density_kg_m3": 1000.0,
+        "sample_count": 12,
+        "recorded_sample_elapsed_s": 0.23951270529267926,
+        "polygonal_path_length_m": 0.1998926172077552,
+        "end_to_end_displacement_m": 0.17069392635488104,
+        "polygonal_tortuosity": 1.171058756901336,
+        "sample_labelled_time_by_room_s": {
+          "process": 0.23951270529267926
+        },
+        "first_observed_room_transitions": [],
+        "first_observed_transition_count": 0,
+        "termination": "fluid_boundary_contact_unresolved",
+        "max_slip_reynolds": 0.4351235603610571,
+        "stokes_regime_warning": false,
+        "boundary_contact_is_not_deposition": true
+      },
+      {
+        "particle_index": 3,
+        "start_room_id": "preparation",
+        "end_room_id": "preparation",
+        "diameter_um": 5.0,
+        "particle_density_kg_m3": 1000.0,
+        "sample_count": 11,
+        "recorded_sample_elapsed_s": 0.22878948836342433,
+        "polygonal_path_length_m": 0.19716079508060483,
+        "end_to_end_displacement_m": 0.17109676074518643,
+        "polygonal_tortuosity": 1.1523350542809834,
+        "sample_labelled_time_by_room_s": {
+          "preparation": 0.22878948836342433
+        },
+        "first_observed_room_transitions": [],
+        "first_observed_transition_count": 0,
+        "termination": "fluid_boundary_contact_unresolved",
+        "max_slip_reynolds": 0.43074435148998347,
+        "stokes_regime_warning": false,
+        "boundary_contact_is_not_deposition": true
+      },
+      {
+        "particle_index": 4,
+        "start_room_id": "process",
+        "end_room_id": "process",
+        "diameter_um": 5.0,
+        "particle_density_kg_m3": 1000.0,
+        "sample_count": 12,
+        "recorded_sample_elapsed_s": 0.23951270529267926,
+        "polygonal_path_length_m": 0.1998926172077552,
+        "end_to_end_displacement_m": 0.17069392635488104,
+        "polygonal_tortuosity": 1.171058756901336,
+        "sample_labelled_time_by_room_s": {
+          "process": 0.23951270529267926
+        },
+        "first_observed_room_transitions": [],
+        "first_observed_transition_count": 0,
+        "termination": "fluid_boundary_contact_unresolved",
+        "max_slip_reynolds": 0.4351235603610571,
+        "stokes_regime_warning": false,
+        "boundary_contact_is_not_deposition": true
+      },
+      {
+        "particle_index": 5,
+        "start_room_id": "preparation",
+        "end_room_id": "preparation",
+        "diameter_um": 5.0,
+        "particle_density_kg_m3": 1000.0,
+        "sample_count": 11,
+        "recorded_sample_elapsed_s": 0.22878948836342433,
+        "polygonal_path_length_m": 0.19716079508060483,
+        "end_to_end_displacement_m": 0.17109676074518643,
+        "polygonal_tortuosity": 1.1523350542809834,
+        "sample_labelled_time_by_room_s": {
+          "preparation": 0.22878948836342433
+        },
+        "first_observed_room_transitions": [],
+        "first_observed_transition_count": 0,
+        "termination": "fluid_boundary_contact_unresolved",
+        "max_slip_reynolds": 0.43074435148998347,
+        "stokes_regime_warning": false,
+        "boundary_contact_is_not_deposition": true
+      },
+      {
+        "particle_index": 6,
+        "start_room_id": "process",
+        "end_room_id": "process",
+        "diameter_um": 5.0,
+        "particle_density_kg_m3": 1000.0,
+        "sample_count": 12,
+        "recorded_sample_elapsed_s": 0.23951270529267926,
+        "polygonal_path_length_m": 0.1998926172077552,
+        "end_to_end_displacement_m": 0.17069392635488104,
+        "polygonal_tortuosity": 1.171058756901336,
+        "sample_labelled_time_by_room_s": {
+          "process": 0.23951270529267926
+        },
+        "first_observed_room_transitions": [],
+        "first_observed_transition_count": 0,
+        "termination": "fluid_boundary_contact_unresolved",
+        "max_slip_reynolds": 0.4351235603610571,
+        "stokes_regime_warning": false,
+        "boundary_contact_is_not_deposition": true
+      },
+      {
+        "particle_index": 7,
+        "start_room_id": "preparation",
+        "end_room_id": "preparation",
+        "diameter_um": 5.0,
+        "particle_density_kg_m3": 1000.0,
+        "sample_count": 11,
+        "recorded_sample_elapsed_s": 0.22878948836342433,
+        "polygonal_path_length_m": 0.19716079508060483,
+        "end_to_end_displacement_m": 0.17109676074518643,
+        "polygonal_tortuosity": 1.1523350542809834,
+        "sample_labelled_time_by_room_s": {
+          "preparation": 0.22878948836342433
+        },
+        "first_observed_room_transitions": [],
+        "first_observed_transition_count": 0,
+        "termination": "fluid_boundary_contact_unresolved",
+        "max_slip_reynolds": 0.43074435148998347,
+        "stokes_regime_warning": false,
+        "boundary_contact_is_not_deposition": true
+      },
+      {
+        "particle_index": 8,
+        "start_room_id": "preparation",
+        "end_room_id": "preparation",
+        "diameter_um": 5.0,
+        "particle_density_kg_m3": 1000.0,
+        "sample_count": 11,
+        "recorded_sample_elapsed_s": 0.22878948836342433,
+        "polygonal_path_length_m": 0.19716079508060483,
+        "end_to_end_displacement_m": 0.17109676074518643,
+        "polygonal_tortuosity": 1.1523350542809834,
+        "sample_labelled_time_by_room_s": {
+          "preparation": 0.22878948836342433
+        },
+        "first_observed_room_transitions": [],
+        "first_observed_transition_count": 0,
+        "termination": "fluid_boundary_contact_unresolved",
+        "max_slip_reynolds": 0.43074435148998347,
+        "stokes_regime_warning": false,
+        "boundary_contact_is_not_deposition": true
+      }
+    ],
+    "interpretation": {
+      "validation": "one-way frozen recorded-U screening only; no certified transport",
+      "path_length": "chords between sampled integration vertices; lower bound on true curved distance",
+      "room_time": "left-endpoint sampled room label; crossing times are not resolved",
+      "room_transition": "first observed in a new room at a recorded sample, not measured door crossing",
+      "boundary_contact": "unresolved contact with computed fluid boundary, NOT deposition",
+      "not_inferred": [
+        "particle concentration",
+        "deposition efficiency",
+        "real residence time",
+        "time-varying OpenFOAM flow",
+        "turbulent dispersion",
+        "cleanroom certification",
+        "5 Pa closed-door performance"
+      ]
+    },
+    "validated_particle_transport": false,
+    "engineering_release": "HOLD"
+  },
+  "engineering_release": "HOLD",
+  "validated_particle_transport": false,
+  "boundary_contact_is_not_escape_or_deposition": true
+}

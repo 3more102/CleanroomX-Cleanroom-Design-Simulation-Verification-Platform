@@ -1,0 +1,122 @@
+/workspace/scratch/d2477ad7a66e/runtime-packages/root/opt/openfoam10/etc/config.sh/mpi: line 46: mpicc: command not found
+..FF.....................                                                [100%]
+=================================== FAILURES ===================================
+____ test_original_polymesh_vtk_load_is_verified_against_real_solver_fields ____
+
+executed_case = PosixPath('/workspace/scratch/d2477ad7a66e/validation/mesh-openfoam/case')
+computed_report = {'schema': 'cleanroomx.multizone-results.v1', 'status': 'computed_fields_require_engineering_review', 'scenario': 'all_doors_open', 'time_name': '100', ...}
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-9/test_original_polymesh_vtk_loa0')
+
+    def test_original_polymesh_vtk_load_is_verified_against_real_solver_fields(executed_case, computed_report, tmp_path):
+        pytest.importorskip("vtk")
+        from cleanroomx.cfd_multizone_mesh import load_recorded_multizone_mesh, recorded_mesh_edge_actor
+>       mesh = load_recorded_multizone_mesh(executed_case, computed_report)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_cfd_multizone_execution.py:121: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+directory = PosixPath('/workspace/scratch/d2477ad7a66e/validation/mesh-openfoam/case')
+report = {'schema': 'cleanroomx.multizone-results.v1', 'status': 'computed_fields_require_engineering_review', 'scenario': 'all_doors_open', 'time_name': '100', ...}
+
+    def load_recorded_multizone_mesh(directory, report):
+        """Return an independent VTK mesh; never reconstruct topology from points.
+    
+        The selected report must equal a fresh hashed-field import from this case.
+        VTK then reads the original polyMesh and U/p at the exact saved iteration.
+        Cell count, centres, cell types and U/p are checked against that import.
+        """
+        import vtk
+        root = Path(directory).resolve(strict=True)
+        if not 0 < len(report.get("cells", [])) <= MAX_3D_CELLS:
+            raise ValueError("Mesh review requires 1 to 100000 recorded CFD cells")
+        actual = analyze_multizone_case(
+            root, density_kg_m3=report["density_kg_m3"],
+            reference_room_id=report["pressure_reference"]["room_id"],
+            time_name=report["time_name"],
+            vertical_tolerance_m_s=report["vertical_tolerance_m_s"],
+        )
+        if actual != report:
+            raise ValueError("Mesh source differs from the selected recorded CFD report")
+        reader = vtk.vtkOpenFOAMReader()
+        # vtkOpenFOAMReader uses this path's parent directory. No marker file or
+        # solver output is created/modified by this read-only review operation.
+        reader.SetFileName(str(root/"cleanroomx-review.foam"))
+        reader.SetCreateCellToPoint(False)
+        reader.SetUse64BitFloats(True)
+        reader.UpdateInformation()
+        times = reader.GetTimeValues()
+        selected = float(report["time_name"])
+        if times is None or selected not in [times.GetValue(i) for i in range(times.GetNumberOfValues())]:
+            raise ValueError("VTK reader lacks the exact selected recorded iteration")
+        reader.SetTimeValue(selected)
+        reader.SetCellArrayStatus("U", 1)
+        reader.SetCellArrayStatus("p", 1)
+        reader.Update()
+        if reader.GetErrorCode():
+            raise ValueError("VTK OpenFOAM mesh reader failed")
+        output = reader.GetOutput()
+        internal = None
+        for index in range(output.GetNumberOfBlocks()):
+            name = output.GetMetaData(index).Get(vtk.vtkCompositeDataSet.NAME())
+            if name == "internalMesh":
+                internal = output.GetBlock(index)
+        if (internal is None or not internal.IsA("vtkUnstructuredGrid")
+            or internal.GetNumberOfCells() != len(report["cells"])):
+            raise ValueError("VTK internal mesh differs from recorded cell count")
+        gas, pressure = internal.GetCellData().GetArray("U"), internal.GetCellData().GetArray("p")
+        if gas is None or pressure is None or gas.GetNumberOfTuples() != len(report["cells"]) or pressure.GetNumberOfTuples() != len(report["cells"]):
+            raise ValueError("VTK mesh lacks the selected recorded U/p arrays")
+        centers = vtk.vtkCellCenters()
+        centers.SetInputData(internal)
+        centers.Update()
+        points = centers.GetOutput().GetPoints()
+        reference = report["pressure_reference"]["kinematic_pressure_m2_s2"]
+        for index, cell in enumerate(report["cells"]):
+            if internal.GetCellType(index) != vtk.VTK_HEXAHEDRON:
+                raise ValueError("Recorded connected mesh requires original hexahedral cells")
+            if any(not math.isclose(a, b, rel_tol=0, abs_tol=1e-6)
+                   for a, b in zip(points.GetPoint(index), cell["center_m"])):
+                raise ValueError("VTK cell centres do not match original recorded C")
+            if any(not math.isclose(a, b, rel_tol=1e-10, abs_tol=1e-12)
+                   for a, b in zip(gas.GetTuple3(index), cell["velocity_m_s"])):
+>               raise ValueError("VTK cell velocities do not match original recorded U")
+E               ValueError: VTK cell velocities do not match original recorded U
+
+src/cleanroomx/cfd_multizone_mesh.py:73: ValueError
+________ test_actual_vtk_original_mesh_worker_and_room_layer_selection _________
+
+executed_case = PosixPath('/workspace/scratch/d2477ad7a66e/validation/mesh-openfoam/case')
+computed_report = {'schema': 'cleanroomx.multizone-results.v1', 'status': 'computed_fields_require_engineering_review', 'scenario': 'all_doors_open', 'time_name': '100', ...}
+
+    def test_actual_vtk_original_mesh_worker_and_room_layer_selection(executed_case, computed_report):
+        pytest.importorskip("vtk")
+        import time
+        from cleanroomx.cfd_multizone_vtk import open_multizone_vtk_window
+        root = tk.Tk()
+        errors = []
+        root.report_callback_exception = lambda *args: errors.append(args)
+        viewer = open_multizone_vtk_window(root, computed_report, [], case_directory=executed_case)
+        try:
+            assert viewer._cleanroomx_load_verified_mesh()
+            deadline = time.monotonic()+15
+            while viewer._cleanroomx_mesh_state["busy"] and time.monotonic()<deadline:
+                root.update()
+                time.sleep(.01)
+            assert not viewer._cleanroomx_mesh_state["busy"]
+>           assert viewer._cleanroomx_mesh_state["dataset"].GetNumberOfCells() == 13210
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           AttributeError: 'NoneType' object has no attribute 'GetNumberOfCells'
+
+tests/test_cfd_multizone_execution.py:153: AttributeError
+=============================== warnings summary ===============================
+tests/test_cfd_multizone_execution.py: 4 warnings
+tests/test_cfd_particle_sources_gui.py: 14 warnings
+  /opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/site-packages/./matplotlib/_api/deprecation.py:94: MatplotlibDeprecationWarning: Passing individual properties to FontProperties() positionally was deprecated in Matplotlib 3.10 and will be removed in 3.12. Please pass all properties via keyword arguments.
+    warn_external(warning, category=MatplotlibDeprecationWarning)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_cfd_multizone_execution.py::test_original_polymesh_vtk_load_is_verified_against_real_solver_fields
+FAILED tests/test_cfd_multizone_execution.py::test_actual_vtk_original_mesh_worker_and_room_layer_selection
+2 failed, 23 passed, 18 warnings in 36.50s

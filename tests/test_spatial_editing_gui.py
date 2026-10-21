@@ -474,13 +474,48 @@ def test_3d_xray_and_hover_are_view_only(app):
         for item_id in polygons
     )
 
-    workspace.canvas_3d.addtag_withtag("current", polygons[0])
-    workspace._on_3d_motion(type("Event", (), {"x": 0, "y": 0})())
+    # Exercise an actual motion event. Tk 9 manages the reserved 'current'
+    # tag itself; assigning it manually does not simulate a pointer hit.
+    canvas = workspace.canvas_3d
+    target = _Hit("room", room["id"])
+    position = None
+    for polygon in polygons:
+        x0, y0, x1, y1 = canvas.bbox(polygon)
+        for y in range(max(1, y0), min(canvas.winfo_height()-1, y1), 8):
+            for x in range(max(1, x0), min(canvas.winfo_width()-1, x1), 8):
+                items = canvas.find_overlapping(x, y, x, y)
+                if items and workspace._parse_hit(canvas.gettags(items[-1])) == target:
+                    position = (x, y)
+                    break
+            if position:
+                break
+        if position:
+            break
+    assert position is not None, "Expected a visible room face for native hover"
+    canvas.event_generate("<Motion>", x=position[0], y=position[1], warp=True)
+    app.root.update()
     assert workspace._hovered_3d == _Hit("room", room["id"])
 
     workspace._on_3d_leave()
     assert workspace._hovered_3d is None
     assert app.project.metadata == metadata_before
+
+
+def test_room_inspector_stays_readable_when_view_requests_excess_width(app):
+    workspace = app.spatial_workspace
+    workspace.set_workspace_mode("3d")
+    workspace.set_inspector_visible(True)
+    workspace.select_item("room", workspace.layout["rooms"][0]["id"])
+    app.root.geometry("1440x900")
+    app.root.update()
+    assert workspace._inspector_frame.winfo_width() >= 270
+    app.root.geometry("1050x680")
+    app.root.update()
+    assert workspace._inspector_frame.winfo_width() >= 270
+    assert workspace.canvas_3d.winfo_width() >= 240
+    workspace.set_inspector_visible(False)
+    app.root.update()
+    assert not workspace.inspector_visible()
 
 
 def test_invalid_3d_preset_is_rejected(app):

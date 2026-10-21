@@ -375,7 +375,7 @@ def sampled_velocity_glyph_actor(report, *, max_arrows=250,
 
 def build_multizone_vtk_renderer(report, traces, *, field="speed", vectors=True,
                                  room_id="all", plane_axis="all", plane_position_m=None,
-                                 particles=None):
+                                 particles=None, field_points=True):
     """VTK renderer with solver-derived field samples, line paths and room outlines.
 
     No OpenGL context is opened here, so testing does not require a display.
@@ -387,6 +387,8 @@ def build_multizone_vtk_renderer(report, traces, *, field="speed", vectors=True,
     particles_geometry=computed_particle_polydata(report,particles or [])
     if field not in ("speed", "pressure"):
         raise ValueError("Select speed or pressure for the 3D field")
+    if type(field_points) is not bool:
+        raise ValueError("Field point visibility must be a boolean")
     name = ("Computed speed (m/s)" if field == "speed"
             else "Computed pressure relative (Pa)")
     array = data.GetPointData().GetArray(name)
@@ -412,6 +414,7 @@ def build_multizone_vtk_renderer(report, traces, *, field="speed", vectors=True,
     actor = vtk.vtkActor()
     actor.SetMapper(mapper)
     actor.GetProperty().SetPointSize(4)
+    actor.SetVisibility(field_points)
     renderer.AddActor(actor)
 
     trajectory_mapper = vtk.vtkPolyDataMapper()
@@ -475,6 +478,8 @@ def build_multizone_vtk_renderer(report, traces, *, field="speed", vectors=True,
         f"Recorded {data.GetNumberOfPoints()} cells | iteration {report.get('time_name')} | "
         f"room {room_id} | plane {plane_axis}"
         + ("" if plane_axis=="all" else f"={plane_position_m:g} m")
+        + f"\n{len(particles or [])} numerical particle paths"
+        + (" | field cells hidden" if not field_points else "")
         + " | GOLD=steady U | GREEN=one-way particle screening (not certified)")
     annotation.SetDisplayPosition(15, 16)
     annotation.GetTextProperty().SetColor(.98,.98,.98)
@@ -484,7 +489,23 @@ def build_multizone_vtk_renderer(report, traces, *, field="speed", vectors=True,
     return renderer
 
 
-def open_multizone_vtk_window(parent, report, traces):
+def set_recorded_view_camera(renderer, preset="iso"):
+    """Camera-only presets; geometry and all numerical field values are unchanged."""
+    if preset not in ("iso","top","front"):
+        raise ValueError("Camera preset must be iso, top or front")
+    bounds=renderer.ComputeVisiblePropBounds()
+    center=[(bounds[2*i]+bounds[2*i+1])/2 for i in range(3)]
+    span=max(bounds[2*i+1]-bounds[2*i] for i in range(3))
+    direction={"iso":(1.,-1.3,1.),"top":(0.,0.,2.),"front":(0.,-2.,0.)}[preset]
+    camera=renderer.GetActiveCamera()
+    camera.SetFocalPoint(*center)
+    camera.SetPosition(*(center[i]+direction[i]*span for i in range(3)))
+    camera.SetViewUp(*( (0.,1.,0.) if preset=="top" else (0.,0.,1.) ))
+    renderer.ResetCamera()
+    renderer.ResetCameraClippingRange()
+
+
+def open_multizone_vtk_window(parent, report, traces, *, case_directory=None):
     """Open interactive 3D with robust support for pip wheels lacking VTK/Tk.
 
     Prefer embedded vtkTkRenderWindowInteractor when the native Tk plugin is
@@ -498,6 +519,7 @@ def open_multizone_vtk_window(parent, report, traces):
     vtk = _vtk()
     # Validate the complete recorded scene *before* opening a native window.
     renderer = build_multizone_vtk_renderer(report, traces)
+    set_recorded_view_camera(renderer,"iso")
     window = tk.Toplevel(parent)
     window.title("CleanroomX | Recorded CFD 3D controls")
     window.geometry("1120x760")
@@ -507,6 +529,8 @@ def open_multizone_vtk_window(parent, report, traces):
     render_window.SetWindowName("CleanroomX | Computed OpenFOAM 3D")
     field_var = tk.StringVar(value="speed")
     arrows_var = tk.BooleanVar(value=True)
+    field_points_var = tk.BooleanVar(value=True)
+    camera_var = tk.StringVar(value="iso")
     click_seed_var = tk.BooleanVar(value=False)
     particle_mode_var = tk.BooleanVar(value=False)
     particle_diameter_var = tk.StringVar(value="5")
@@ -519,6 +543,9 @@ def open_multizone_vtk_window(parent, report, traces):
     ensemble_events = queue.Queue()
     source_mode_var = tk.BooleanVar(value=False)
     source_panel = [None]
+    mesh_var = tk.BooleanVar(value=False)
+    mesh_events = queue.Queue()
+    mesh_state = {"busy":False,"dataset":None,"poll_id":None}
     playback_var = tk.DoubleVar(value=0.)
     playback_status = tk.StringVar(value="Particle playback shows recorded sample vertices only")
     playback_state = {"playing":False, "after_id":None}
@@ -551,6 +578,11 @@ def open_multizone_vtk_window(parent, report, traces):
         arrows_control = ttk.Checkbutton(
             controls,text="Computed U arrows",variable=arrows_var)
         arrows_control.pack(side="left",padx=12)
+        field_points_control=ttk.Checkbutton(controls,text="Recorded cells",variable=field_points_var)
+        field_points_control.pack(side="left",padx=8)
+        ttk.Label(controls,text="Camera:").pack(side="left",padx=(10,3))
+        camera_control=ttk.Combobox(controls,textvariable=camera_var,values=("iso","top","front"),state="readonly",width=7)
+        camera_control.pack(side="left")
         instructions = tk.StringVar(value="Rotate: drag | zoom: wheel | pan: Shift+drag")
         ttk.Label(controls,textvariable=instructions).pack(side="right")
         selection=ttk.Frame(window,padding=(8,0,8,8))
@@ -599,6 +631,8 @@ def open_multizone_vtk_window(parent, report, traces):
         source_controls.pack(fill="x")
         ttk.Checkbutton(source_controls,text="Pick source in 3D",variable=source_mode_var).pack(side="left")
         ttk.Label(source_controls,text="Magenta: enabled sources | Green: full computed paths; markers follow release time").pack(side="right")
+        mesh_controls=ttk.Frame(window,padding=(8,0,8,8))
+        mesh_controls.pack(fill="x")
         timeline_controls=ttk.Frame(window,padding=(8,0,8,8))
         timeline_controls.pack(fill="x")
         timeline_label=tk.StringVar(value="Particle elapsed time (s):")
@@ -630,8 +664,8 @@ def open_multizone_vtk_window(parent, report, traces):
         else:
             mode="native"
             holder.destroy()
-            window.geometry("1180x390")
-            window.minsize(900,360)
+            window.geometry("1180x430")
+            window.minsize(900,400)
             ttk.Label(window,padding=8,
                 text="3D scene opens in a separate native VTK window. Controls remain here.").pack(fill="x")
             render_window.SetSize(1100,760)
@@ -654,7 +688,7 @@ def open_multizone_vtk_window(parent, report, traces):
         marker_data=vtk.vtkPolyData()
         marker_data.SetPoints(marker_points)
         marker_sphere=vtk.vtkSphereSource()
-        marker_sphere.SetRadius(0.15*min(report["voxel_pitch_m"]))
+        marker_sphere.SetRadius(0.35*min(report["voxel_pitch_m"]))
         marker_sphere.SetThetaResolution(10)
         marker_sphere.SetPhiResolution(10)
         marker_glyph=vtk.vtkGlyph3D()
@@ -673,7 +707,7 @@ def open_multizone_vtk_window(parent, report, traces):
         source_data=vtk.vtkPolyData()
         source_data.SetPoints(source_points)
         source_sphere=vtk.vtkSphereSource()
-        source_sphere.SetRadius(.24*min(report["voxel_pitch_m"]))
+        source_sphere.SetRadius(.5*min(report["voxel_pitch_m"]))
         source_glyph=vtk.vtkGlyph3D()
         source_glyph.SetSourceConnection(source_sphere.GetOutputPort())
         source_glyph.SetInputData(source_data)
@@ -751,7 +785,7 @@ def open_multizone_vtk_window(parent, report, traces):
                 new=build_multizone_vtk_renderer(
                     report,traces,field=field_var.get(),vectors=arrows_var.get(),
                     room_id=room_var.get(),plane_axis=axis,plane_position_m=pos,
-                    particles=particles)
+                    particles=particles,field_points=field_points_var.get())
             except (ValueError,OverflowError) as exc:
                 view_status.set(f"Selection rejected: {exc}")
                 return
@@ -760,6 +794,11 @@ def open_multizone_vtk_window(parent, report, traces):
             new.AddActor(marker_actor)
             if source_points.GetNumberOfPoints():
                 new.AddActor(source_actor)
+            if mesh_var.get() and mesh_state["dataset"] is not None:
+                from .cfd_multizone_mesh import recorded_mesh_edge_actor
+                new.AddActor(recorded_mesh_edge_actor(
+                    mesh_state["dataset"],report,room_id=room_var.get(),
+                    plane_axis=axis,plane_position_m=pos))
             new.SetActiveCamera(camera)
             render_window.Render()
             window._cleanroomx_vtk_renderer=new
@@ -1168,6 +1207,45 @@ def open_multizone_vtk_window(parent, report, traces):
 
         ttk.Button(source_controls,text="Particle sources...",command=open_particle_sources).pack(side="left",padx=8)
 
+        def load_verified_mesh():
+            if case_directory is None or mesh_state["busy"]:
+                return False
+            mesh_state["busy"]=True
+            mesh_button.configure(state="disabled")
+            view_status.set("Reading original polyMesh on a worker; checking recorded C/U/p and source hashes")
+            def work():
+                try:
+                    from .cfd_multizone_mesh import load_recorded_multizone_mesh
+                    mesh_events.put(("result",load_recorded_multizone_mesh(case_directory,report)))
+                except Exception as exc:
+                    mesh_events.put(("error",str(exc)))
+            threading.Thread(target=work,daemon=True).start()
+            def poll_mesh():
+                mesh_state["poll_id"]=None
+                try:
+                    kind,value=mesh_events.get_nowait()
+                except queue.Empty:
+                    mesh_state["poll_id"]=window.after(60,poll_mesh)
+                    return
+                mesh_state["busy"]=False
+                mesh_button.configure(state="normal")
+                if kind=="error":
+                    view_status.set(f"Original mesh rejected: {value}")
+                    return
+                mesh_state["dataset"]=value
+                mesh_var.set(True)
+                refresh_scene()
+                view_status.set(f"Original OpenFOAM mesh verified: {value.GetNumberOfCells()} cells | engineering HOLD")
+            mesh_state["poll_id"]=window.after(60,poll_mesh)
+            return True
+
+        mesh_button=ttk.Button(
+            mesh_controls,text="Load verified mesh",command=load_verified_mesh,
+            state="normal" if case_directory is not None else "disabled")
+        mesh_button.pack(side="left",padx=6)
+        ttk.Checkbutton(mesh_controls,text="Original mesh edges",variable=mesh_var,command=refresh_scene).pack(side="left")
+        ttk.Label(mesh_controls,text="Original polyMesh topology; verified recorded cell centres and U/p. No mesh-independence claim.").pack(side="right")
+
         def seed_display_point(x,y):
             is_particle=particle_mode_var.get()
             if not source_mode_var.get() and len(particles if is_particle else traces)>=20:
@@ -1226,11 +1304,19 @@ def open_multizone_vtk_window(parent, report, traces):
         interactor.AddObserver("LeftButtonPressEvent",on_vtk_click,1.0)
         field_control.bind("<<ComboboxSelected>>",refresh_scene)
         arrows_control.configure(command=refresh_scene)
+        field_points_control.configure(command=refresh_scene)
+        def apply_camera(_event=None):
+            set_recorded_view_camera(window._cleanroomx_vtk_renderer,camera_var.get())
+            render_window.Render()
+        camera_control.bind("<<ComboboxSelected>>",apply_camera)
         window._cleanroomx_vtk_widget=widget
         window._cleanroomx_vtk_render_window=render_window
         window._cleanroomx_vtk_mode=mode
         window._cleanroomx_field_var=field_var
         window._cleanroomx_arrows_var=arrows_var
+        window._cleanroomx_field_points_var=field_points_var
+        window._cleanroomx_camera_var=camera_var
+        window._cleanroomx_apply_camera=apply_camera
         window._cleanroomx_room_var=room_var
         window._cleanroomx_plane_var=plane_var
         window._cleanroomx_plane_position_var=plane_position_var
@@ -1256,6 +1342,9 @@ def open_multizone_vtk_window(parent, report, traces):
         window._cleanroomx_source_mode_var=source_mode_var
         window._cleanroomx_open_particle_sources=open_particle_sources
         window._cleanroomx_source_marker_points=source_points
+        window._cleanroomx_load_verified_mesh=load_verified_mesh
+        window._cleanroomx_mesh_state=mesh_state
+        window._cleanroomx_mesh_var=mesh_var
         window._cleanroomx_traces=traces
         window._cleanroomx_seed_display_point=seed_display_point
         window._cleanroomx_export_traces_to_path=export_paths
@@ -1271,6 +1360,10 @@ def open_multizone_vtk_window(parent, report, traces):
             if event.widget is not window:
                 return
             pause_particle_playback()
+            mesh_pending=mesh_state.get("poll_id")
+            if mesh_pending is not None:
+                window.after_cancel(mesh_pending)
+                mesh_state["poll_id"]=None
             ensemble_pending=ensemble_state.get("poll_id")
             if ensemble_pending is not None:
                 try:

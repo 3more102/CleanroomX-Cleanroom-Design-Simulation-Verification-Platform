@@ -88,7 +88,46 @@ Milestone 1 was instead published through the authenticated GitHub connection as
 No force update was used. Further publication records are in the final session
 report and PR #1363; a description of tests is not a claim that CI has finished.
 
-## Engineering limitations and next priorities
+## Milestone 3 — original mesh, usable 3D review and actual captures
+
+- Added `cfd_multizone_mesh.py`: original VTK OpenFOAM polyMesh reader, bounded
+  cell counts, exact iteration selection, full canonical report/source-hash
+  agreement, recorded C matching, U/p storage-precision comparison and
+  post-read receipt/integrity checks. It never reconstructs mesh topology from
+  displayed cell points. VTK float32 field storage is compared with the exact
+  source rounding; canonical numerical values remain unchanged.
+- Added worker mesh loading, exact room/layer edge selection, field visibility
+  and iso/top/front cameras in the existing VTK viewer. Hidden field points
+  make interior source/particle paths inspectable. Glyph sizes are illustrative.
+- Protected the existing property inspector from being squeezed to an unreadable
+  strip by a wide viewport. Actual 1440×900 and 1050×680 interactions are tested.
+- Replaced one legacy hover test's manual reserved `current` tag assignment
+  with a genuine pointer-motion event, resolving its observed Tk 9 failure.
+- Added `scripts/capture_recorded_cfd_gui.py`. It imports an existing verified
+  solver case, opens the actual application/workspaces, computes scheduled
+  sources and saves actual window/framebuffer pixels with per-image hashes.
+  The published capture manifest records **17 images**, **zero GUI callback
+  errors**, actual source iteration **100** and its **unconverged** verdict.
+- Archived the original executed case, configuration, mesh, fields, solver logs
+  and receipts with the numerical/source/trajectory exports. Existing older
+  screenshots, reports and historical branches were preserved.
+
+Additional executed checks:
+
+```bash
+bash scripts/with_openfoam10.sh python -m pytest -q tests/test_cfd_multizone_execution.py tests/test_cfd_multizone_mesh.py tests/test_cfd_particle_sources_gui.py -ra
+# 25 passed, 0 failed, 0 skipped, 35.33 s; 22 Matplotlib warnings
+python -m pytest -q tests/test_spatial_editing_gui.py tests/test_cfd_particle_sources_gui.py tests/test_cfd_multizone_vtk_gui.py tests/test_cfd_multizone_vtk.py tests/test_cfd_multizone_mesh.py -ra
+# 83 passed, 0 failed, 0 skipped, 16.54 s; 40 Matplotlib warnings
+cleanroomx-gui --demo --smoke
+# CleanroomX GUI smoke: PASS
+```
+
+These GUI commands used the real display wrapper described above. The final
+full-suite result and retained logs are in
+`reports/engineering-session-20261021/REPORT.md` and `validation.json`.
+
+## Remaining engineering work
 
 - Closed-door leakage CFD and independently supported 5 Pa pressure control
   remain unvalidated. An analytical leakage-network comparison is a different
@@ -106,3 +145,5 @@ report and PR #1363; a description of tests is not a claim that CI has finished.
   divergent GUI/OpenFOAM implementations before any merge.
 
 Engineering release remains **HOLD**.
+
+Final complete local suite after the CI fixture correction: **2,704 passed, 0 failed, 1 skipped**, 179.52 s, 48 Matplotlib deprecation warnings. The optional native IFC smoke is the one skip. Display/no-display checks separately produced 5 passed and 5 capability skips. Source/field/mesh tests used actual Foundation v10 and a real display.

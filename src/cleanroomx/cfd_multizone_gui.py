@@ -1096,7 +1096,7 @@ class MultizoneCFDWindow(tk.Toplevel):
             return
         try:
             from .cfd_multizone_vtk import open_multizone_vtk_window
-            window=open_multizone_vtk_window(self,self.report,list(self.trace_paths))
+            window=open_multizone_vtk_window(self,self.report,list(self.trace_paths),case_directory=self.case_path.get() or None)
         except (RuntimeError,ImportError,ValueError,tk.TclError) as exc:
             messagebox.showerror("3D VTK viewer unavailable",str(exc),parent=self)
             return

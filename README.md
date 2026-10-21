@@ -8,6 +8,50 @@
 
 The current stable release is **v0.102.1**.
 
+## Active connected-CFD engineering workflow
+
+The development branch in [PR #1363](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/pull/1363)
+connects the existing desktop to real Foundation v10 case execution, recorded
+p/U/C/phi review, original mesh inspection and scheduled particle screening.
+The design-flow case shown below is **not solver-converged**. Closed-door 5 Pa
+performance, mesh independence and physical particle validation remain **HOLD**.
+
+| Stage | Existing implementation / source of displayed data |
+|---|---|
+| Geometry and properties | `spatial.py`, canonical project room/device model |
+| Connected case and mesh | `cfd_multizone.py`, generated dictionaries, blockMesh/checkMesh |
+| Execution and integrity | Foundation v10 processes, stage logs, manifest and receipt hashes |
+| Recorded fields and analysis | `cfd_multizone_results.py`, actual p/U/C/phi and face-flux balances |
+| Desktop / original 3D mesh | `cfd_multizone_gui.py`, `cfd_multizone_vtk.py`, `cfd_multizone_mesh.py` |
+| Scheduled particles | `cfd_particles.py`, `cfd_particle_sources.py`, `cfd_particle_sources_gui.py` |
+| Evidence | Recorded-cell sections, residuals, numerical population, CSV/JSON/HTML exports |
+
+Launch with `cleanroomx-gui --demo`; install optional 3D dependencies using
+`python -m pip install -e ".[cfd]"`. Actual solver execution requires a sourced
+[OpenFOAM Foundation v10](https://openfoam.org/download/10-ubuntu/) environment.
+Use the [multiroom workflow](docs/MULTIROOM_CFD_EXECUTION.md) or the explicit
+[Windows → WSL procedure](docs/WINDOWS_WSL_OPENFOAM_BRIDGE.md).
+
+### Actual application captures
+
+These images come from the running Tk application and native VTK framebuffer.
+Design arrows/targets express input intent. CFD views use recorded solver
+fields; particle paths use the stated frozen-field model.
+
+![Actual multiroom design and room inspector](docs/real-gui-screenshots-20261021/04-object-inspector.png)
+
+![Actual saved source editor with timed releases](docs/real-gui-screenshots-20261021/09-particle-injection.png)
+
+![Original verified OpenFOAM mesh, with computed velocity samples](docs/real-gui-screenshots-20261021/06-original-openfoam-mesh.png)
+
+![Actual camera close-up of computed particle paths](docs/real-gui-screenshots-20261021/17-particle-source-closeup.png)
+
+![Computed numerical population, not physical airborne concentration](docs/real-gui-screenshots-20261021/13-particle-population.png)
+
+[All actual captures](docs/real-gui-screenshots-20261021/README.md) ·
+[Engineering session report](reports/engineering-session-20261021/REPORT.md) ·
+[Current project state / remaining work](docs/PROJECT_STATE.md)
+
 ### Workstation and package-readiness diagnostics
 
 Use `cleanroomx-doctor` to check Python qualification, package and module

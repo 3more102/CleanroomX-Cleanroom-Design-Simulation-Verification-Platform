@@ -168,6 +168,12 @@ def test_actual_vtk_point_pick_prefills_source_and_scheduled_markers(root, tmp_p
     path = tmp_path/"vtk-sources.json"
     panel.save_configuration(path)
     assert json.loads(path.read_text())["sources"][0]["position_m"] == [1.5, .5, .5]
+    viewer._cleanroomx_field_points_var.set(False)
+    viewer._cleanroomx_refresh_scene()
+    viewer._cleanroomx_camera_var.set("top")
+    viewer._cleanroomx_apply_camera()
+    assert viewer._cleanroomx_vtk_renderer.GetActiveCamera().GetViewUp() == pytest.approx((0.,1.,0.))
+    assert len(viewer._cleanroomx_particles) == 3
     viewer.destroy()
     # X11 must unregister the closed native interactor before a second opens.
     reopened = open_multizone_vtk_window(root, _source(), [])

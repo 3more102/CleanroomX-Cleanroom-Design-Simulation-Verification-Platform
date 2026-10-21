@@ -47,6 +47,7 @@ jobs:
           tests/test_ai_assistant_plan.py
           tests/test_ai_assistant_cli.py
           tests/test_ai_cfd_evidence.py
+          tests/test_ai_cfd_replay.py
           tests/test_ai_cfd_followup.py
       - name: Run v0.95 solver-result-integrity compatibility regressions
         run: >-

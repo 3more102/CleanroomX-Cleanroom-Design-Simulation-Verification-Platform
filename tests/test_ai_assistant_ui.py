@@ -199,3 +199,47 @@ def test_ai_window_rejects_unmatched_cfd_without_attaching(tmp_path, monkeypatch
     finally:
         window._close()
         root.destroy()
+
+
+
+def test_ai_window_next_actions_includes_bound_cfd_followups(monkeypatch):
+    """Synthetic evidence tests UI wiring; does not assert solver authenticity."""
+    from cleanroomx.ai_assistant import build_assistant_context
+
+    root = _root()
+    root.withdraw()
+    project = new_project()
+    key = project_chat_key(None, unsaved_id="cfd-next-checks")
+    window = AssistantWindow(
+        root,
+        project_getter=lambda: project,
+        base_dir_getter=lambda: None,
+        project_key_getter=lambda: key,
+    )
+    evidence = {
+        "schema": "cleanroomx.ai-cfd-evidence",
+        "schema_version": 1,
+        "evidence_type": "exported_recorded_open_door_cfd",
+        "scenario": "all_doors_open",
+        "report_sha256": "a" * 64,
+        "saved_project_source_sha256": "b" * 64,
+        "engineering_release": "HOLD",
+        "closed_door_5pa_demonstrated": False,
+        "review_reasons": [
+            {"code": "OPEN_DOOR_SCENARIO", "message": "Open door recording."},
+        ],
+        "non_prescriptive_checks": ["Review original solver inputs."],
+    }
+    context = build_assistant_context(project)
+    context["cfd_evidence"] = evidence
+    monkeypatch.setattr(window, "_snapshot", lambda: context)
+    try:
+        window.review_action_plan()
+        transcript = window.transcript.get("1.0", "end")
+        assert "ENGINEERING NEXT-ACTIONS PLAN" in transcript
+        assert "RECORDED CFD NEXT CHECKS" in transcript
+        assert "SOLVER_ORIGIN_UNVERIFIED" in transcript
+        assert "No network or design changes" in window.status.get()
+    finally:
+        window._close()
+        root.destroy()

@@ -39,6 +39,9 @@ def test_saved_snapshot_triage_shows_recorded_drift_not_certification(gui,tmp_pa
     history=compare_recorded_iterations(_series())
     window.load_iteration_history(history)
     root.update()
+    assert "room_speed" in window.history_table["columns"]
+    latest_row=window.history_table.item(window.history_table.get_children()[-1],"values")
+    assert float(latest_row[-1])==pytest.approx(.04)
     assert window.tabs.select()==str(window.history_tab)
     assert window.tabs.tab(window.tabs.select(),"text")=="Iteration stability"
     dialog=window.open_convergence_triage()

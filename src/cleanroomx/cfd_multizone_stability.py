@@ -220,6 +220,7 @@ def export_recorded_iteration_history(history,directory):
                 "max_absolute_cell_imbalance_m3_s",
                 "global_signed_boundary_imbalance_m3_s",
                 "max_absolute_room_pressure_change_pa",
+                "max_absolute_room_speed_change_m_s",
                 "max_absolute_door_delta_change_pa",
                 "max_absolute_door_transfer_change_m3_s",
             ])
@@ -231,6 +232,7 @@ def export_recorded_iteration_history(history,directory):
                     snap["max_absolute_cell_imbalance_m3_s"],
                     snap["global_signed_boundary_imbalance_m3_s"],
                     d.get("max_absolute_room_pressure_change_pa"),
+                    d.get("max_absolute_room_speed_change_m_s"),
                     d.get("max_absolute_door_delta_change_pa"),
                     d.get("max_absolute_door_transfer_change_m3_s"),
                 ])

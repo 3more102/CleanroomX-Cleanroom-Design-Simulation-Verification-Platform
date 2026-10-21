@@ -231,17 +231,22 @@ class MultizoneCFDWindow(tk.Toplevel):
         ttk.Button(history_header,text="Numerical drift triage",
             command=self.open_convergence_triage).pack(side="right",padx=4)
         self.history_table=ttk.Treeview(
-            history_tab,columns=("iteration","converged","door_pa","door_flow","cell_sum","room_p"),
+            history_tab,columns=("iteration","converged","door_pa","door_flow","cell_sum","room_p","room_speed"),
             show="headings",height=6)
         for key,label in (
             ("iteration","SIMPLE iteration"),("converged","Selected converged?"),
             ("door_pa","Max Δ door Δp (Pa)"),("door_flow","Max Δ door transfer (m³/h)"),
             ("cell_sum","Σ absolute cell imbalance (m³/s)"),
             ("room_p","Max Δ room pressure (Pa)"),
+            ("room_speed","Max Δ room speed (m/s)"),
         ):
             self.history_table.heading(key,text=label)
             self.history_table.column(key,width=175,minwidth=110)
-        self.history_table.pack(fill="x",pady=7)
+        self.history_table.pack(fill="x",pady=(7,0))
+        history_horizontal=ttk.Scrollbar(
+            history_tab,orient="horizontal",command=self.history_table.xview)
+        self.history_table.configure(xscrollcommand=history_horizontal.set)
+        history_horizontal.pack(fill="x",pady=(0,7))
         self.history_pressure_canvas=tk.Canvas(
             history_tab,background="#101b2b",highlightthickness=0,height=205)
         self.history_pressure_canvas.pack(fill="both",expand=True,pady=4)
@@ -644,7 +649,9 @@ class MultizoneCFDWindow(tk.Toplevel):
                     f"{3600*change['max_absolute_door_transfer_change_m3_s']:.5g}",
                 f"{snap['sum_absolute_cell_imbalance_m3_s']:.5g}",
                 "—" if change is None else
-                    f"{change['max_absolute_room_pressure_change_pa']:.5g}"))
+                    f"{change['max_absolute_room_pressure_change_pa']:.5g}",
+                "—" if change is None else
+                    f"{change['max_absolute_room_speed_change_m_s']:.5g}"))
         final=history["last_saved_snapshot_change"]
         self.history_status.set(
             f"ENGINEERING HOLD | {len(history['snapshots'])} real saved SIMPLE iterations | "

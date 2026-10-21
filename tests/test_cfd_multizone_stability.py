@@ -130,6 +130,12 @@ def test_nonoverwriting_exports_reproducible_snapshot_csv_and_json(tmp_path):
     assert recorded["source_run_receipt_sha256"]=="b"*64
     text=(dest/"iteration-evolution.csv").read_text()
     assert "max_absolute_door_delta_change_pa" in text
+    assert "max_absolute_room_speed_change_m_s" in text
+    import csv
+    from io import StringIO
+    rows=list(csv.DictReader(StringIO(text)))
+    assert rows[0]["max_absolute_room_speed_change_m_s"] == ""
+    assert float(rows[-1]["max_absolute_room_speed_change_m_s"]) == pytest.approx(.04)
     assert len(text.splitlines())==4
     with pytest.raises(FileExistsError):
         export_recorded_iteration_history(report,dest)

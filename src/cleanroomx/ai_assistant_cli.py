@@ -16,6 +16,7 @@ from .ai_assistant_specialist import (
     SPECIALIST_FOCUSES, build_specialist_review, render_specialist_review,
 )
 from .ai_cfd_evidence import bound_cfd_evidence, format_cfd_evidence
+from .ai_cfd_replay import replay_recorded_cfd
 from .ai_cfd_followup import build_cfd_followup_plan, render_cfd_followup_plan
 from .project import (
     capture_project_file_revision,
@@ -60,6 +61,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--cfd-actions", action="store_true",
         help="Include source-bound, non-executed CFD follow-up checks; requires --cfd-export.",
     )
+    parser.add_argument(
+        "--cfd-case",
+        help="Recheck a retained OpenFOAM case against --cfd-export without running a solver.",
+    )
     return parser
 
 
@@ -68,12 +73,15 @@ def build_offline_review(
     actions: bool = False,
     max_findings: int = 15,
     cfd_export: str | Path | None = None,
+    cfd_case: str | Path | None = None,
     cfd_actions: bool = False,
     specialist: str | None = None,
 ) -> dict:
     """Return a revision-checked, side-effect-free review envelope."""
     if type(max_findings) is not int or not 1 <= max_findings <= 50:
         raise ValueError("max_findings must be an integer between 1 and 50")
+    if cfd_case is not None and cfd_export is None:
+        raise ValueError("--cfd-case requires --cfd-export")
     if cfd_actions and cfd_export is None:
         raise ValueError("--cfd-actions requires --cfd-export")
     source = Path(project_path).expanduser().resolve(strict=False)
@@ -86,6 +94,10 @@ def build_offline_review(
     if cfd_export is not None:
         context["cfd_evidence"] = bound_cfd_evidence(
             cfd_export, project=project, project_path=source,
+        )
+    if cfd_case is not None:
+        context["cfd_case_replay"] = replay_recorded_cfd(
+            cfd_export, cfd_case, project=project, project_path=source,
         )
     plan = build_assistant_action_plan(context) if actions else None
     cfd_plan = (
@@ -120,7 +132,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         result = build_offline_review(
             args.project, actions=args.actions, max_findings=args.max_findings,
-            cfd_export=args.cfd_export, cfd_actions=args.cfd_actions, specialist=args.specialist,
+            cfd_export=args.cfd_export, cfd_case=args.cfd_case, cfd_actions=args.cfd_actions, specialist=args.specialist,
         )
         if args.output_format == "json":
             output = json.dumps(
@@ -131,6 +143,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             output = format_offline_review(result["context"])
             if "cfd_evidence" in result["context"]:
                 output += "\n\n" + format_cfd_evidence(result["context"]["cfd_evidence"])
+            if "cfd_case_replay" in result["context"]:
+                replay = result["context"]["cfd_case_replay"]
+                output += (
+                    "\n\nRECORDED OPENFOAM CASE REPLAY — " + replay["status"]
+                    + "\nReport matches retained fields, logs and receipt: true"
+                    + "\nProducer authenticated: false; engineering release: HOLD"
+                    + "\n" + replay["note"]
+                )
             if result["action_plan"] is not None:
                 output += "\n\n" + render_assistant_action_plan(result["action_plan"])
             if result["cfd_followup_plan"] is not None:

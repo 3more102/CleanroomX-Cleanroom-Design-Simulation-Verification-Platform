@@ -36,8 +36,10 @@ The window has two independent functions:
    an unverified suggestion and is not used as solver/verification evidence.
 
 The assistant snapshot includes project name, in-memory SHA-256 identity,
-bounded analysis names/types, diagnostic severity/counts/findings, and
-retained verification status summaries. The diagnostic snapshot **does not include**
+bounded analysis names/types, diagnostic severity/counts/findings, the latest
+15 validated run-ledger metadata entries (status, timestamps, record digests),
+and retained verification status summaries. These run statuses are **not**
+CFD convergence claims. The diagnostic snapshot **does not include**
 raw room geometry, full analysis inputs, CFD fields, solver residual arrays,
 files, or project metadata. Names, diagnostic messages and previously entered chat messages can still
 contain sensitive information: inspect your project before enabling cloud mode.
@@ -100,6 +102,10 @@ requires a paid service.
   through assistant answers.
 - Model text is labeled *unverified engineering suggestion*.
 
+Select a **Review focus** of general, CFD, HVAC, particles or verification to
+steer explanations to that topic. These modes guide the same bounded evidence
+snapshot; they do not unlock hidden measurement data or execute solvers.
+
 The assistant is **not** a physical validation, commissioning, quality or
 regulatory compliance system. Diagnostic checks cover only configured
 model/data rules. The AI cannot independently confirm any value absent
@@ -134,6 +140,8 @@ Run:
 ```bash
 python -m pytest tests/test_ai_assistant.py tests/test_ai_assistant_chat.py -q
 python -m pytest tests/test_gui.py -q
+# With a graphical display/Xvfb:
+python -m pytest tests/test_ai_assistant_ui.py -q
 ```
 
 The former tests context boundaries, local/cloud opt-in, sanitized failures,

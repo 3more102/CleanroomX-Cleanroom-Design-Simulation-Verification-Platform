@@ -62,6 +62,9 @@ codes, privacy considerations, and limitations.
 
 ### Recorded-field particle sources
 
+- **Computed sections → Open real VTK 3D → Particle sources...** opens the
+  functional source table/editor. Pick a solved fluid cell in 3D, save source
+  properties, and run the complete collection on a cancellable worker.
 - Multiple source definitions with explicit release start, duration, numerical
   count, enablement and initial velocity, driven by recorded OpenFOAM U.
 - Reuses the existing one-way Stokes/Cunningham/inertia/gravity screening model.
@@ -70,6 +73,8 @@ codes, privacy considerations, and limitations.
   trajectory JSON/CSV export; at most 20 numerical particles per run.
 - Counts are numerical samples, not calibrated airborne concentrations.
   Boundary contact does not establish deposition or outlet escape.
+- The source review includes computed population graphs/tables, source glyphs,
+  JSON save/load, and a release-aware 3D timeline using actual integration samples.
 - [Source model and workflow](docs/CFD_PARTICLE_SOURCES.md) ·
   [Current engineering evidence and limitations](docs/PROJECT_STATE.md).
 

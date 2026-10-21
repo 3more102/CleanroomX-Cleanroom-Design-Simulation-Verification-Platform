@@ -517,6 +517,8 @@ def open_multizone_vtk_window(parent, report, traces):
         value="Select a room/layer to seed distinct recorded CFD cells (geometric, not statistical).")
     ensemble_state = {"busy":False,"poll_id":None}
     ensemble_events = queue.Queue()
+    source_mode_var = tk.BooleanVar(value=False)
+    source_panel = [None]
     playback_var = tk.DoubleVar(value=0.)
     playback_status = tk.StringVar(value="Particle playback shows recorded sample vertices only")
     playback_state = {"playing":False, "after_id":None}
@@ -593,9 +595,14 @@ def open_multizone_vtk_window(parent, report, traces):
         ttk.Label(
             ensemble_controls,textvariable=ensemble_status,
             wraplength=700).pack(side="right",padx=8)
+        source_controls=ttk.Frame(window,padding=(8,0,8,8))
+        source_controls.pack(fill="x")
+        ttk.Checkbutton(source_controls,text="Pick source in 3D",variable=source_mode_var).pack(side="left")
+        ttk.Label(source_controls,text="Magenta: enabled sources | Green: full computed paths; markers follow release time").pack(side="right")
         timeline_controls=ttk.Frame(window,padding=(8,0,8,8))
         timeline_controls.pack(fill="x")
-        ttk.Label(timeline_controls,text="Particle elapsed time (s):").pack(side="left")
+        timeline_label=tk.StringVar(value="Particle elapsed time (s):")
+        ttk.Label(timeline_controls,textvariable=timeline_label).pack(side="left")
         slider=tk.Scale(
             timeline_controls,from_=0,to=2,resolution=.01,orient="horizontal",
             length=300,showvalue=True,variable=playback_var)
@@ -623,8 +630,8 @@ def open_multizone_vtk_window(parent, report, traces):
         else:
             mode="native"
             holder.destroy()
-            window.geometry("1090x310")
-            window.minsize(760,280)
+            window.geometry("1180x390")
+            window.minsize(900,360)
             ttk.Label(window,padding=8,
                 text="3D scene opens in a separate native VTK window. Controls remain here.").pack(fill="x")
             render_window.SetSize(1100,760)
@@ -661,6 +668,21 @@ def open_multizone_vtk_window(parent, report, traces):
         marker_actor.SetMapper(marker_mapper)
         marker_actor.GetProperty().SetColor(.78,1.0,.26)
         renderer.AddActor(marker_actor)
+        source_points=vtk.vtkPoints()
+        source_points.SetDataTypeToDouble()
+        source_data=vtk.vtkPolyData()
+        source_data.SetPoints(source_points)
+        source_sphere=vtk.vtkSphereSource()
+        source_sphere.SetRadius(.24*min(report["voxel_pitch_m"]))
+        source_glyph=vtk.vtkGlyph3D()
+        source_glyph.SetSourceConnection(source_sphere.GetOutputPort())
+        source_glyph.SetInputData(source_data)
+        source_glyph.ScalingOff()
+        source_mapper=vtk.vtkPolyDataMapper()
+        source_mapper.SetInputConnection(source_glyph.GetOutputPort())
+        source_actor=vtk.vtkActor()
+        source_actor.SetMapper(source_mapper)
+        source_actor.GetProperty().SetColor(.95,.35,.85)
 
         def update_particle_markers(_value=None):
             # No artificial interpolation: hold the latest actual integration
@@ -736,6 +758,8 @@ def open_multizone_vtk_window(parent, report, traces):
             render_window.RemoveRenderer(old)
             render_window.AddRenderer(new)
             new.AddActor(marker_actor)
+            if source_points.GetNumberOfPoints():
+                new.AddActor(source_actor)
             new.SetActiveCamera(camera)
             render_window.Render()
             window._cleanroomx_vtk_renderer=new
@@ -1095,7 +1119,7 @@ def open_multizone_vtk_window(parent, report, traces):
                     return
                 particles.extend(result["new_tracks"])
                 horizon_recorded=max(
-                    p["points"][-1]["elapsed_particle_s"] for p in particles)
+                    p.get("release_time_s",0.)+p["points"][-1]["elapsed_particle_s"] for p in particles)
                 slider.configure(to=max(horizon_recorded,.01))
                 playback_var.set(0.)
                 refresh_scene()
@@ -1111,14 +1135,54 @@ def open_multizone_vtk_window(parent, report, traces):
             command=start_particle_ensemble)
         ensemble_button.pack(side="left",padx=8)
 
+        def show_sources(sources):
+            source_points.Reset()
+            for source in sources:
+                if source["enabled"]:
+                    source_points.InsertNextPoint(*source["position_m"])
+            source_points.Modified()
+            source_data.Modified()
+            refresh_scene()
+
+        def apply_source_run(result):
+            # Validate before replacing any existing particle collection.
+            computed_particle_polydata(report,result["tracks"])
+            pause_particle_playback()
+            particles[:]=copy.deepcopy(result["tracks"])
+            slider.configure(to=result["configuration"]["observation_end_s"])
+            timeline_label.set("Source observation time (s):")
+            playback_var.set(0.)
+            refresh_scene()
+            update_particle_markers()
+            view_status.set(f"{len(particles)} scheduled numerical paths | frozen U | engineering HOLD")
+
+        def open_particle_sources():
+            from .cfd_particle_sources_gui import ParticleSourcesWindow
+            if source_panel[0] is None or not source_panel[0].winfo_exists():
+                source_panel[0]=ParticleSourcesWindow(
+                    window,report,on_run=apply_source_run,on_sources=show_sources,
+                    scene_state=lambda:copy.deepcopy(particles))
+            source_panel[0].deiconify()
+            source_panel[0].lift()
+            return source_panel[0]
+
+        ttk.Button(source_controls,text="Particle sources...",command=open_particle_sources).pack(side="left",padx=8)
+
         def seed_display_point(x,y):
             is_particle=particle_mode_var.get()
-            if len(particles if is_particle else traces)>=20:
+            if not source_mode_var.get() and len(particles if is_particle else traces)>=20:
                 view_status.set("Maximum 20 paths per type; clear before adding more")
                 return False
             try:
                 point_id=pick_recorded_solver_point(
                     window._cleanroomx_vtk_renderer,x,y)
+                if source_mode_var.get():
+                    samples=select_recorded_cells(report,**displayed_selection)
+                    if type(point_id) is not int or not 0<=point_id<len(samples):
+                        raise ValueError("Source seed must be a visible recorded CFD fluid cell")
+                    open_particle_sources().new_source(samples[point_id]["center_m"])
+                    view_status.set("Fluid source selected; save its release parameters in Particle sources")
+                    return True
                 if is_particle:
                     particle=seed_particle_from_displayed_point(
                         report,particles,point_id,**displayed_selection,
@@ -1129,7 +1193,7 @@ def open_multizone_vtk_window(parent, report, traces):
                     # Bound the timeline to the actual recorded integration
                     # horizon, not the requested duration if it hit a wall.
                     actual_horizon=max(
-                        track["points"][-1]["elapsed_particle_s"]
+                        track.get("release_time_s",0.)+track["points"][-1]["elapsed_particle_s"]
                         for track in particles)
                     slider.configure(to=max(actual_horizon,.01))
                     playback_var.set(0.)
@@ -1155,7 +1219,7 @@ def open_multizone_vtk_window(parent, report, traces):
             return True
 
         def on_vtk_click(_caller,_event):
-            if click_seed_var.get():
+            if click_seed_var.get() or source_mode_var.get():
                 x,y=interactor.GetEventPosition()
                 seed_display_point(x,y)
 
@@ -1189,6 +1253,9 @@ def open_multizone_vtk_window(parent, report, traces):
         window._cleanroomx_ensemble_count_var=ensemble_count_var
         window._cleanroomx_ensemble_status=ensemble_status
         window._cleanroomx_ensemble_state=ensemble_state
+        window._cleanroomx_source_mode_var=source_mode_var
+        window._cleanroomx_open_particle_sources=open_particle_sources
+        window._cleanroomx_source_marker_points=source_points
         window._cleanroomx_traces=traces
         window._cleanroomx_seed_display_point=seed_display_point
         window._cleanroomx_export_traces_to_path=export_paths
@@ -1219,6 +1286,12 @@ def open_multizone_vtk_window(parent, report, traces):
                     pass
             if mode=="native":
                 interactor.TerminateApp()
+                # VTK 9.3 X11 removes terminated interactors from its shared
+                # registry in ProcessEvents(), before closing their displays.
+                # Finalizing the render window first leaves a stale display
+                # that can terminate Python when the next viewer opens.
+                if interactor.IsA("vtkXRenderWindowInteractor"):
+                    interactor.ProcessEvents()
             render_window.Finalize()
 
         window.bind("<Destroy>",cleanup,add="+")

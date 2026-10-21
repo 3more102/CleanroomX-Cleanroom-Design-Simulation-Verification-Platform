@@ -31,6 +31,37 @@ High slip Reynolds is reported by the existing model-validity warning.
 
 ## API and persistence
 
+### Desktop workflow
+
+1. Import a genuinely executed connected OpenFOAM case in **Multiroom CFD**.
+2. In **Computed sections**, choose **Open real VTK 3D**.
+3. Choose **Particle sources...**. Enable **Pick source in 3D** in the viewer
+   and click an actual computed fluid point to prefill a new source.
+4. Set count, release start/duration, size, density and optional initial
+   velocity, then **Save source**. Add/edit/delete sources or toggle enablement.
+5. Set observation end and **Run sources / replace particle paths**. This
+   explicitly replaces the viewer's current particle collection only after
+   the complete worker run succeeds. Cancellation, changed inputs or altered
+   scene paths discard the pending run without publishing partial paths.
+6. Review **Numerical population**, the exact count table, and the release-aware
+   3D timeline. Magenta glyphs identify enabled sources (display size is not
+   physical particle diameter). Green lines show full precomputed paths;
+   playback markers show only released particles at recorded sample positions.
+7. **Save sources** preserves the saved definitions and source identity.
+   **Load sources** rejects another run/iteration. **Export run JSON** and
+   **Export trajectory CSV** independently replay the computed run on a worker
+   before writing. Existing output files are never replaced.
+
+The source editor retains inputs while hidden. Save/load JSON is the explicit
+persistence route; source definitions are not silently added to the spatial
+project or assumed valid for a later CFD run. Unsaved form edits require
+**Save source** before execution. Editing saved inputs invalidates the population
+review; previously computed 3D paths remain visible until a successful rerun.
+
+Source integration and replay exports run away from the Tk thread. The worker
+does not manipulate VTK or Tk objects. Cooperative cancellation is checked
+inside integration steps and between releases.
+
 `cfd_particle_sources.py` supplies validation, source configuration export/import,
 atomic source integration, population accounting, independently replayed JSON
 export, and trajectory CSV export. Configurations are bound to the selected

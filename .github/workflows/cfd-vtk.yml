@@ -14,6 +14,8 @@ on:
       - "tests/test_cfd_particles.py"
       - "tests/test_cfd_particle_diagnostics.py"
       - "tests/test_cfd_particle_ensemble.py"
+      - "tests/test_cfd_particle_sources.py"
+      - "tests/test_cfd_particle_sources_gui.py"
       - "tests/test_cfd_particle_refinement.py"
       - "tests/test_cfd_convergence_triage.py"
       - "tests/test_cfd_convergence_triage_gui.py"
@@ -33,6 +35,8 @@ on:
       - "tests/test_cfd_particles.py"
       - "tests/test_cfd_particle_diagnostics.py"
       - "tests/test_cfd_particle_ensemble.py"
+      - "tests/test_cfd_particle_sources.py"
+      - "tests/test_cfd_particle_sources_gui.py"
       - "tests/test_cfd_particle_refinement.py"
       - "tests/test_cfd_convergence_triage.py"
       - "tests/test_cfd_convergence_triage_gui.py"
@@ -60,10 +64,10 @@ jobs:
       - name: Verify VTK reader and plotting available
         run: python -c "import vtk, matplotlib; print(vtk.vtkVersion.GetVTKVersion(), matplotlib.__version__)"
       - name: CFD focused regression with real VTK fixtures
-        run: python -m pytest -q tests/test_cfd_study.py tests/test_cfd_pipeline.py tests/test_cfd_scalar_audit.py tests/test_cfd_grid_study.py tests/test_cfd_streamlines.py tests/test_cfd_particles.py tests/test_cfd_particle_diagnostics.py tests/test_cfd_particle_ensemble.py tests/test_cfd_particle_refinement.py tests/test_cfd_convergence_triage.py tests/test_cfd_multizone_review.py tests/test_cfd_multizone_stability.py tests/test_cfd_closed_door_comparison.py tests/test_cfd_multizone_vtk.py -ra
+        run: python -m pytest -q tests/test_cfd_study.py tests/test_cfd_pipeline.py tests/test_cfd_scalar_audit.py tests/test_cfd_grid_study.py tests/test_cfd_streamlines.py tests/test_cfd_particles.py tests/test_cfd_particle_diagnostics.py tests/test_cfd_particle_ensemble.py tests/test_cfd_particle_sources.py tests/test_cfd_particle_refinement.py tests/test_cfd_convergence_triage.py tests/test_cfd_multizone_review.py tests/test_cfd_multizone_stability.py tests/test_cfd_closed_door_comparison.py tests/test_cfd_multizone_vtk.py -ra
       - name: Install real Tk and X virtual framebuffer
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends xvfb xauth python3-tk
       - name: Run interactive native VTK-on-Tk smoke test on actual display server
         env:
           LIBGL_ALWAYS_SOFTWARE: "1"
-        run: xvfb-run -a python -m pytest -q tests/test_cfd_multizone_vtk_gui.py tests/test_cfd_convergence_triage_gui.py -ra
+        run: xvfb-run -a python -m pytest -q tests/test_cfd_multizone_vtk_gui.py tests/test_cfd_particle_sources_gui.py tests/test_cfd_convergence_triage_gui.py -ra

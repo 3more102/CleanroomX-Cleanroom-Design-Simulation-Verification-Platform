@@ -253,17 +253,17 @@ def particle_source_population(report, run, times_s):
     return rows
 
 
-def _verified_replay(report, run):
+def _verified_replay(report, run, cancel_check=None):
     config, _ = _validate_run(report, run)
     replay = run_particle_sources(report, config["sources"],
-                                  observation_end_s=config["observation_end_s"])
+                                  observation_end_s=config["observation_end_s"], cancel_check=cancel_check)
     if replay != run:
         raise ValueError("Scheduled particle run does not exactly reproduce from its inputs")
 
 
-def export_particle_source_run(report, run, destination):
+def export_particle_source_run(report, run, destination, *, cancel_check=None):
     """Independent replay rejects altered samples before any file is opened."""
-    _verified_replay(report, run)
+    _verified_replay(report, run, cancel_check)
     serialized = json.dumps(run, indent=2, allow_nan=False) + "\n"
     path = Path(destination)
     with path.open("x", encoding="utf-8") as stream:
@@ -271,9 +271,9 @@ def export_particle_source_run(report, run, destination):
     return path
 
 
-def export_particle_source_csv(report, run, destination):
+def export_particle_source_csv(report, run, destination, *, cancel_check=None):
     """Export actual integration vertices with both age and scheduled time."""
-    _verified_replay(report, run)
+    _verified_replay(report, run, cancel_check)
     path = Path(destination)
     with path.open("x", encoding="utf-8", newline="") as stream:
         writer = csv.writer(stream)

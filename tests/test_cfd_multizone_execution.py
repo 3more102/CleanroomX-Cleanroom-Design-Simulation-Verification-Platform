@@ -84,6 +84,37 @@ def test_actual_mesh_solver_outputs_and_provenance(executed_case,computed_report
         assert all(math.isfinite(v) for v in cell["velocity_m_s"])
 
 
+def test_scheduled_sources_use_actual_executed_openfoam_velocity(computed_report, tmp_path):
+    """Real solver -> recorded U -> timed source integration -> verified exports."""
+    from cleanroomx.cfd_particle_sources import (
+        run_particle_sources, particle_source_population, export_particle_source_run,
+        export_particle_source_csv, export_particle_source_configuration,
+        load_particle_source_configuration,
+    )
+    from cleanroomx.cfd_particles import particle_positions_at_elapsed
+    cell = computed_report["cells"][len(computed_report["cells"])//2]
+    sources = [{
+        "source_id": "RecordedFluidSource", "enabled": True,
+        "position_m": cell["center_m"], "particle_count": 3,
+        "start_time_s": .01, "duration_s": .02, "diameter_um": 5.,
+        "particle_density_kg_m3": 1000., "initial_velocity_m_s": None,
+    }]
+    run = run_particle_sources(computed_report, sources, observation_end_s=.05)
+    assert run["source_run_receipt_sha256"] == computed_report["provenance"]["run_receipt_sha256"]
+    assert len(run["tracks"]) == 3
+    for track in run["tracks"]:
+        assert track["points"][0]["recorded_gas_velocity_m_s"] == cell["velocity_m_s"]
+        assert track["initial_particle_velocity_m_s"] == cell["velocity_m_s"]
+        assert track["validated_particle_transport"] is False
+    assert particle_positions_at_elapsed(run["tracks"], 0.) == []
+    rows = particle_source_population(computed_report, run, [0., .02, .05])
+    assert all(row["accounting_complete"] for row in rows)
+    config = export_particle_source_configuration(computed_report, sources, .05, tmp_path/"sources.json")
+    assert load_particle_source_configuration(computed_report, config)["sources"] == sources
+    assert export_particle_source_run(computed_report, run, tmp_path/"scheduled-run.json").is_file()
+    assert export_particle_source_csv(computed_report, run, tmp_path/"scheduled-tracks.csv").is_file()
+
+
 def test_true_openfoam_saved_iteration_history_uses_p_u_and_phi_snapshots(
     executed_case, computed_report, tmp_path,
 ):

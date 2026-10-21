@@ -375,8 +375,8 @@ class AssistantWindow(tk.Toplevel):
             return
         if not messagebox.askyesno(
             "Open existing CFD workspace?",
-            "The preview matches the saved project and has no recorded solver run.\\n\\n"
-            "Open the existing Multiroom CFD workspace for independent review?\\n"
+            "The preview matches the saved project and has no recorded solver run.\n\n"
+            "Open the existing Multiroom CFD workspace for independent review?\n"
             "This action does NOT run OpenFOAM. Running the solver requires a "
             "separate deliberate action in that workspace.",
             parent=self,

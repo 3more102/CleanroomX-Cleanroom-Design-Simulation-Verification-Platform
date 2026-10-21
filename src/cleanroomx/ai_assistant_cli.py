@@ -99,6 +99,9 @@ def build_offline_review(
         context["cfd_case_replay"] = replay_recorded_cfd(
             cfd_export, cfd_case, project=project, project_path=source,
         )
+        if (context["cfd_case_replay"]["report_sha256"]
+                != context["cfd_evidence"]["report_sha256"]):
+            raise ValueError("CFD export changed between review and case replay")
     plan = build_assistant_action_plan(context) if actions else None
     cfd_plan = (
         build_cfd_followup_plan(context["cfd_evidence"])

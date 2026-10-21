@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import copy
 import json
+from hashlib import sha256
+from pathlib import Path
 
 import pytest
 
@@ -154,6 +156,7 @@ def test_cli_json_exposes_case_replay_without_model_or_solver(recorded, monkeypa
         called.append((export_directory, case_directory))
         return {
             "status": "recorded_case_consistent",
+            "report_sha256": sha256((Path(export_directory) / "report.json").read_bytes()).hexdigest(),
             "engineering_release": "HOLD",
             "note": "Synthetic replay fixture only.",
         }

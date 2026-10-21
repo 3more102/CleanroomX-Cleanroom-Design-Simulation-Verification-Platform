@@ -1,4 +1,4 @@
-"""Small read-only AI workspace for the existing CleanroomX Tk desktop."""
+"""Read-only project-aware AI conversation window for CleanroomX desktop."""
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -6,7 +6,7 @@ from pathlib import Path
 from queue import Empty, Queue
 import threading
 import tkinter as tk
-from tkinter import scrolledtext, ttk
+from tkinter import filedialog, messagebox, scrolledtext, ttk
 
 from .ai_assistant import (
     AssistantConfiguration,
@@ -15,11 +15,12 @@ from .ai_assistant import (
     format_offline_review,
     project_snapshot_sha256,
 )
+from .ai_assistant_chat import AssistantConversations
 from .project import ProjectDocument
 
 
 class AssistantWindow(tk.Toplevel):
-    """No project mutations. All model I/O runs outside Tk's UI thread."""
+    """Model requests never block Tk; messages cannot mutate project state."""
 
     def __init__(
         self,
@@ -27,35 +28,54 @@ class AssistantWindow(tk.Toplevel):
         *,
         project_getter: Callable[[], ProjectDocument],
         base_dir_getter: Callable[[], str | Path | None],
+        project_key_getter: Callable[[], str],
         on_close: Callable[[], None] | None = None,
     ) -> None:
         super().__init__(parent)
         self.title("CleanroomX | AI Engineering Assistant")
-        self.geometry("850x630")
-        self.minsize(620, 430)
+        self.geometry("875x660")
+        self.minsize(620, 440)
         self.transient(parent)
         self._project_getter = project_getter
         self._base_dir_getter = base_dir_getter
+        self._project_key_getter = project_key_getter
         self._on_close = on_close
-        self._pending: Queue[tuple[str, str, str]] = Queue()
+        self._conversations = AssistantConversations()
+        self._active_project_key: str | None = None
+        self._session_id: str | None = None
+        self._session_ids: list[str] = []
+        self._pending: Queue[dict] = Queue()
         self._busy = False
+        self._closed = False
 
         content = ttk.Frame(self, padding=12)
         content.pack(fill="both", expand=True)
         ttk.Label(
-            content,
-            text="AI Engineering Assistant | Read-only",
+            content, text="AI Engineering Assistant | Read-only",
             font=("TkDefaultFont", 14, "bold"),
         ).pack(anchor="w")
         ttk.Label(
             content,
             text=(
-                "Review project diagnostics locally or ask a configured model. "
-                "No design edits, CFD runs, or standards claims are performed."
+                "Project-bound conversations, canonical diagnostics, and "
+                "optional AI suggestions. No changes to design or CFD results."
             ),
-            wraplength=790,
-            justify="left",
+            wraplength=810, justify="left",
         ).pack(anchor="w", pady=(4, 10))
+
+        sessions = ttk.Frame(content)
+        sessions.pack(fill="x", pady=(0, 8))
+        ttk.Label(sessions, text="Conversation").pack(side="left", padx=(0, 6))
+        self.session_choice = ttk.Combobox(sessions, state="readonly", width=25)
+        self.session_choice.pack(side="left", fill="x", expand=True)
+        self.session_choice.bind("<<ComboboxSelected>>", self._on_session_selected)
+        ttk.Button(sessions, text="New", command=self.new_chat).pack(side="left", padx=(6, 0))
+        ttk.Button(sessions, text="Save chats...", command=self.save_chats).pack(
+            side="left", padx=(6, 0)
+        )
+        ttk.Button(sessions, text="Load chats...", command=self.load_chats).pack(
+            side="left", padx=(6, 0)
+        )
 
         self.transcript = scrolledtext.ScrolledText(
             content, height=18, wrap="word", state="disabled",
@@ -76,16 +96,11 @@ class AssistantWindow(tk.Toplevel):
         )
         self.ask_button.pack(side="left", padx=8)
         self.status = tk.StringVar(
-            value="AI defaults to local Ollama. Cloud use requires explicit environment opt-in."
+            value="Local Ollama by default. Save chats explicitly to preserve them."
         )
-        ttk.Label(content, textvariable=self.status, wraplength=790).pack(anchor="w")
+        ttk.Label(content, textvariable=self.status, wraplength=810).pack(anchor="w")
 
-        self._append("CleanroomX", (
-            "Only the bounded project name, analysis index, diagnostic findings "
-            "and verification summaries are sent to a selected model. "
-            "Raw geometry, CFD fields and project metadata are not included. "
-            "The offline review does not send data."
-        ))
+        self._ensure_session()
         self.protocol("WM_DELETE_WINDOW", self._close)
         self.after(125, self._poll)
 
@@ -95,6 +110,119 @@ class AssistantWindow(tk.Toplevel):
         self.transcript.configure(state="disabled")
         self.transcript.see("end")
 
+    def _clear(self) -> None:
+        self.transcript.configure(state="normal")
+        self.transcript.delete("1.0", "end")
+        self.transcript.configure(state="disabled")
+
+    def _ensure_session(self) -> None:
+        key = self._project_key_getter()
+        sessions = self._conversations.sessions(key)
+        if not sessions:
+            sessions = (self._conversations.new(key),)
+        if key != self._active_project_key or self._session_id not in {
+            session.id for session in sessions
+        }:
+            self._active_project_key = key
+            self._session_id = sessions[-1].id
+            self._redraw()
+        self._refresh_sessions()
+
+    def _refresh_sessions(self) -> None:
+        sessions = self._conversations.sessions(self._active_project_key)
+        self._session_ids = [item.id for item in sessions]
+        self.session_choice["values"] = [
+            item.title + " (" + str(item.revision // 2) + ")"
+            for item in sessions
+        ]
+        if self._session_id in self._session_ids:
+            self.session_choice.current(self._session_ids.index(self._session_id))
+
+    def _redraw(self) -> None:
+        self._clear()
+        self._append(
+            "CleanroomX",
+            "Conversations are in memory until explicitly saved. "
+            "Responses are suggestions, not verified CFD or compliance evidence.",
+        )
+        if self._session_id is None:
+            return
+        chat = self._conversations.require_session(
+            self._session_id, self._active_project_key
+        )
+        for message in chat.messages:
+            self._append(
+                "You" if message.role == "user" else "AI suggestion (unverified)",
+                message.content,
+            )
+
+    def _on_session_selected(self, _event: tk.Event) -> None:
+        selection = self.session_choice.current()
+        if 0 <= selection < len(self._session_ids):
+            self._session_id = self._session_ids[selection]
+            self._redraw()
+
+    def new_chat(self) -> None:
+        self._ensure_session()
+        count = len(self._conversations.sessions(self._active_project_key)) + 1
+        session = self._conversations.new(self._active_project_key, "Engineering review " + str(count))
+        self._session_id = session.id
+        self._refresh_sessions()
+        self._redraw()
+
+    def save_chats(self) -> None:
+        destination = filedialog.asksaveasfilename(
+            parent=self,
+            title="Save AI conversations (contains full questions and answers)",
+            defaultextension=".json",
+            filetypes=[("CleanroomX AI workspace", "*.json")],
+        )
+        if not destination:
+            return
+        path = Path(destination)
+        try:
+            if path.exists():
+                # Never overwrite arbitrary JSON, especially a CleanroomX project file.
+                AssistantConversations.load(path)
+                if not messagebox.askyesno(
+                    "Replace existing AI conversation file?",
+                    "The selected AI conversation file already exists. Replace it?",
+                    parent=self,
+                ):
+                    return
+            self._conversations.save(path)
+        except (OSError, ValueError, TypeError) as exc:
+            messagebox.showerror("AI conversation save failed", str(exc), parent=self)
+            return
+        self.status.set("AI conversations saved locally. This file contains full chat text.")
+
+    def load_chats(self) -> None:
+        if self._busy:
+            self.status.set("Finish the current request before loading another workspace.")
+            return
+        source = filedialog.askopenfilename(
+            parent=self, title="Load AI conversations",
+            filetypes=[("CleanroomX AI workspace", "*.json")],
+        )
+        if not source:
+            return
+        try:
+            loaded = AssistantConversations.load(source)
+            if not messagebox.askyesno(
+                "Replace chats in this window?",
+                "Loading a workspace replaces unsaved chats currently in this window. Continue?",
+                parent=self,
+            ):
+                return
+        except (OSError, ValueError, TypeError) as exc:
+            messagebox.showerror("AI conversation load failed", str(exc), parent=self)
+            return
+        self._conversations = loaded
+        self._active_project_key = None
+        self._session_id = None
+        self._ensure_session()
+        self.status.set("AI workspace loaded; only conversations for this project are shown.")
+
     def _snapshot(self) -> dict:
         return build_assistant_context(
             self._project_getter(), base_dir=self._base_dir_getter()
@@ -102,12 +230,13 @@ class AssistantWindow(tk.Toplevel):
 
     def review_project(self) -> None:
         try:
+            self._ensure_session()
             context = self._snapshot()
-            self._append("Project diagnostics", format_offline_review(context))
-            self.status.set("Offline review complete. No model request made.")
+            self._append("Local project diagnostics", format_offline_review(context))
+            self.status.set("Offline review complete. No network request made.")
         except (OSError, ValueError, TypeError, KeyError) as exc:
-            self._append("Review failed", str(exc))
-            self.status.set("Could not obtain an authoritative project diagnostic snapshot.")
+            self._append("Offline review failed", str(exc))
+            self.status.set("Could not obtain a canonical diagnostic snapshot.")
 
     def _on_return(self, _event: tk.Event) -> None:
         self.ask_ai()
@@ -117,61 +246,104 @@ class AssistantWindow(tk.Toplevel):
             return
         question = self.question.get().strip()
         try:
-            configuration = AssistantConfiguration.from_environment()
-            if not question:
-                raise ValueError("Enter a question first.")
+            self._ensure_session()
+            cfg = AssistantConfiguration.from_environment()
+            if not question or len(question) > 4000:
+                raise ValueError("Enter a question of at most 4000 characters.")
             context = self._snapshot()
-            if len(question) > 4000:
-                raise ValueError("Question exceeds the 4000-character limit.")
+            key = self._active_project_key
+            chat = self._conversations.require_session(self._session_id, key)
+            history = self._conversations.model_history(chat.id, key)
         except (OSError, ValueError, TypeError, KeyError) as exc:
             self._append("Assistant setup", str(exc))
             return
 
         self._busy = True
         self.ask_button.configure(state="disabled")
-        self._append("You", question)
+        self._append("You (pending)", question)
         self.question.delete(0, "end")
+        snapshot_sha = context["project"]["in_memory_sha256"]
         self.status.set(
-            "Asking " + configuration.provider + " (" + configuration.model
-            + ") using project snapshot " + context["project"]["in_memory_sha256"][:12]
+            "Asking " + cfg.provider + " (" + cfg.model + "), snapshot " + snapshot_sha[:12]
         )
 
         def worker() -> None:
+            payload = {
+                "project_key": key,
+                "session_id": chat.id,
+                "revision": chat.revision,
+                "instance_id": chat.instance_id,
+                "snapshot_sha": snapshot_sha,
+                "provider": cfg.provider,
+                "model": cfg.model,
+                "question": question,
+            }
             try:
-                answer = ask_model(question, context, configuration=configuration)
-                self._pending.put(("ok", context["project"]["in_memory_sha256"], answer))
+                payload["answer"] = ask_model(
+                    question, context, configuration=cfg, history=history
+                )
+                payload["kind"] = "ok"
             except Exception as exc:
-                # The backend reports sanitized endpoint errors, never key contents.
-                self._pending.put(("error", context["project"]["in_memory_sha256"], str(exc)))
+                payload["kind"] = "error"
+                payload["error"] = str(exc)
+            self._pending.put(payload)
 
         threading.Thread(target=worker, name="CleanroomX-AI", daemon=True).start()
 
     def _poll(self) -> None:
-        try:
-            kind, snapshot_sha, message = self._pending.get_nowait()
-        except Empty:
-            self.after(125, self._poll)
+        if self._closed:
             return
-        self._busy = False
-        self.ask_button.configure(state="normal")
-        if kind == "error":
-            self._append("AI request failed", message)
-            self.status.set("Model request failed; project unchanged.")
-        else:
+        while True:
             try:
-                current_sha = project_snapshot_sha256(self._project_getter())
-            except (ValueError, TypeError) as exc:
-                current_sha = ""
-            if current_sha != snapshot_sha:
-                self._append(
-                    "Snapshot warning",
-                    "Project changed after the request. The response refers to an older snapshot."
+                response = self._pending.get_nowait()
+            except Empty:
+                break
+            self._busy = False
+            self.ask_button.configure(state="normal")
+            same_view = (
+                response["project_key"] == self._project_key_getter()
+                and response["session_id"] == self._session_id
+            )
+            if response["kind"] == "error":
+                if same_view:
+                    self._redraw()  # Discard uncommitted pending question.
+                    self._append("AI request failed", response["error"])
+                self.status.set("Model request failed. No chat or project changes made.")
+                continue
+            try:
+                stale = (
+                    response["project_key"] != self._project_key_getter()
+                    or response["snapshot_sha"]
+                    != project_snapshot_sha256(self._project_getter())
                 )
-            self._append("AI suggestion (not verified engineering evidence)", message)
-            self.status.set("Model response received. No changes applied.")
+                self._conversations.commit_exchange(
+                    response["session_id"], response["project_key"],
+                    question=response["question"], answer=response["answer"],
+                    snapshot_sha256=response["snapshot_sha"],
+                    expected_revision=response["revision"],
+                    expected_instance_id=response["instance_id"],
+                    provider=response["provider"], model=response["model"],
+                    stale_project=stale,
+                )
+            except (KeyError, ValueError, RuntimeError) as exc:
+                if same_view:
+                    self._redraw()
+                    self._append("AI conversation conflict", str(exc))
+                self.status.set("AI response discarded: conversation changed.")
+                continue
+            if same_view:
+                self._redraw()
+                if stale:
+                    self._append(
+                        "Snapshot warning",
+                        "The project has changed. This answer used an older snapshot.",
+                    )
+                self._refresh_sessions()
+            self.status.set("AI suggestion recorded in local chat; project unchanged.")
         self.after(125, self._poll)
 
     def _close(self) -> None:
+        self._closed = True
         self.destroy()
         if self._on_close is not None:
             self._on_close()

@@ -7,6 +7,7 @@ multiplied by a visibly hypothetical factor in a NEW network solve.
 """
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import asdict, replace
 import json
 import math
@@ -78,7 +79,8 @@ def sweep_closed_door_leakage(
         "physical_model":"steady pressure/leakage NETWORK only; OPEN CFD is reference",
         "basis":"hypothetical uniform simultaneous path coefficient/orifice-area multipliers",
         "baseline_factor":1.0,
-        "baseline_closed_network_inputs":asdict(network),
+        "baseline_closed_network_inputs":json.loads(
+            json.dumps(asdict(network),allow_nan=False)),
         "baseline_closed_network_sha256":network_inputs_sha256(network),
         "baseline_door_connectivity":[{
             "door":row["door"],
@@ -86,7 +88,7 @@ def sweep_closed_door_leakage(
             "to_room":row["to_room"],
             "design_target_pa":row["design_target_pa"],
         } for row in base["door_comparison"]],
-        "baseline_result":base_result,
+        "baseline_result":deepcopy(base_result),
         "factor_results":rows,
         "hypothesis_not_uncertainty_interval":True,
         "engineering_release":"HOLD",

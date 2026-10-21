@@ -302,6 +302,20 @@ def test_leakage_sensitivity_export_rejects_tampered_network_claims(
     assert not dest.exists()
 
 
+def test_saved_baseline_is_an_independent_snapshot_with_json_arrays():
+    sweep=sweep_closed_door_leakage(
+        _open_report(),_network(supply=180.),_evidence(),factors=(.5,1.,2.))
+    assert isinstance(sweep["baseline_closed_network_inputs"]["nodes"],list)
+    assert isinstance(sweep["baseline_closed_network_inputs"]["paths"],list)
+    assert isinstance(sweep["baseline_closed_network_inputs"]["targets"],list)
+    assert sweep["baseline_result"] == sweep["factor_results"][1]
+    assert sweep["baseline_result"] is not sweep["factor_results"][1]
+    sweep["baseline_result"]["door_results"][0]["computed_closed_network_delta_pa"]=-7
+    assert sweep["factor_results"][1]["door_results"][0]["computed_closed_network_delta_pa"]!=-7
+    with pytest.raises(ValueError,match="Baseline result"):
+        export_closed_door_sensitivity(sweep,None)
+
+
 def test_leakage_sensitivity_replay_handles_real_orifice_formula(tmp_path):
     original=_network(supply=90.)
     from cleanroomx.pressure_network import PressurePath

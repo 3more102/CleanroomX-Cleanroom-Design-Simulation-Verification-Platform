@@ -183,11 +183,45 @@ regulatory compliance system. Diagnostic checks cover only configured
 model/data rules. The AI cannot independently confirm any value absent
 from the provided evidence.
 
+## Offline specialist engineering review (Phase 2, first increment)
+
+The assistant now supports an additional **Specialist review (offline)** action
+in the desktop assistant window. Select **Review focus** (general, CFD, HVAC,
+particles or verification), then click **Specialist review (offline)**.
+The review reads the same canonical diagnostic snapshot as the main assistant.
+If a matching, previously validated CFD export is attached, the CFD specialist
+can also inspect its bounded, explicitly reported mesh marker, selected-iteration
+convergence marker, relative boundary imbalance and closed-door limitations.
+
+Each specialist checklist labels its **evidence path**, **state** and **next
+check**, includes only relevant canonical diagnostic rule IDs, and binds a
+SHA-256 digest to the reviewed context and output. This digest detects content
+changes; it is **not** an authentication signature. Missing data is marked
+**NOT_EVIDENCED**, never a pass. Neither reported mesh success nor reported
+numerical convergence is a claim of independent solver authentication or
+engineering acceptance. The CFD disposition remains **HOLD**.
+
+The same output is available without a GUI or AI model:
+
+```bash
+cleanroomx-ai-review path/to/project.json --specialist cfd --format text
+cleanroomx-ai-review path/to/project.json --specialist verification --format json
+cleanroomx-ai-review path/to/project.json --cfd-export path/to/export --specialist cfd --format json
+```
+
+The existing `--actions` option remains independent and may be combined with
+`--specialist`. Specialist review does **not** run a solver, interpret full CFD
+fields, alter geometry, send network requests, issue AI model prompts, change
+project data, or approve a design. The detailed HVAC, particle and geometry
+datasets remain outside the bounded general snapshot; future specialist
+adapters must supply provenance-checked inputs before making numeric claims.
+
 ## Next engineering phases
 
-**Phase 2 — Specialist assistants:** add role-specific, evidence-bound context
-for CFD/meshing, HVAC, geometry, contamination, and evidence review. Shared
-multi-agent orchestration remains future work; no new solver claims.
+**Phase 2 — Specialist assistants:** the initial *offline* specialty review
+is implemented for general, CFD, HVAC, particles and verification using bounded
+canonical evidence. Deeper geometry, HVAC/particles numeric adapters and shared
+multi-agent orchestration remain future work; no new solver claims.
 
 **Phase 3 — Draft engineering actions:** show proposed edits as structured
 diffs with units, justifications, input-revision bindings and explicit human

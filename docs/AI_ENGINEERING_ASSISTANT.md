@@ -93,6 +93,42 @@ Do not put API keys in project JSON, source control, screenshots or reports.
 Cloud requests may have usage charges. The engineering review never
 requires a paid service.
 
+## Recorded multiroom CFD evidence (project-bound, engineering HOLD)
+
+Open **Tools > AI Engineering Assistant...** and click
+**Review CFD export...**. Select the `report.json` created by the existing
+CleanroomX multiroom CFD export workflow. This is a **local, offline**
+operation. The companion `engineering-review.json`, when present, must
+match a freshly computed `review_recorded_multizone()` result.
+
+The import fails closed unless:
+
+- The project is saved, the in-memory project matches the on-disk model,
+  and the exported `provenance.project_source_sha256` matches the exact
+  saved project bytes.
+- The report is a strict, bounded, stable JSON file; symlinked inputs,
+  oversized exports, malformed numbers, and changed files are rejected.
+- The canonical OpenFOAM result-review contract finds consistent mesh,
+  selected SIMPLE iteration, room/door pressure differences, face fluxes,
+  and boundary flow balance.
+- A supplied engineering-review companion is identical to the canonical
+  recomputation and remains stable during import.
+
+The assistant then displays bounded room-mean relative pressures, flow
+imbalances, door flux/delta comparisons, iteration convergence marker,
+source identifiers and **engineering release HOLD**. If an AI request is
+made, the same evidence is reloaded and rechecked. Responses generated
+from a changed source are marked stale and never included in later model
+history. Conversation context is filtered by *both* project revision and
+the exported CFD report SHA-256.
+
+**The importer does not independently authenticate OpenFOAM outputs.**
+A project-matching hash and internally consistent JSON do not establish
+that a physical solver ran, a mesh is independent, boundary conditions
+are physically valid, or results are certified. This feature cannot
+demonstrate a closed-door 5 Pa cascade from the all-doors-open scenario.
+No automatic model/CFD edits or numerical solver operations are performed.
+
 ## Offline AI evidence review from CLI
 
 For command-line workflows and CI you can use the same project-aware,
@@ -174,6 +210,7 @@ Run:
 ```bash
 python -m pytest tests/test_ai_assistant.py tests/test_ai_assistant_chat.py tests/test_ai_assistant_plan.py -q
 python -m pytest tests/test_ai_assistant_cli.py -q
+python -m pytest tests/test_ai_cfd_evidence.py -q
 python -m pytest tests/test_gui.py -q
 # With a graphical display/Xvfb:
 python -m pytest tests/test_ai_assistant_ui.py -q

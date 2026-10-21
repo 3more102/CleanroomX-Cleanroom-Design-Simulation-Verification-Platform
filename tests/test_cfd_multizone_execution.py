@@ -197,6 +197,14 @@ def test_alternative_simple_relaxation_executes_as_an_independent_provenanced_ca
     assert export_independent_relaxation_comparison(compared,out)==out
     assert json.loads(out.read_text())["source_project_sha256"]==(
         generated["project_source_sha256"])
+    # An edited result must be detected against the TWO independently
+    # reimported, verified run receipts; never export a fabricated improvement.
+    modified=json.loads(json.dumps(compared))
+    first_room=next(iter(modified["room_comparison"]))
+    modified["room_comparison"][first_room]["variant_minus_baseline_pressure_pa"]+=5
+    with pytest.raises(ValueError,match="changed after source-linked"):
+        export_independent_relaxation_comparison(
+            modified,tmp_path/"forged-numerical-evidence.json")
     from cleanroomx.cfd_pipeline_cli import main as cfd_pipeline_main
     cli_out=tmp_path/"cli-paired-relaxation.json"
     monkeypatch.setattr("sys.argv",[

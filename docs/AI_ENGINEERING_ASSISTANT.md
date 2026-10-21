@@ -284,6 +284,14 @@ convergence, commissioning, physical validation or compliance. The local case
 path appears only in the operator's handoff preview; it is not added to the
 bounded cloud/model prompt context.
 
+The same validation is available headlessly, with no model request or
+solver execution. The preview is stored in the separate
+`cfd_run_handoff` review-envelope field, not in the model snapshot:
+
+```bash
+cleanroomx-ai-review path/to/project.json --cfd-handoff path/to/generated-case --format json
+```
+
 Regression commands (the tests do **not** run an OpenFOAM solver):
 
 ```bash

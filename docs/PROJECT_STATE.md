@@ -1,5 +1,18 @@
 # CleanroomX engineering state — 21 October 2026
 
+## Native residual inspection increment
+
+The existing desktop residual panel now supports actual field/kind/scale
+controls, recent recorded-iteration windows and exact mouse/keyboard probes.
+Repeated linear solves remain distinct; initial limits are not applied to
+final linear residuals. The [current report](../reports/native-residual-inspection-20261021/REPORT.md)
+records **2843 passed / 0 failed / 24 capability skips** on a real Tk/VTK display.
+The skips are actual Foundation v10 execution and optional native IFC, unavailable
+in this environment. [Three new actual GUI captures](native-residual-inspection-20261021/README.md)
+reuse the verified archived 100-iteration case, which remains unconverged.
+This increment does not claim a new solver run. Engineering release remains
+**HOLD**; earlier complete solver-enabled results below retain their original scopes.
+
 ## Native cancellation and GUI lifetime recovery
 
 The [current execution report](../reports/native-cancellation-20261021/REPORT.md)

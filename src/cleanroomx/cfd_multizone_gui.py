@@ -16,6 +16,7 @@ from .cfd_process import CFDRunCancelled
 from .gui_lifecycle import collect_retired_tk_objects, protect_tk_lifecycle
 from .gui_scrollable import create_scrollable_content
 from .gui_windowing import fit_window_to_display
+from .cfd_residual_plot import RecordedResidualPlot
 from .cfd_convergence_triage import (
     triage_recorded_convergence, export_convergence_triage,
 )
@@ -438,10 +439,9 @@ class MultizoneCFDWindow(tk.Toplevel):
             self.residual_table.heading(key,text=label)
             self.residual_table.column(key,width=210)
         self.residual_table.pack(fill="x",pady=(0,8))
-        self.residual_canvas=tk.Canvas(residuals,background="#101b2b",highlightthickness=0)
-        self.residual_canvas.pack(fill="both",expand=True)
-        self.residual_canvas.bind("<Configure>",lambda e:self.draw_residuals())
-        ttk.Label(residuals,text="Full run initial residuals on a log₁₀ scale; the white marker selects the displayed fields. Linear final residuals do not establish SIMPLE convergence.",wraplength=1100).pack(anchor="w",pady=5)
+        self.residual_plot=RecordedResidualPlot(residuals)
+        self.residual_plot.pack(fill="both",expand=True)
+        self.residual_canvas=self.residual_plot.canvas
         self.log_text=tk.Text(logs,background="#101b2b",foreground="#d9e7f7",wrap="none",font=("TkFixedFont",10))
         self.log_text.pack(fill="both",expand=True)
         self.diagnostics=tk.Text(diagnostics,wrap="word",font=("TkFixedFont",10))
@@ -708,6 +708,7 @@ class MultizoneCFDWindow(tk.Toplevel):
         for table in (self.room_table,self.door_table,self.residual_table,self.engineering_table):
             table.delete(*table.get_children())
         self.numerical_status.set("")
+        self.residual_plot.set_report(None)
         self.diagnostics.delete("1.0","end")
         for canvas in (self.section_canvas,self.residual_canvas,self.pressure_canvas):
             canvas.delete("all")
@@ -1391,33 +1392,7 @@ class MultizoneCFDWindow(tk.Toplevel):
         c.create_text(12,36,anchor="w",fill="#b6cddd",text="" if self.report["solver_reported_convergence"] else "NOT CONVERGED • provisional numerical fields")
 
     def draw_residuals(self):
-        c=self.residual_canvas
-        c.delete("all")
-        if not self.report:
-            return
-        width,height=max(c.winfo_width(),600),max(c.winfo_height(),350)
-        histories=self.report["residual_history"]
-        times=[h["iteration"] for h in histories if h["iteration"] is not None]
-        max_time=max(times,default=1)
-        for power in range(0,-11,-1):
-            y=35+(-power)/10*(height-80)
-            c.create_line(65,y,width-20,y,fill="#24374e")
-            c.create_text(50,y,anchor="e",text=f"1e{power}",fill="#b6cddd")
-        for field,color in (("p","#ffbf69"),("Ux","#22c5d6"),("Uy","#98d36b"),("Uz","#d990ed")):
-            data=[h for h in histories if h["field"]==field and h["iteration"] is not None]
-            points=[]
-            for h in data:
-                x=65+h["iteration"]/max_time*(width-90)
-                y=35-min(0,max(-10,math.log10(max(h["initial"],1e-10))))/10*(height-80)
-                points.extend((x,y))
-            if len(points)>=4:
-                c.create_line(*points,fill=color,width=1.5,tags="computed-residual")
-            index=("p","Ux","Uy","Uz").index(field)
-            c.create_text(90+index*100,height-20,text=field,fill=color)
-        selected=float(self.report["time_name"])
-        x=65+selected/max_time*(width-90)
-        c.create_line(x,35,x,height-45,fill="#ffffff",dash=(4,3),tags="selected-iteration")
-        c.create_text(min(x,width-100),18,anchor="w",fill="#ffffff",text=f"Selected: {selected:g}")
+        self.residual_plot.set_report(self.report)
 
     def export_report(self):
         if not self.report or self.running:

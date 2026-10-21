@@ -38,6 +38,12 @@ Cancelled or interrupted runs retain failure evidence and cannot be imported
 as completed CFD. The separate Windows-to-WSL bridge does not yet offer this
 cancellation control.
 
+The native **Residual histories** panel supports field filtering,
+initial/final linear residuals, linear/log10 scales, recent-iteration windows
+and exact mouse/keyboard point inspection. See the
+[actual residual-control captures and usage](docs/native-residual-inspection-20261021/README.md).
+These controls inspect recorded data and preserve the original convergence verdict.
+
 The [executed cancellation and GUI lifecycle report](reports/native-cancellation-20261021/REPORT.md)
 includes the complete **2833 passed / 1 optional IFC skip** run, original
 cancelled-case archive and

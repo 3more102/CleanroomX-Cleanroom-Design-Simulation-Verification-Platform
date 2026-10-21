@@ -1,0 +1,207 @@
+........................................................................ [  2%]
+........................................................................ [  5%]
+........................................................................ [  7%]
+........................................................................ [ 10%]
+............................................sss......................... [ 12%]
+..................................................................s..... [ 15%]
+........................................................................ [ 17%]
+.....sssssssssssssssssssssss............................................ [ 20%]
+..............F......................................................... [ 22%]
+.......................sssss............................................ [ 25%]
+.......................................sssssssss........................ [ 27%]
+....................................................s.s................. [ 30%]
+........................................................................ [ 32%]
+........................................................................ [ 35%]
+........................................................................ [ 37%]
+........................................................................ [ 40%]
+........................................................................ [ 42%]
+........................................................................ [ 45%]
+........................................................................ [ 47%]
+.................................................................ss..... [ 50%]
+.....s..ssssss.....................ssss.......ssss.......ssss......ss... [ 52%]
+.......sssss.......s.............ssss.......ss.ss....................... [ 55%]
+........................................................................ [ 57%]
+........................................................................ [ 60%]
+........................................................................ [ 62%]
+........................................................................ [ 65%]
+........................................................................ [ 67%]
+........................................................................ [ 70%]
+........................................................................ [ 72%]
+........................................................................ [ 75%]
+........................................................................ [ 77%]
+........................................................................ [ 80%]
+........................................................................ [ 82%]
+........................................................................ [ 85%]
+........................................................................ [ 87%]
+...............sssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 90%]
+s....................................................................... [ 92%]
+........................................................................ [ 95%]
+........................................................................ [ 97%]
+..........................................................               [100%]
+=================================== FAILURES ===================================
+_____ test_real_tk_vtk_window_opens_and_updates_selected_field_and_glyphs ______
+
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-1/test_real_tk_vtk_window_opens_0')
+
+    def test_real_tk_vtk_window_opens_and_updates_selected_field_and_glyphs(tmp_path):
+>       root = tk.Tk()
+               ^^^^^^^
+
+tests/test_cfd_multizone_vtk_gui.py:21: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <tkinter.Tk object .>, screenName = None, baseName = '__main__'
+className = 'Tk', useTk = True, sync = False, use = None
+
+    def __init__(self, screenName=None, baseName=None, className='Tk',
+                 useTk=True, sync=False, use=None):
+        """Return a new top level widget on screen SCREENNAME. A new Tcl interpreter will
+        be created. BASENAME will be used for the identification of the profile file (see
+        readprofile).
+        It is constructed from sys.argv[0] without extensions if None is given. CLASSNAME
+        is the name of the widget class."""
+        self.master = None
+        self.children = {}
+        self._tkloaded = False
+        # to avoid recursions in the getattr code in case of failure, we
+        # ensure that self.tk is always _something_.
+        self.tk = None
+        if baseName is None:
+            import os
+            baseName = os.path.basename(sys.argv[0])
+            baseName, ext = os.path.splitext(baseName)
+            if ext not in ('.py', '.pyc'):
+                baseName = baseName + ext
+        interactive = False
+>       self.tk = _tkinter.create(screenName, baseName, className, interactive, wantobjects, useTk, sync, use)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       _tkinter.TclError: no display name and no $DISPLAY environment variable
+
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/tkinter/__init__.py:2346: TclError
+=========================== short test summary info ============================
+SKIPPED [1] tests/test_bim_ifc_native.py:5: native IFC smoke requires the optional CleanroomX BIM dependency
+SKIPPED [1] tests/test_cfd_cancellation_gui.py:39: Real Tk display required: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_cfd_cancellation_gui.py:64: Real Tk display required: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_cfd_cancellation_gui.py:78: Real Tk display required: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_cfd_convergence_triage_gui.py:35: Tk requires a display: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_cfd_multizone_execution.py:76: Actual OpenFOAM Foundation v10 execution requires its sourced environment
+SKIPPED [1] tests/test_cfd_multizone_execution.py:92: Actual OpenFOAM Foundation v10 execution requires its sourced environment
+SKIPPED [1] tests/test_cfd_multizone_execution.py:123: Actual OpenFOAM Foundation v10 execution requires its sourced environment
+SKIPPED [1] tests/test_cfd_multizone_execution.py:143: Actual OpenFOAM Foundation v10 execution requires its sourced environment
+SKIPPED [1] tests/test_cfd_multizone_execution.py:175: Actual OpenFOAM Foundation v10 execution requires its sourced environment
+SKIPPED [8] tests/test_cfd_multizone_execution.py:50: Actual OpenFOAM Foundation v10 execution requires its sourced environment
+SKIPPED [1] tests/test_cfd_multizone_execution.py:314: Actual OpenFOAM Foundation v10 execution requires its sourced environment
+SKIPPED [1] tests/test_cfd_multizone_execution.py:342: Actual OpenFOAM Foundation v10 execution requires its sourced environment
+SKIPPED [1] tests/test_cfd_multizone_execution.py:370: Actual OpenFOAM Foundation v10 execution requires its sourced environment
+SKIPPED [1] tests/test_cfd_multizone_execution.py:581: Actual OpenFOAM Foundation v10 execution requires its sourced environment
+SKIPPED [1] tests/test_cfd_multizone_execution.py:665: Actual OpenFOAM Foundation v10 execution requires its sourced environment
+SKIPPED [1] tests/test_cfd_multizone_execution.py:703: Actual OpenFOAM Foundation v10 execution requires its sourced environment
+SKIPPED [1] tests/test_cfd_multizone_execution.py:722: Actual OpenFOAM Foundation v10 execution requires its sourced environment
+SKIPPED [1] tests/test_cfd_multizone_execution.py:776: Actual OpenFOAM Foundation v10 execution requires its sourced environment
+SKIPPED [1] tests/test_cfd_multizone_execution.py:847: Actual OpenFOAM Foundation v10 execution requires its sourced environment
+SKIPPED [1] tests/test_cfd_multizone_execution.py:895: Actual OpenFOAM Foundation v10 execution requires its sourced environment
+SKIPPED [1] tests/test_cfd_particle_sources_gui.py:44: Actual Tk source editor requires a display: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_cfd_particle_sources_gui.py:73: Actual Tk source editor requires a display: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_cfd_particle_sources_gui.py:99: Actual Tk source editor requires a display: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_cfd_particle_sources_gui.py:125: Actual Tk source editor requires a display: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_cfd_particle_sources_gui.py:142: Actual Tk source editor requires a display: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_cfd_residual_plot.py:96: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_cfd_residual_plot.py:139: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_cfd_residual_plot.py:162: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_cfd_responsive_gui.py:28: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_cfd_responsive_gui.py:48: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_cfd_responsive_gui.py:61: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_cfd_responsive_gui.py:77: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [2] tests/test_cfd_responsive_v3.py:16: Tk display unavailable (covered under Xvfb): no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_cfd_wsl_gui.py:91: Real Tk display required: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_cfd_wsl_gui.py:146: Real Tk display required: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_gui_command_palette.py:60: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_gui_command_palette.py:97: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_gui_engineering_overlays.py:179: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_gui_engineering_panels.py:63: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_gui_engineering_panels.py:83: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_gui_engineering_panels.py:115: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_gui_engineering_panels.py:133: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_gui_engineering_panels.py:142: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_gui_engineering_panels.py:161: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_gui_lifecycle.py:64: Real Tk display required: no display name and no $DISPLAY environment variable
+SKIPPED [2] tests/test_gui_lifecycle.py:78: Real Tk display required: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_gui_lifecycle.py:99: Real Tk display required: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_gui_project_browser.py:45: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_gui_project_browser.py:67: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_gui_project_browser.py:83: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_gui_project_browser.py:110: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_gui_proofgraph_integration.py:132: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_gui_proofgraph_integration.py:161: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_gui_proofgraph_integration.py:185: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_gui_proofgraph_integration.py:201: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_gui_recovery_revision_workstations.py:58: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_gui_recovery_revision_workstations.py:119: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_gui_start_center.py:34: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_gui_start_center.py:40: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_gui_start_center.py:53: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_gui_start_center.py:66: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_gui_start_center.py:78: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_gui_startup.py:94: An actual display is required for the Tk callback regression
+SKIPPED [1] tests/test_gui_table.py:62: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_gui_table.py:78: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_gui_table.py:99: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_gui_table.py:113: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_gui_workstation_dialogs.py:44: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_gui_workstation_dialogs.py:76: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_gui_workstation_dialogs.py:175: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_gui_workstation_dialogs.py:251: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_spatial_editing_gui.py:44: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_spatial_editing_gui.py:59: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_spatial_editing_gui.py:83: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_spatial_editing_gui.py:99: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_spatial_editing_gui.py:154: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [2] tests/test_spatial_editing_gui.py:173: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_spatial_editing_gui.py:190: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_spatial_editing_gui.py:214: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_spatial_editing_gui.py:235: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_spatial_editing_gui.py:255: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_spatial_editing_gui.py:272: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_spatial_editing_gui.py:289: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_spatial_editing_gui.py:318: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_spatial_editing_gui.py:334: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [6] tests/test_spatial_editing_gui.py:364: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_spatial_editing_gui.py:382: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_spatial_editing_gui.py:409: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_spatial_editing_gui.py:426: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_spatial_editing_gui.py:455: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_spatial_editing_gui.py:504: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_spatial_editing_gui.py:521: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_spatial_editing_gui.py:526: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_spatial_editing_gui.py:562: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_spatial_editing_gui.py:566: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_spatial_editing_gui.py:598: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_spatial_editing_gui.py:614: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_spatial_editing_gui.py:634: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_spatial_editing_gui.py:649: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_spatial_editing_gui.py:671: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_spatial_editing_gui.py:709: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_spatial_editing_gui.py:737: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_spatial_editing_gui.py:767: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_spatial_editing_gui.py:786: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_spatial_editing_gui.py:817: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_spatial_editing_gui.py:837: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_spatial_editing_gui.py:862: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_spatial_editing_gui.py:883: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_spatial_editing_gui.py:897: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_spatial_editing_gui.py:924: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_spatial_editing_gui.py:942: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_spatial_editing_gui.py:956: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_spatial_editing_gui.py:981: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_spatial_editing_gui.py:1013: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_spatial_editing_gui.py:1047: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_spatial_editing_gui.py:1068: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_spatial_editing_gui.py:1105: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_spatial_editing_gui.py:1155: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_spatial_editing_gui.py:1204: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_spatial_editing_gui.py:1223: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_spatial_editing_gui.py:1244: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_spatial_editing_gui.py:1296: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_spatial_editing_gui.py:1318: Tk display unavailable: no display name and no $DISPLAY environment variable
+FAILED tests/test_cfd_multizone_vtk_gui.py::test_real_tk_vtk_window_opens_and_updates_selected_field_and_glyphs
+1 failed, 2727 passed, 139 skipped in 143.96s (0:02:23)

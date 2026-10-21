@@ -72,6 +72,21 @@ These are six unedited CleanroomX desktop screenshots. See the [annotated CFD ga
 The six source PNG files and their [SHA-256 manifest](docs/images/multiroom-cfd/manifest.json) are retained under `docs/images/multiroom-cfd/`. Validate their integrity with `python tools/validate_multiroom_cfd_gallery.py`.
 <!-- cleanroomx-multiroom-cfd-gallery:end -->
 
+## Real CleanroomX desktop screenshots — 21 October 2026
+
+The following are **actual GUI/VTK captures from the development branch** (not features qualified in the stable release). The recorded Foundation v10 all-doors-open simulation was **not converged**; engineering release remains **HOLD**.
+
+| Design Studio and room geometry | Original OpenFOAM mesh |
+| :--: | :--: |
+| ![Real CleanroomX Design Studio](docs/real-gui-screenshots-20261021/02-design-studio.png) | ![Original OpenFOAM mesh](docs/real-gui-screenshots-20261021/06-original-openfoam-mesh.png) |
+
+| Recorded CFD velocity field | Computed particle paths (screening only) |
+| :--: | :--: |
+| ![Recorded computed velocity field](docs/real-gui-screenshots-20261021/07-computed-velocity-section.png) | ![Particle tracking in frozen recorded U](docs/real-gui-screenshots-20261021/10-computed-particle-tracking.png) |
+
+**[View all 17 original PNG files in the visual gallery](docs/real-gui-screenshots-20261021/README.md)** — 16 distinct images (the archived 05 and 08 are identical); source capture metadata and limitations are linked on the gallery page.
+
+
 ### Cleanroom CFD study (external solver evidence)
 
 - Compare three supply/exhaust layouts: central ceiling / low-wall, distributed ceiling / low-wall, and distributed ceiling / raised perforated floor.

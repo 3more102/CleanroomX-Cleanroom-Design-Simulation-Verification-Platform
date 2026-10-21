@@ -14,6 +14,8 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import tempfile
+from typing import Callable
 
 _DISTRO = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}\Z")
 
@@ -25,12 +27,20 @@ repo="$1"
 case_dir="$2"
 mode="$3"
 timeout="$4"
+foam_bashrc="${5:-}"
 if [[ ! -f "$repo/scripts/with_openfoam10.sh" || ! -d "$repo/src/cleanroomx" ]]; then
     echo "CleanroomX repository is not accessible inside WSL: $repo" >&2
     exit 2
 fi
 cd "$repo"
 export PYTHONPATH="$repo/src${PYTHONPATH:+:$PYTHONPATH}"
+if ! python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)'; then
+    echo "CleanroomX requires Python 3.11+ inside the selected WSL distribution." >&2
+    exit 2
+fi
+if [[ -n "$foam_bashrc" ]]; then
+    export CLEANROOMX_OPENFOAM_BASHRC="$foam_bashrc"
+fi
 if [[ "$mode" == probe ]]; then
     exec bash "$repo/scripts/with_openfoam10.sh" python3 -c \
         'import cleanroomx.cfd_pipeline_cli; print("CleanroomX + OpenFOAM Foundation v10 probe: READY")'
@@ -83,6 +93,8 @@ def run_wsl_bridge(
     *, repository: str | Path, distribution: str = "Ubuntu",
     mode: str = "probe", case_directory: str | Path | None = None,
     timeout_seconds: int = 3600, executable: str = "wsl.exe",
+    openfoam_bashrc: str | None = None,
+    diagnostic_callback: Callable[[str], None] | None = None,
 ) -> int:
     """Execute a verified native Linux OpenFOAM run from Windows.
 
@@ -98,6 +110,11 @@ def run_wsl_bridge(
         raise ValueError("timeout_seconds must be an integer in [60,86400]")
     if not executable or not isinstance(executable, str):
         raise ValueError("A WSL executable is required")
+    if openfoam_bashrc is not None and (
+        not isinstance(openfoam_bashrc, str) or not openfoam_bashrc.startswith("/")
+        or any(ord(ch)<32 or ord(ch)==127 for ch in openfoam_bashrc)
+    ):
+        raise ValueError("OpenFOAM bashrc must be an absolute Linux path inside WSL (for example /mnt/d/OpenFOAM/OpenFOAM-10/etc/bashrc)")
 
     repo = _existing_directory(repository, "Repository")
     if not (repo / "scripts" / "with_openfoam10.sh").is_file() or not (
@@ -125,11 +142,28 @@ def run_wsl_bridge(
         _WSL_ENTRYPOINT, "cleanroomx-wsl-bridge",
         linux_repo, linux_case, mode, str(timeout_seconds),
     ]
+    if openfoam_bashrc is not None:
+        command.append(openfoam_bashrc)
     # Four OpenFOAM stages each use timeout_seconds in the Linux runner.
     # Bound the outer WSL handoff as well; a hung distro startup cannot leave
     # the GUI worker blocked indefinitely.
     overall_timeout = 180 if mode=="probe" else 4*timeout_seconds+180
-    return subprocess.run(command, check=False, timeout=overall_timeout).returncode
+    if diagnostic_callback is None:
+        return subprocess.run(command, check=False, timeout=overall_timeout).returncode
+    # A file avoids holding unbounded WSL startup/solver chatter in memory.
+    # The GUI receives actual diagnostics, including on timeouts, on its queue.
+    with tempfile.TemporaryFile() as output:
+        try:
+            return subprocess.run(
+                command, check=False, timeout=overall_timeout,
+                stdout=output, stderr=subprocess.STDOUT,
+            ).returncode
+        finally:
+            size = output.tell()
+            output.seek(max(0, size - 64*1024))
+            detail = output.read().decode("utf-8", errors="replace")
+            if detail:
+                diagnostic_callback(("[Earlier diagnostics truncated]\n" if size>64*1024 else "") + detail)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -141,12 +175,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--case-directory")
     parser.add_argument("--distribution", default="Ubuntu")
     parser.add_argument("--timeout-seconds", type=int, default=3600)
+    parser.add_argument("--openfoam-bashrc", help="Optional absolute Linux etc/bashrc path inside WSL; otherwise discover installations")
     args=parser.parse_args(argv)
     try:
         return run_wsl_bridge(
             repository=args.repository, distribution=args.distribution,
             mode=args.mode, case_directory=args.case_directory,
             timeout_seconds=args.timeout_seconds,
+            openfoam_bashrc=args.openfoam_bashrc,
         )
     except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired) as exc:
         print(f"CleanroomX WSL bridge: {exc}", file=sys.stderr)

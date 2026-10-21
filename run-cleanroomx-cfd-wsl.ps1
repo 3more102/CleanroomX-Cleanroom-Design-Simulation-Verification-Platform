@@ -6,6 +6,7 @@ param(
     [string]$Mode = "Probe",
     [string]$CaseDirectory,
     [string]$Distribution = "Ubuntu",
+    [string]$OpenFOAMBashrc,
     [ValidateRange(60, 86400)]
     [int]$TimeoutSeconds = 3600
 )
@@ -49,6 +50,9 @@ $bridgeArgs = @(
     "--distribution", $Distribution,
     "--timeout-seconds", [string]$TimeoutSeconds
 )
+if (-not [string]::IsNullOrWhiteSpace($OpenFOAMBashrc)) {
+    $bridgeArgs += @("--openfoam-bashrc", $OpenFOAMBashrc)
+}
 if ($Mode -eq "Run") {
     if ([string]::IsNullOrWhiteSpace($CaseDirectory)) {
         throw "Run mode requires -CaseDirectory pointing to a generated connected case."

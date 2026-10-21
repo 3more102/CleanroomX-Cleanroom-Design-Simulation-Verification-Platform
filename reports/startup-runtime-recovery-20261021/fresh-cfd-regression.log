@@ -1,0 +1,17 @@
+CleanroomX OpenFOAM environment: /workspace/scratch/d2477ad7a66e/runtime-packages/root/opt/openfoam10/etc/bashrc
+/workspace/scratch/d2477ad7a66e/runtime-packages/root/opt/openfoam10/etc/config.sh/mpi: line 46: mpicc: command not found
+...................                                                      [100%]
+=============================== warnings summary ===============================
+tests/test_cfd_multizone_execution.py::test_actual_vtk_original_mesh_worker_and_room_layer_selection
+tests/test_cfd_multizone_execution.py::test_actual_vtk_original_mesh_worker_and_room_layer_selection
+tests/test_cfd_multizone_execution.py::test_actual_vtk_original_mesh_worker_and_room_layer_selection
+tests/test_cfd_multizone_execution.py::test_actual_vtk_original_mesh_worker_and_room_layer_selection
+tests/test_cfd_multizone_execution.py::test_actual_vtk_original_mesh_worker_and_room_layer_selection
+tests/test_cfd_multizone_execution.py::test_actual_vtk_original_mesh_worker_and_room_layer_selection
+tests/test_cfd_multizone_execution.py::test_actual_vtk_original_mesh_worker_and_room_layer_selection
+tests/test_cfd_multizone_execution.py::test_actual_vtk_original_mesh_worker_and_room_layer_selection
+  /opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/site-packages/./matplotlib/_api/deprecation.py:94: MatplotlibDeprecationWarning: Passing individual properties to FontProperties() positionally was deprecated in Matplotlib 3.10 and will be removed in 3.12. Please pass all properties via keyword arguments.
+    warn_external(warning, category=MatplotlibDeprecationWarning)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+19 passed, 8 warnings in 62.50s (0:01:02)

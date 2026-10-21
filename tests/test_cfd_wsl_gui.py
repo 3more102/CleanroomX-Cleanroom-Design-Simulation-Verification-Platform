@@ -93,6 +93,8 @@ def test_native_wsl_controls_and_worker_routing(tkinter_window,monkeypatch,tmp_p
     assert window.wsl_run_button.cget("text")=="Run case in WSL"
     assert window.wsl_probe_button.cget("text")=="Probe WSL"
     assert window.wsl_distribution.get()=="Ubuntu"
+    assert window.wsl_openfoam_bashrc.get()==""
+    assert Path(window.wsl_repository.get())==Path(__file__).resolve().parents[1]
     case=tmp_path/"new-case"
     case.mkdir()
     calls=[]
@@ -100,6 +102,7 @@ def test_native_wsl_controls_and_worker_routing(tkinter_window,monkeypatch,tmp_p
     monkeypatch.setattr(gui,"verify_multizone_inputs",lambda folder:(Path(folder),{}))
     def fake_operation(**kwargs):
         calls.append(kwargs)
+        kwargs["on_diagnostic"]("Runtime probe output sentinel; process contract fixture only\n")
         return {"status":(
             "wsl_probe_ready" if kwargs["mode"]=="probe"
             else "wsl_solver_executed_requires_convergence_review"
@@ -111,19 +114,33 @@ def test_native_wsl_controls_and_worker_routing(tkinter_window,monkeypatch,tmp_p
     monkeypatch.setattr(window,"_worker",sync_worker)
     window.case_path.set(str(case))
     window.wsl_distribution.set("Ubuntu-Test")
+    window.wsl_repository.set(str(tmp_path / "source checkout"))
+    window.wsl_openfoam_bashrc.set("/mnt/d/OpenFOAM with spaces/OpenFOAM-10/etc/bashrc")
     window.run_wsl_case()
     assert calls[-1]["directory"]==case
     assert calls[-1]["distribution"]=="Ubuntu-Test"
     assert calls[-1]["mode"]=="run"
+    assert calls[-1]["repository"]==tmp_path/"source checkout"
+    assert calls[-1]["openfoam_bashrc"]==window.wsl_openfoam_bashrc.get()
     window._poll()
     assert not window.running
+    assert "Runtime probe output sentinel" in window.log_text.get("1.0","end")
     assert "wsl solver executed" in window.status.get()
     window.probe_wsl()
     assert calls[-1]["mode"]=="probe"
     assert calls[-1]["distribution"]=="Ubuntu-Test"
+    assert calls[-1]["openfoam_bashrc"]==window.wsl_openfoam_bashrc.get()
     window._poll()
     assert "probe READY" in window.status.get()
     assert not window.running
+
+
+def test_wheel_installation_requires_explicit_checkout_instead_of_site_packages(tmp_path):
+    module=tmp_path/"site-packages/cleanroomx/cfd_multizone_gui.py"
+    module.parent.mkdir(parents=True)
+    module.write_text("# wheel fixture")
+    assert gui.source_checkout_for_wsl(module) is None
+    assert gui.source_checkout_for_wsl() == Path(__file__).resolve().parents[1]
 
 
 def test_gui_tails_only_genuine_wsl_logs_without_replaying_prior_bytes(

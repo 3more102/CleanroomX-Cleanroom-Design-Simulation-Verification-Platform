@@ -46,13 +46,20 @@ def slice_samples(report: dict, axis: str, position_m: float, room: str = "all")
 
 
 def wsl_gui_command(*, repository: Path, directory: Path | None = None,
-                    distribution: str = "Ubuntu", mode: str = "probe") -> dict:
+                    distribution: str = "Ubuntu", mode: str = "probe",
+                    openfoam_bashrc: str | None = None, on_diagnostic=None) -> dict:
     """Run opt-in WSL on a worker; do not equate solver exit with CFD validity."""
     if mode not in ("probe", "run"):
         raise ValueError("Unsupported WSL GUI operation")
+    options = {}
+    if openfoam_bashrc is not None:
+        options["openfoam_bashrc"] = openfoam_bashrc
+    if on_diagnostic is not None:
+        options["diagnostic_callback"] = on_diagnostic
     result=run_wsl_bridge(
         repository=repository, distribution=distribution, mode=mode,
         case_directory=directory if mode=="run" else None,
+        **options,
     )
     if result != 0:
         raise RuntimeError(
@@ -89,6 +96,17 @@ def _windows_wsl_available() -> bool:
     return sys.platform=="win32"
 
 
+def source_checkout_for_wsl(module_path: str | Path | None = None) -> Path | None:
+    """A wheel's site-packages directory must never be mistaken for a checkout."""
+    source = Path(__file__ if module_path is None else module_path).resolve()
+    for candidate in list(source.parents)[:3]:
+        if (candidate / "scripts/with_openfoam10.sh").is_file() and (
+            candidate / "src/cleanroomx"
+        ).is_dir():
+            return candidate
+    return None
+
+
 class MultizoneCFDWindow(tk.Toplevel):
     """Run in a worker, tail actual logs, and review recorded field samples."""
 
@@ -109,6 +127,8 @@ class MultizoneCFDWindow(tk.Toplevel):
         self.events = queue.Queue()
         self.case_path = tk.StringVar(value=str(directory or ""))
         self.wsl_distribution = tk.StringVar(value="Ubuntu")
+        self.wsl_repository = tk.StringVar(value=str(source_checkout_for_wsl() or ""))
+        self.wsl_openfoam_bashrc = tk.StringVar(value="")
         self._wsl_running_case = None
         self._wsl_log_positions = {}
         self._wsl_seen_stages = set()
@@ -169,6 +189,26 @@ class MultizoneCFDWindow(tk.Toplevel):
         ttk.Label(
             wsl_controls,text="Opt-in; inspect real solver logs and import recorded fields. Engineering HOLD."
         ).pack(side="left",padx=8)
+        repository_path = ttk.Frame(top)
+        repository_path.pack(fill="x", pady=(0,6))
+        ttk.Label(repository_path, text="WSL source checkout").pack(side="left")
+        self.wsl_repository_entry = ttk.Entry(
+            repository_path, textvariable=self.wsl_repository, state=initial_state,
+        )
+        self.wsl_repository_entry.pack(side="left", fill="x", expand=True, padx=8)
+        self.wsl_repository_button = ttk.Button(
+            repository_path, text="Browse checkout", command=self.browse_wsl_repository,
+            state=initial_state,
+        )
+        self.wsl_repository_button.pack(side="left")
+        runtime_path = ttk.Frame(top)
+        runtime_path.pack(fill="x", pady=(0,6))
+        ttk.Label(runtime_path, text="WSL OpenFOAM etc/bashrc").pack(side="left")
+        self.wsl_bashrc_entry = ttk.Entry(
+            runtime_path, textvariable=self.wsl_openfoam_bashrc, state=initial_state,
+        )
+        self.wsl_bashrc_entry.pack(side="left", fill="x", expand=True, padx=8)
+        ttk.Label(runtime_path, text="Optional Linux path; blank detects v10 installations").pack(side="left")
         ttk.Label(top,textvariable=self.status,wraplength=1130).pack(anchor="w")
         self.progress=ttk.Progressbar(top,mode="indeterminate")
         self.progress.pack(fill="x",pady=(8,0))
@@ -378,6 +418,10 @@ class MultizoneCFDWindow(tk.Toplevel):
         self.import_button.configure(state="disabled")
         self.wsl_probe_button.configure(state="disabled")
         self.wsl_run_button.configure(state="disabled")
+        self.wsl_distribution_entry.configure(state="disabled")
+        self.wsl_bashrc_entry.configure(state="disabled")
+        self.wsl_repository_entry.configure(state="disabled")
+        self.wsl_repository_button.configure(state="disabled")
         self.progress.start(15)
         def work():
             try:
@@ -402,13 +446,40 @@ class MultizoneCFDWindow(tk.Toplevel):
         if self.running or not _windows_wsl_available():
             return
         distribution=self.wsl_distribution.get().strip()
+        repository=self._selected_wsl_repository()
+        if repository is None:
+            return
+        bashrc=self.wsl_openfoam_bashrc.get().strip() or None
         self.status.set("Probing installed WSL OpenFOAM Foundation v10 and Linux Python; no CFD run is started.")
+        self.tabs.select(3)
         self._worker(lambda:wsl_gui_command(
-            repository=Path(__file__).resolve().parents[2],
-            distribution=distribution,mode="probe"))
+            repository=repository,
+            distribution=distribution,mode="probe",openfoam_bashrc=bashrc,
+            on_diagnostic=lambda detail:self.events.put(("runtime_diagnostics",detail))))
+
+    def browse_wsl_repository(self):
+        if self.running:
+            return
+        folder = filedialog.askdirectory(parent=self, title="Choose the CleanroomX source checkout")
+        if folder:
+            self.wsl_repository.set(folder)
+
+    def _selected_wsl_repository(self):
+        folder = self.wsl_repository.get().strip()
+        if not folder:
+            messagebox.showerror(
+                "CleanroomX checkout required",
+                "Choose the source checkout containing scripts/with_openfoam10.sh and src/cleanroomx. "
+                "An installed wheel alone does not contain the WSL launcher scripts.", parent=self,
+            )
+            return None
+        return Path(folder).expanduser()
 
     def run_wsl_case(self):
         if self.running or not _windows_wsl_available():
+            return
+        repository=self._selected_wsl_repository()
+        if repository is None:
             return
         try:
             root,_=verify_multizone_inputs(self.case_path.get())
@@ -416,6 +487,7 @@ class MultizoneCFDWindow(tk.Toplevel):
             messagebox.showerror("Invalid connected CFD case",str(exc),parent=self)
             return
         distribution=self.wsl_distribution.get().strip()
+        bashrc=self.wsl_openfoam_bashrc.get().strip() or None
         self.report=None
         self._clear_results()
         self.active_log=None
@@ -427,8 +499,9 @@ class MultizoneCFDWindow(tk.Toplevel):
             "Running the verified OpenFOAM 10 pipeline in WSL. Solver exit is NOT convergence or 5 Pa validation.")
         self.tabs.select(3)
         self._worker(lambda:wsl_gui_command(
-            repository=Path(__file__).resolve().parents[2],
-            directory=root,distribution=distribution,mode="run"))
+            repository=repository,
+            directory=root,distribution=distribution,mode="run",openfoam_bashrc=bashrc,
+            on_diagnostic=lambda detail:self.events.put(("runtime_diagnostics",detail))))
 
     def _poll_wsl_logs(self):
         """Follow genuine stage log files produced in the shared Windows case."""
@@ -469,7 +542,10 @@ class MultizoneCFDWindow(tk.Toplevel):
         try:
             while True:
                 kind,payload=self.events.get_nowait()
-                if kind=="progress":
+                if kind=="runtime_diagnostics":
+                    self.log_text.insert("end", "\n--- WSL runtime diagnostics ---\n" + payload)
+                    self.log_text.see("end")
+                elif kind=="progress":
                     self.status.set(f"{payload['stage']}: {payload['event']}")
                     if payload["event"]=="started":
                         self.active_log=Path(payload["log"])
@@ -486,6 +562,10 @@ class MultizoneCFDWindow(tk.Toplevel):
                     state="normal" if _windows_wsl_available() else "disabled"
                     self.wsl_probe_button.configure(state=state)
                     self.wsl_run_button.configure(state=state)
+                    self.wsl_distribution_entry.configure(state=state)
+                    self.wsl_bashrc_entry.configure(state=state)
+                    self.wsl_repository_entry.configure(state=state)
+                    self.wsl_repository_button.configure(state=state)
                     self._wsl_running_case=None
                     if kind=="error":
                         self.status.set("CFD operation failed: "+payload)

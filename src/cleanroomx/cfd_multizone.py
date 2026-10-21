@@ -538,7 +538,11 @@ def verify_multizone_inputs(directory: str | Path) -> tuple[Path, dict]:
     for name,expected in files.items():
         path=root/name
         if path.is_symlink() or not path.is_file():
-            raise ValueError(f"Missing or symlinked solver input: {name}")
+            raise ValueError(
+                f"Missing or symlinked solver input: {name}. "
+                "Generate a fresh connected CFD case from the saved project. "
+                "A results-only folder is insufficient; original inputs are required for provenance."
+            )
         path=path.resolve(strict=True)
         if not path.is_relative_to(root) or hashlib.sha256(path.read_bytes()).hexdigest()!=expected:
             raise ValueError(f"Solver input changed: {name}")

@@ -141,6 +141,47 @@ def test_rejects_nonwindows(repository):
         bridge.run_wsl_bridge(repository=repository[0])
 
 
+def test_custom_mounted_drive_runtime_is_an_isolated_argument(repository, fake_windows, monkeypatch):
+    calls = []
+    bashrc = "/mnt/d/CFD with $(literal text)/OpenFOAM-10/etc/bashrc"
+    def run(args, **kwargs):
+        calls.append(args)
+        return subprocess.CompletedProcess(args, 0, "/mnt/c/repo\n" if "wslpath" in args else "", "")
+    monkeypatch.setattr(bridge.subprocess, "run", run)
+    assert bridge.run_wsl_bridge(repository=repository[0], openfoam_bashrc=bashrc) == 0
+    assert calls[-1][-1] == bashrc
+    assert bashrc not in calls[-1][6]
+    assert 'export CLEANROOMX_OPENFOAM_BASHRC="$foam_bashrc"' in calls[-1][6]
+
+
+@pytest.mark.parametrize("path", ["D:\\OpenFOAM\\etc\\bashrc", "../etc/bashrc", "/etc/bashrc\n", ""])
+def test_custom_runtime_requires_an_absolute_linux_path(repository, fake_windows, monkeypatch, path):
+    monkeypatch.setattr(bridge.subprocess, "run", lambda *a, **k: pytest.fail("WSL invoked"))
+    with pytest.raises(ValueError, match="absolute Linux path"):
+        bridge.run_wsl_bridge(repository=repository[0], openfoam_bashrc=path)
+
+
+@pytest.mark.parametrize("timed_out", [False, True])
+def test_real_process_diagnostics_are_bounded_and_retained_on_failure(repository, fake_windows, monkeypatch, timed_out):
+    messages = []
+    def run(args, **kwargs):
+        if "wslpath" in args:
+            return subprocess.CompletedProcess(args, 0, "/mnt/c/repo\n", "")
+        kwargs["stdout"].write(b"x" * 70000 + b"\nActual runtime missing: fixture diagnostic\n")
+        if timed_out:
+            raise subprocess.TimeoutExpired(args, 180)
+        return subprocess.CompletedProcess(args, 2)
+    monkeypatch.setattr(bridge.subprocess, "run", run)
+    if timed_out:
+        with pytest.raises(subprocess.TimeoutExpired):
+            bridge.run_wsl_bridge(repository=repository[0], diagnostic_callback=messages.append)
+    else:
+        assert bridge.run_wsl_bridge(repository=repository[0], diagnostic_callback=messages.append) == 2
+    assert len(messages) == 1 and len(messages[0]) < 66000
+    assert messages[0].startswith("[Earlier diagnostics truncated]")
+    assert "Actual runtime missing" in messages[0]
+
+
 def test_bash_entrypoint_syntax_when_bash_is_installed():
     if os.name=="nt":
         pytest.skip("Windows bash.exe can be an unconfigured WSL stub; Bash syntax is tested on Linux CI")

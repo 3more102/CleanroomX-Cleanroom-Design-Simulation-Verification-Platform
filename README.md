@@ -54,6 +54,13 @@ fields; particle paths use the stated frozen-field model.
 
 ### Workstation and package-readiness diagnostics
 
+The [startup and runtime recovery guide](docs/STARTUP_AND_RUNTIME_RECOVERY.md)
+covers persistent startup tracebacks, strict real-GUI smoke checks, bounded
+OpenFOAM installation discovery and configurable WSL checkout/runtime paths,
+including installations accessible under `/mnt/d/`.
+
+![Current desktop runtime controls and genuine imported CFD fields](docs/startup-runtime-recovery-20261021/02-runtime-and-computed-fields.png)
+
 Use `cleanroomx-doctor` to check Python qualification, package and module
 integrity, native BIM availability, Tcl/Tk readiness, packaged examples,
 plugin/analysis registry integrity, and atomic persistence. Add `--deep` to

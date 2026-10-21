@@ -1,5 +1,16 @@
 # CleanroomX engineering state — 21 October 2026
 
+## Startup and runtime recovery increment
+
+The [current recovery report](../reports/startup-runtime-recovery-20261021/REPORT.md)
+records source changes, **2812 passed / 0 failed / 1 optional IFC skip**, an
+actual Foundation v10/display run, three new actual desktop captures and
+explicit remaining Windows/WSL and physical-model limitations. It also retains
+an earlier rejected log-integrity incident. See the
+[launch and configuration guide](STARTUP_AND_RUNTIME_RECOVERY.md) for the new
+runtime discovery and selectable WSL checkout/bashrc controls. Earlier results
+below remain historical evidence rather than current-head qualification.
+
 ## Verified repository baseline
 
 - Inspected branch: `feat/doors-5pa-ceiling-downflow-demo-20261020`.

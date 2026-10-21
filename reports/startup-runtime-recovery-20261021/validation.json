@@ -1,0 +1,136 @@
+{
+  "generated_utc": "2026-10-21T10:42:41.572673+00:00",
+  "base_commit": "edfe7dacdd42fdc985bda815d76b042347ac42b6",
+  "branch": "feat/doors-5pa-ceiling-downflow-demo-20261020",
+  "environment": {
+    "platform": "linux",
+    "python": "3.12.14 (main, Aug 25 2026, 14:00:49) [Clang 22.1.3 ]",
+    "tk": 9.0,
+    "vtk": "9.3.1",
+    "matplotlib": "3.10.8"
+  },
+  "complete_suite": {
+    "passed": 2812,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 1,
+    "elapsed_seconds": 303.724
+  },
+  "solver": {
+    "identity": "Usage: simpleFoam [OPTIONS]\noptions:\n  -case <dir>       specify alternate case directory, default is the cwd\n  -fileHandler <handler>\n                    override the fileHandler\n  -hostRoots <((host1 dir1) .. (hostN dirN))>\n                    slave root directories (per host) for distributed running\n  -libs '(\"lib1.so\" ... \"libN.so\")'\n                    pre-load libraries\n  -listFunctionObjects\n                    List functionObjects\n  -listFvConstraints\n                    List fvConstraints\n  -listFvModels     List fvModels\n  -listMomentumTransportModels\n                    List momentumTransportModels\n  -listScalarBCs    List scalar field boundary conditions (fvPatchField<scalar>)\n  -listSwitches     List all available debug, info and optimisation switches\n  -listVectorBCs    List vector field boundary conditions (fvPatchField<vector>)\n  -noFunctionObjects\n                    do not execute functionObjects\n  -parallel         run in parallel\n  -postProcess      Execute functionObjects only\n  -roots <(dir1 .. dirN)>\n                    slave root directories for distributed running\n  -srcDoc           display source code in browser\n  -doc              display application documentation in browser\n  -help             print the usage\n\nUsing: OpenFOAM-10 (see https://openfoam.org)\nBuild: 10-c4cf895ad8fa",
+    "stages": [
+      {
+        "command": "blockMesh",
+        "returncode": 0,
+        "failure": null,
+        "log_sha256": "b883136f91298ab43983909116dd6cce33a7dc61b4521d27567a46ae5bd4eded"
+      },
+      {
+        "command": "checkMesh",
+        "returncode": 0,
+        "failure": null,
+        "log_sha256": "1bb8e311d5e61b31866c415aa124e0755b4a16ed63e3c6efcbfc8db19156fcd4"
+      },
+      {
+        "command": "simpleFoam",
+        "returncode": 0,
+        "failure": null,
+        "log_sha256": "ce3a09f0ca7a678b29aa7e0c0e6598bb233ca4e72a6f9f8786382c1f83e632bb"
+      },
+      {
+        "command": "postProcess",
+        "returncode": 0,
+        "failure": null,
+        "log_sha256": "60950c35d4adcc2ce77d5e0e0793d091800933101bce2770a5059dd4f8d91a00"
+      }
+    ],
+    "mesh": {
+      "mesh_ok": true,
+      "cells": 13210.0,
+      "regions": 1.0,
+      "max_aspect_ratio": 5.0,
+      "max_nonorthogonality_deg": 0.0,
+      "max_skewness": 2.962039982e-14,
+      "min_cell_volume_m3": 0.015,
+      "max_cell_volume_m3": 0.015,
+      "total_volume_m3": 198.15
+    },
+    "iteration": "100",
+    "solver_reported_convergence": false,
+    "source_manifest_sha256": "ff25c6a55936dac0c4a485a773e56395537fe817854c072b931e6fd157eb2ae7",
+    "source_run_receipt_sha256": "9e8b9b762bc1d034ab68fc4e5be2b20e141fd3ae704bbc5d3f05bd8ad8a6fd01"
+  },
+  "runtime_discovery": {
+    "schema": "cleanroomx.openfoam-environments.v1",
+    "case_runtime_requirement": "OpenFOAM Foundation v10 / simpleFoam",
+    "searched_roots": [
+      "/opt",
+      "/usr/lib/openfoam",
+      "/usr/share/openfoam",
+      "/usr/share",
+      "/usr/local",
+      "/root/OpenFOAM"
+    ],
+    "environments": [
+      {
+        "bashrc": "/workspace/scratch/d2477ad7a66e/runtime-packages/root/opt/openfoam10/etc/bashrc",
+        "origin": "installation_directory",
+        "release_hint": "10",
+        "runtime_verified": false
+      }
+    ],
+    "selected_bashrc": "/workspace/scratch/d2477ad7a66e/runtime-packages/root/opt/openfoam10/etc/bashrc",
+    "selection_error": null,
+    "inspection_issues": [],
+    "runtime_verified": false,
+    "remediation": "Set CLEANROOMX_OPENFOAM_BASHRC to the absolute Linux etc/bashrc path for your installation, then probe it. Current case templates require Foundation v10; another detected release is not automatically compatible. Installation: https://openfoam.org/download/10-ubuntu/ WSL: https://openfoam.org/download/windows/"
+  },
+  "gui_capture_manifest": {
+    "created_utc": "2026-10-21T10:42:18.435255+00:00",
+    "source_manifest_sha256": "ff25c6a55936dac0c4a485a773e56395537fe817854c072b931e6fd157eb2ae7",
+    "source_run_receipt_sha256": "9e8b9b762bc1d034ab68fc4e5be2b20e141fd3ae704bbc5d3f05bd8ad8a6fd01",
+    "source_iteration": "100",
+    "solver_reported_convergence": false,
+    "engineering_release": "HOLD",
+    "gui_callback_errors": [],
+    "images": [
+      {
+        "file": "01-design-workspace.png",
+        "description": "Actual synchronized design workspace; no sourced solver environment is needed for startup",
+        "kind": "actual_Tk_window_pixels",
+        "width": 1440,
+        "height": 900,
+        "sha256": "5f213fb30a5e3a69c4081a83b543d70706e4759b9c276c150c72f1d296dd1888"
+      },
+      {
+        "file": "02-runtime-and-computed-fields.png",
+        "description": "Current runtime/checkout controls and genuine imported p/U/phi; WSL controls unavailable on this Linux host",
+        "kind": "actual_Tk_window_pixels",
+        "width": 1390,
+        "height": 930,
+        "sha256": "eb2b36586140c357542b2a36afe12dec1cd9c8e6309a4604086ed1ead3c4c5d7"
+      },
+      {
+        "file": "03-recorded-residuals.png",
+        "description": "Actual solver residual curves calculated by the running GUI from recorded stage logs",
+        "kind": "actual_Tk_window_pixels",
+        "width": 1390,
+        "height": 930,
+        "sha256": "f020f4f274c8259a50707bbe6c0571723f98a2ad88bc4274dc4ae32c9d69a84d"
+      }
+    ]
+  },
+  "engineering_release": "HOLD",
+  "initial_integrity_failure": {
+    "description": "An interrupted full-suite attempt rejected altered postProcess.log bytes after receipt creation. The cause of that alteration was not established. Fresh isolated CFD and complete-suite reruns passed without altering hash checks.",
+    "recorded_log_sha256": "fddc64ec92f54471a753d0d0d0cca92d1994cc170e161aa14dd89d4c3c29f314",
+    "observed_log_sha256": "f3fce01d3003bac2dd32d6a3af7d9549292d7cc7fd629694233e8f84024a6e87"
+  },
+  "artifact_sha256": {
+    "executed-case.tar.gz": "d5eb6127a973f464d3ef913a4777a691fcb83884072b8845775006ee00482dcd",
+    "full-suite.xml": "a4360c9175819e90718fe00795c0d236c8ed139516a777c7ce75ba0e3b0d8f76",
+    "full-suite.log": "38130bab4ef2ce815655d8eb6c50c8998e160894aacee7e626a9997043a2ada5",
+    "fresh-cfd-regression.log": "941c7f331f497eee6464da5e7502c792a3b305119f1d20f6ac056a395e43ee6d",
+    "startup-before-fix.log.gz": "0cd659827550af3217a4f90a63dfa032f940deb47c274950af92d189e40a9dfd"
+  }
+}

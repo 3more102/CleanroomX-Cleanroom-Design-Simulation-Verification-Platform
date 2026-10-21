@@ -4,6 +4,7 @@ import argparse
 import copy
 from datetime import datetime
 import json
+import math
 from pathlib import Path
 import queue
 import threading
@@ -83,7 +84,7 @@ from .gui_state import (
     save_gui_layout_state,
 )
 from .gui_theme import configure_ttk_theme, normalize_theme_name
-from .runtime_diagnostics import install_tk_exception_handler
+from .runtime_diagnostics import install_tk_exception_handler, report_gui_failure
 from .gui_windowing import fit_window_to_display
 from .gui_proofgraph import ProofGraphViewer
 from .gui_start import StartCenter
@@ -7625,20 +7626,53 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.demo and args.project:
         parser.error("project path and --demo cannot be used together")
-    if args.autosave_interval_seconds < 0:
-        parser.error("--autosave-interval-seconds must be zero or greater")
+    if (not math.isfinite(args.autosave_interval_seconds)
+            or args.autosave_interval_seconds < 0):
+        parser.error("--autosave-interval-seconds must be finite and zero or greater")
     if args.check:
         print(json.dumps(application_info(), indent=2, ensure_ascii=False))
         return 0
 
     registry = validate_application_registry()
-    project_path = bundled_demo_project_path() if args.demo else args.project
+    root = None
+    app = None
+    smoke_callback_errors = []
+    try:
+        root = tk.Tk()
+        if args.smoke:
+            # Tk normally prints and swallows callback exceptions. A smoke run
+            # must fail when an idle/layout callback fails, even if update()
+            # returns normally. Install this before application construction.
+            def smoke_callback_error(exc_type, exc, traceback):
+                smoke_callback_errors.append(exc)
+                report_gui_failure(exc.with_traceback(traceback), phase="smoke callback")
+            root.report_callback_exception = smoke_callback_error
+        app = CleanroomXApp(
+            root,
+            autosave_interval_seconds=args.autosave_interval_seconds,
+        )
+        return _run_gui(root, app, args, registry, smoke_callback_errors)
+    except Exception as exc:
+        detail = report_gui_failure(exc)
+        if root is not None and not args.smoke:
+            try:
+                messagebox.showerror("CleanroomX startup failed", detail, parent=root)
+            except tk.TclError:
+                pass
+        return 2
+    finally:
+        manager = getattr(app, "_autosave_manager", None)
+        if manager is not None:
+            manager.shutdown(wait=False)
+        if root is not None and callable(getattr(root, "destroy", None)):
+            try:
+                root.destroy()
+            except tk.TclError:
+                pass  # WM_DELETE_WINDOW may already have destroyed this root.
 
-    root = tk.Tk()
-    app = CleanroomXApp(
-        root,
-        autosave_interval_seconds=args.autosave_interval_seconds,
-    )
+
+def _run_gui(root, app, args, registry, smoke_callback_errors) -> int:
+    """Run an initialized window; the caller owns lifecycle and failure logging."""
     if not args.smoke:
         runtime_status_callback = getattr(
             getattr(app, "status_var", None),
@@ -7670,23 +7704,28 @@ def main(argv: list[str] | None = None) -> int:
     if not args.smoke:
         recovered_at_startup = app.offer_startup_recovery()
 
-    if project_path and not recovered_at_startup:
+    if (args.demo or args.project) and not recovered_at_startup:
         try:
+            project_path = bundled_demo_project_path() if args.demo else args.project
             app.load_project_path(project_path)
         except Exception as exc:
+            detail = report_gui_failure(exc, phase="project loading")
             if args.smoke:
-                root.destroy()
                 print(f"CleanroomX GUI smoke: FAIL — {exc}")
                 return 2
-            messagebox.showerror("Open failed", str(exc), parent=root)
+            messagebox.showerror("Open failed", detail, parent=root)
 
     if args.smoke:
         try:
-            if project_path and app.project.analyses:
+            if (args.demo or args.project) and app.project.analyses:
                 run = app.smoke_run_active()
                 json.dumps(run.to_dict(), allow_nan=False)
             root.update_idletasks()
             root.update()
+            if smoke_callback_errors:
+                raise RuntimeError(
+                    f"{len(smoke_callback_errors)} Tk callback error(s) during GUI smoke"
+                ) from smoke_callback_errors[0]
             if args.demo:
                 layout = app.spatial_workspace.layout
                 if len(layout.get("rooms", [])) < 3:
@@ -7700,10 +7739,9 @@ def main(argv: list[str] | None = None) -> int:
                 if not app.spatial_workspace.canvas_3d.find_withtag("pressure_relationship_3d"):
                     raise RuntimeError("3D pressure-cascade relationships did not render")
         except Exception as exc:
-            root.destroy()
+            report_gui_failure(exc, phase="smoke")
             print(f"CleanroomX GUI smoke: FAIL — {exc}")
             return 2
-        root.destroy()
         print("CleanroomX GUI smoke: PASS")
         return 0
 

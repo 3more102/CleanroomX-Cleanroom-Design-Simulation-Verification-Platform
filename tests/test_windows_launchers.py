@@ -27,4 +27,6 @@ def test_windows_launchers_use_repository_source_and_open_demo_by_default():
     assert "CleanroomX GUI requires Tkinter" in cmd
     assert "-m cleanroomx.gui --demo" in cmd
     assert "-m cleanroomx.gui %*" in cmd
-    assert cmd.rstrip().endswith("exit /b %ERRORLEVEL%")
+    assert 'set "CLEANROOMX_LAUNCH_EXIT=%ERRORLEVEL%"' in cmd
+    assert "CLEANROOMX_NO_PAUSE" in cmd
+    assert cmd.rstrip().endswith("exit /b %CLEANROOMX_LAUNCH_EXIT%")

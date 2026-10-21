@@ -18,6 +18,7 @@ from .ai_assistant import (
 from .ai_assistant_chat import AssistantConversations
 from .ai_cfd_evidence import bound_cfd_evidence, format_cfd_evidence
 from .ai_assistant_plan import build_assistant_action_plan, render_assistant_action_plan
+from .ai_assistant_specialist import build_specialist_review, render_specialist_review
 from .project import ProjectDocument
 
 
@@ -125,6 +126,10 @@ class AssistantWindow(tk.Toplevel):
             evidence_buttons, text="Clear evidence",
             command=self.clear_cfd_export,
         ).pack(side="left", padx=(8, 0))
+        ttk.Button(
+            evidence_buttons, text="Specialist review (offline)",
+            command=self.review_specialist,
+        ).pack(side="left", padx=(12, 0))
 
         self.status = tk.StringVar(
             value="Local Ollama by default. Save chats explicitly to preserve them."
@@ -345,6 +350,22 @@ class AssistantWindow(tk.Toplevel):
         except (OSError, ValueError, TypeError, KeyError) as exc:
             self._append("Action plan unavailable", str(exc))
             self.status.set("Could not build a traceable engineering action plan.")
+
+    def review_specialist(self) -> None:
+        """Review one evidence-bound engineering specialty without network use."""
+        if self._busy:
+            self.status.set("Finish the current request before reviewing evidence.")
+            return
+        try:
+            self._ensure_session()
+            review = build_specialist_review(
+                self._snapshot(), focus=self.review_focus.get(),
+            )
+            self._append("Offline specialist review", render_specialist_review(review))
+            self.status.set("Specialist review complete. No model, network or design edits.")
+        except (OSError, ValueError, TypeError, KeyError) as exc:
+            self._append("Specialist review unavailable", str(exc))
+            self.status.set("Could not review this specialty from canonical evidence.")
 
     def _on_return(self, _event: tk.Event) -> None:
         self.ask_ai()

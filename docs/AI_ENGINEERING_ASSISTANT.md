@@ -129,6 +129,33 @@ are physically valid, or results are certified. This feature cannot
 demonstrate a closed-door 5 Pa cascade from the all-doors-open scenario.
 No automatic model/CFD edits or numerical solver operations are performed.
 
+
+## Recorded CFD follow-up worklist (offline, non-executing)
+
+The existing **Next actions (offline)** button now adds a separate **Recorded
+CFD next checks — HOLD** section whenever a matching CFD export is attached.
+The exported report is reloaded through the same revision-bound,
+fail-closed importer before making the plan. No model call is required.
+
+The headless equivalent is:
+
+```bash
+cleanroomx-ai-review project.json --cfd-export path/to/export --cfd-actions
+cleanroomx-ai-review project.json --cfd-export path/to/export --cfd-actions --format json
+```
+
+`--cfd-actions` without `--cfd-export` fails with exit code 2. This is
+independent from `--actions`, which only plans from project diagnostics.
+The CFD worklist uses the canonical review reasons and non-prescriptive
+checks, and adds explicit steps to investigate closed-door evidence,
+authentic source fields, and physical validation. All entries remain
+`proposal_not_executed`, require separate approval, and are tied to the
+saved project SHA-256, exported report SHA-256, and evidence digest.
+The plan has its own content digest for mutation detection. **Hashes are
+not proof of genuine OpenFOAM computation or independent authorship.**
+No tolerance, successful check, closed-door cascade, automatic modification,
+regulatory result, or engineering release is inferred or performed.
+
 ## Offline AI evidence review from CLI
 
 For command-line workflows and CI you can use the same project-aware,
@@ -247,6 +274,7 @@ Run:
 python -m pytest tests/test_ai_assistant.py tests/test_ai_assistant_chat.py tests/test_ai_assistant_plan.py -q
 python -m pytest tests/test_ai_assistant_cli.py -q
 python -m pytest tests/test_ai_cfd_evidence.py -q
+python -m pytest tests/test_ai_cfd_followup.py -q
 python -m pytest tests/test_gui.py -q
 # With a graphical display/Xvfb:
 python -m pytest tests/test_ai_assistant_ui.py -q

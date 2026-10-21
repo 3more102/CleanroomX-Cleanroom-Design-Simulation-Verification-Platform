@@ -77,25 +77,49 @@ class AssistantConversations:
         return session
 
     def model_history(
-        self, session_id: str, project_key: str
+        self,
+        session_id: str,
+        project_key: str,
+        *,
+        snapshot_sha256: str | None = None,
     ) -> list[dict[str, str]]:
-        """Return bounded past Q/A pairs; never forward system/tool/offline items."""
-        session = self.require_session(session_id, project_key)
-        messages = []
-        for message in session.messages:
-            if (
-                message.role in ("user", "assistant")
-                and message.metadata.get("assistant_source") == "ai"
-            ):
-                messages.append(
-                    {"role": message.role, "content": message.content}
-                )
+        """Return bounded, complete, non-stale Q/A pairs.
 
-        # Preserve *complete* question/answer exchanges from newest backwards.
+        With a snapshot identity, do not forward answers produced for a
+        different design revision. The historical transcript remains
+        available to the human, but is not silently promoted to current
+        engineering context. Legacy callers can omit the snapshot filter.
+        """
+        if snapshot_sha256 is not None:
+            self._validate_key(snapshot_sha256)
+        session = self.require_session(session_id, project_key)
+        messages = [
+            message for message in session.messages
+            if message.role in ("user", "assistant")
+            and message.metadata.get("assistant_source") == "ai"
+        ]
+
+        # Match actual message pairs before filtering. Dropping one half of
+        # an exchange must never pair an old question with a new answer.
         pairs = []
         for i in range(0, len(messages) - 1, 2):
-            if messages[i]["role"] == "user" and messages[i + 1]["role"] == "assistant":
-                pairs.append(messages[i:i + 2])
+            first, second = messages[i:i + 2]
+            if first.role != "user" or second.role != "assistant":
+                continue
+            if (
+                first.metadata.get("stale_project_on_receipt") is True
+                or second.metadata.get("stale_project_on_receipt") is True
+            ):
+                continue
+            if snapshot_sha256 is not None and (
+                first.metadata.get("snapshot_sha256") != snapshot_sha256
+                or second.metadata.get("snapshot_sha256") != snapshot_sha256
+            ):
+                continue
+            pairs.append([
+                {"role": first.role, "content": first.content},
+                {"role": second.role, "content": second.content},
+            ])
         retained = []
         remaining = MAX_HISTORY_CHARACTERS
         for pair in reversed(pairs):

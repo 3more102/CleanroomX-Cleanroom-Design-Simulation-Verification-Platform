@@ -25,6 +25,10 @@ from .project import (
 )
 
 
+class ProjectReviewChangedError(RuntimeError):
+    """The saved project revision changed while preparing evidence."""
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="cleanroomx-ai-review",
@@ -113,7 +117,7 @@ def build_offline_review(
     )
     after = capture_project_file_revision(source)
     if not project_file_revision_matches(before, after):
-        raise RuntimeError(
+        raise ProjectReviewChangedError(
             "The project changed during AI review; evidence was discarded."
         )
     return {
@@ -162,7 +166,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 output += "\n\n" + render_specialist_review(result["specialist_review"])
             output += "\n\nSource revision: " + result["source_revision_sha256"]
             output += "\nNo model request or solver execution was performed."
-    except (OSError, ValueError, TypeError, KeyError, RuntimeError) as exc:
+    except (OSError, ValueError, TypeError, KeyError, ProjectReviewChangedError) as exc:
         print("cleanroomx-ai-review: " + str(exc), file=sys.stderr)
         return 2
     print(output)

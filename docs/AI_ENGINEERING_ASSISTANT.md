@@ -11,21 +11,36 @@ operations, optimization, IFC edits, or automated project modifications.
 Open **Tools > AI Engineering Assistant...** in the normal
 `cleanroomx-gui` desktop.
 
+The window now also has a **Conversation** selector, **New**, **Save chats...**
+and **Load chats...** buttons. Conversations are independent and bound to a
+local project identity. Model context uses at most 12 prior messages from
+complete question-answer pairs, with a 12,000-character history limit.
+Concurrent/stale chat writes are rejected through the existing
+`ChatSessionStore` revision and incarnation checks.
+
+**Chat persistence is deliberately explicit:** messages live in memory until
+Save chats is clicked. Saved workspaces use the existing strict-JSON
+multi-agent workspace format and atomic writer. The files contain full
+questions, model responses and their limited provenance metadata; protect
+them as project documents. Loading an AI workspace asks before replacing
+in-memory conversations. The save dialog refuses to overwrite unrelated JSON
+(including normal CleanroomX project files).
+
 The window has two independent functions:
 
 1. **Review project (offline):** deterministic review of the canonical
    `analyze_project_diagnostics` result, with explicit rule IDs and suggested
    corrective actions. It uses no LLM and makes no network request.
-2. **Ask AI:** sends one bounded project evidence snapshot and the question to
-   a model *only after* you press the button. The response is clearly marked
+2. **Ask AI:** sends one bounded project evidence snapshot, the question, and
+   up to 12 prior conversation messages to a model *only after* you press the button. The response is clearly marked
    an unverified suggestion and is not used as solver/verification evidence.
 
 The assistant snapshot includes project name, in-memory SHA-256 identity,
 bounded analysis names/types, diagnostic severity/counts/findings, and
-retained verification status summaries. The snapshot **does not include**
+retained verification status summaries. The diagnostic snapshot **does not include**
 raw room geometry, full analysis inputs, CFD fields, solver residual arrays,
-files, or project metadata. Names and diagnostic messages can still contain
-sensitive information: inspect your project before enabling cloud mode.
+files, or project metadata. Names, diagnostic messages and previously entered chat messages can still
+contain sensitive information: inspect your project before enabling cloud mode.
 
 The snapshot identity is calculated from the current **in-memory** project,
 not assumed to be identical to any on-disk revision. If the project changes
@@ -92,9 +107,9 @@ from the provided evidence.
 
 ## Next engineering phases
 
-**Phase 2 — Project-aware conversations:** reuse `ChatSessionStore`
-for isolated persistent chat sessions and bounded history; add roles
-for CFD/meshing, HVAC, geometry, contamination, and evidence review.
+**Phase 2 — Specialist assistants:** add role-specific, evidence-bound context
+for CFD/meshing, HVAC, geometry, contamination, and evidence review. Shared
+multi-agent orchestration remains future work; no new solver claims.
 
 **Phase 3 — Draft engineering actions:** show proposed edits as structured
 diffs with units, justifications, input-revision bindings and explicit human
@@ -117,7 +132,7 @@ numerical-vs-physical validation distinction, and measured decision criteria.
 Run:
 
 ```bash
-python -m pytest tests/test_ai_assistant.py -q
+python -m pytest tests/test_ai_assistant.py tests/test_ai_assistant_chat.py -q
 python -m pytest tests/test_gui.py -q
 ```
 

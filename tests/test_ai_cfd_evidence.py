@@ -229,3 +229,25 @@ def test_headless_review_can_attach_matching_cfd_evidence(tmp_path, capsys):
     )
     assert main([str(project_path), "--cfd-export", str(export)]) == 2
     assert "different saved project revision" in capsys.readouterr().err
+
+
+
+@pytest.mark.parametrize("field,value,expected", [
+    ("mean_speed_m_s", "fast", "finite numeric"),
+    ("max_speed_m_s", True, "finite numeric"),
+    ("mean_downward_velocity_m_s", "0.2", "finite numeric"),
+    ("upward_volume_fraction", 1.5, "between zero and one"),
+    ("downward_volume_fraction", -0.01, "between zero and one"),
+    ("supply_inflow_m3_s", "0.1", "finite numeric"),
+    ("return_outflow_m3_s", {}, "finite numeric"),
+])
+def test_optional_room_metrics_must_be_numeric_and_bounded(
+    tmp_path, field, value, expected
+):
+    project_path, project, export, report = _saved_project_and_export(tmp_path)
+    report["rooms"]["A"][field] = value
+    (export / "report.json").write_text(json.dumps(report), encoding="utf-8")
+    # Canonical engineering review checks source balance but does not need these
+    # additional presentation metrics. The adapter must reject their bad types.
+    with pytest.raises(ValueError, match=expected):
+        bound_cfd_evidence(export, project=project, project_path=project_path)

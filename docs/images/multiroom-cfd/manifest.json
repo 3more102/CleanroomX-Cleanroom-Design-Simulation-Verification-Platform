@@ -1,0 +1,48 @@
+{
+  "description": "Original user-provided CleanroomX GUI and CFD screenshot assets. Renamed only; original image bytes preserved.",
+  "capture_context": "2026-10-20 screenshots",
+  "assets": [
+    {
+      "file": "minimum-window-design.png",
+      "sha256": "0c8ff5635c9ca6b175ecb43966f3b632bcd4b5da473993ec57170eb22802be50",
+      "bytes": 127211,
+      "width": 1050,
+      "height": 680
+    },
+    {
+      "file": "computed-dashboard.png",
+      "sha256": "fdc4b898fe14bf62106e0b3b33dac296d75207f389f7a3dfcada2f3590ef1193",
+      "bytes": 96638,
+      "width": 1400,
+      "height": 850
+    },
+    {
+      "file": "computed-section.png",
+      "sha256": "7fdbdeefbefbf76add60acd34a9bfff4f0953253d14085fe5b11b2b517f437e9",
+      "bytes": 72119,
+      "width": 1400,
+      "height": 850
+    },
+    {
+      "file": "actual-room-flow-balances.png",
+      "sha256": "4a65c6931d180c0a4782acb9eca34dfaebb88bdcb7863e73a7eaa3c412c9b901",
+      "bytes": 101507,
+      "width": 1380,
+      "height": 900
+    },
+    {
+      "file": "actual-design-residual-review.png",
+      "sha256": "c00322bd532e09bfeee39b126a41a68cea130b946d89e92681d3c07da44916b8",
+      "bytes": 83888,
+      "width": 1380,
+      "height": 900
+    },
+    {
+      "file": "earlier-snapshot-convergence.png",
+      "sha256": "29a66d4eef44eeb725d9083b493a6b03073c1ccfcf6724156a2b53baaff2a9b7",
+      "bytes": 85212,
+      "width": 1380,
+      "height": 900
+    }
+  ]
+}

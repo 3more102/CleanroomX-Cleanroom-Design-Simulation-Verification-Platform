@@ -77,6 +77,45 @@ codes, privacy considerations, and limitations.
 - Validated, atomic property edits that keep devices attached when room coordinates change.
 - Room/device duplication with fresh IDs, synchronized views, and one-step Undo/Redo.
 
+<!-- cleanroomx-multiroom-cfd-gallery:start -->
+## Multiroom CFD — GUI and computed-field screenshots
+
+These are six unedited CleanroomX desktop screenshots. See the [annotated CFD gallery](docs/MULTIROOM_CFD_GALLERY.md) for interpretation and evidence limitations.
+
+**Numerical status:** The 13,210-cell, 600-iteration example is **NOT CONVERGED**. Computed pressures must not be mistaken for achieving 5/10/15 Pa design targets. A separate, lower-flow screenshot selects iteration 50 of a run that later reported convergence at iteration 163. Screenshots are not independent CFD validation.
+
+**2D and 3D cleanroom design workspace**
+
+![CleanroomX 2D and 3D workspace](docs/images/multiroom-cfd/minimum-window-design.png)
+
+**Computed multiroom CFD dashboard**
+
+![Computed room pressures and airflow rates](docs/images/multiroom-cfd/computed-dashboard.png)
+
+<details>
+<summary>View four additional CFD screenshots</summary>
+
+**Computed pressure section and velocity vectors**
+
+![Computed CFD section and velocity vectors](docs/images/multiroom-cfd/computed-section.png)
+
+**Room airflow balance and open-door transfer**
+
+![Room airflow balance and door transfer](docs/images/multiroom-cfd/actual-room-flow-balances.png)
+
+**Residual history — 600-iteration run not converged**
+
+![Actual design residual history](docs/images/multiroom-cfd/actual-design-residual-review.png)
+
+**Earlier snapshot of the separate lower-flow run**
+
+![Earlier iteration 50 convergence-history snapshot](docs/images/multiroom-cfd/earlier-snapshot-convergence.png)
+
+</details>
+
+The six source PNG files and their [SHA-256 manifest](docs/images/multiroom-cfd/manifest.json) are retained under `docs/images/multiroom-cfd/`. Validate their integrity with `python tools/validate_multiroom_cfd_gallery.py`.
+<!-- cleanroomx-multiroom-cfd-gallery:end -->
+
 ### Cleanroom CFD study (external solver evidence)
 
 - Compare three supply/exhaust layouts: central ceiling / low-wall, distributed ceiling / low-wall, and distributed ceiling / raised perforated floor.

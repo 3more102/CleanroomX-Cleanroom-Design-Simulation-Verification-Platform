@@ -259,3 +259,32 @@ def test_optional_room_metrics_must_be_numeric_and_bounded(
     # additional presentation metrics. The adapter must reject their bad types.
     with pytest.raises(ValueError, match=expected):
         bound_cfd_evidence(export, project=project, project_path=project_path)
+
+
+
+def test_headless_cfd_next_checks_require_matching_export(tmp_path, capsys):
+    """Synthetic report fixture: no actual OpenFOAM run or acceptance claim."""
+    from cleanroomx.ai_assistant_cli import build_offline_review, main
+    from cleanroomx.ai_cfd_followup import verify_cfd_followup_plan
+
+    project_path, project, export, report = _saved_project_and_export(tmp_path)
+    unchanged = (project_path.read_bytes(), (export / "report.json").read_bytes())
+    output = build_offline_review(project_path, cfd_export=export, cfd_actions=True)
+    plan = output["cfd_followup_plan"]
+    assert verify_cfd_followup_plan(plan)
+    assert plan["engineering_release"] == "HOLD"
+    assert plan["source_report_sha256"] == output["context"]["cfd_evidence"]["report_sha256"]
+    assert all(action["state"] == "proposal_not_executed" for action in plan["actions"])
+    assert (project_path.read_bytes(), (export / "report.json").read_bytes()) == unchanged
+
+    assert main([str(project_path), "--cfd-actions"]) == 2
+    assert "--cfd-actions requires --cfd-export" in capsys.readouterr().err
+    assert main([str(project_path), "--cfd-export", str(export),
+                 "--cfd-actions", "--format", "json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["cfd_followup_plan"]["source_report_sha256"] == plan["source_report_sha256"]
+    assert payload["model_used"] is False
+    assert payload["network_used"] is False
+    assert main([str(project_path), "--cfd-export", str(export),
+                 "--cfd-actions"]) == 0
+    assert "RECORDED CFD NEXT CHECKS" in capsys.readouterr().out

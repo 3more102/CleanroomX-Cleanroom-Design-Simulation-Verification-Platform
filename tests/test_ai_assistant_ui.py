@@ -32,9 +32,12 @@ def test_ai_window_offline_review_and_project_isolation():
     try:
         original_chat = window._session_id
         window.review_project()
+        window.review_action_plan()
         text = window.transcript.get("1.0", "end")
         assert "LOCAL EVIDENCE REVIEW" in text
-        assert "No network request made" in window.status.get()
+        assert "ENGINEERING NEXT-ACTIONS PLAN" in text
+        assert "No CleanroomX analyses" in text
+        assert "No network or design changes" in window.status.get()
         window.new_chat()
         assert len(window._conversations.sessions(state["key"])) == 2
         assert window._session_id != original_chat

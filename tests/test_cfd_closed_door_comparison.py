@@ -281,7 +281,7 @@ def test_sensitivity_replay_accepts_genuine_network_results_and_source_identity(
         leakage_multiplier=.5),"increase strictly"),
     (lambda s:s["baseline_closed_network_inputs"]["paths"][0].update(
         coefficient_m3_s_pa_n=.5),"fingerprint"),
-    (lambda s:s["baseline_closed_network_sha256"]="0"*64,"fingerprint"),
+    (lambda s:s.update(baseline_closed_network_sha256="0"*64),"fingerprint"),
     (lambda s:s["baseline_result"]["door_results"][0].update(
         computed_closed_network_delta_pa=-1.),"Baseline result"),
     (lambda s:s["baseline_door_connectivity"][0].update(

@@ -105,6 +105,9 @@ class AssistantWindow(tk.Toplevel):
             buttons, text="Review CFD export...", command=self.review_cfd_export
         )
         self.cfd_button.pack(side="left", padx=(6, 0))
+        ttk.Button(
+            buttons, text="Clear CFD", command=self.clear_cfd_export
+        ).pack(side="left", padx=(6, 0))
         self.ask_button = ttk.Button(
             buttons, text="Ask AI", command=self.ask_ai
         )
@@ -266,6 +269,15 @@ class AssistantWindow(tk.Toplevel):
                 project_path=path,
             )
         return context
+
+    def clear_cfd_export(self) -> None:
+        """Detach recorded CFD evidence from subsequent model requests."""
+        if self._busy:
+            self.status.set("Finish the current request before clearing CFD evidence.")
+            return
+        self._cfd_export_dir = None
+        self._cfd_project_key = None
+        self.status.set("CFD export detached. Future AI questions use project diagnostics only.")
 
     def review_cfd_export(self) -> None:
         """Explicitly inspect an existing CFD export without any model request."""

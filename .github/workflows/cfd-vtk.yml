@@ -7,10 +7,14 @@ on:
       - "src/cleanroomx/openfoam_runtime.py"
       - "src/cleanroomx/gui.py"
       - "src/cleanroomx/gui_lifecycle.py"
+      - "src/cleanroomx/gui_scrollable.py"
       - "scripts/with_openfoam10.sh"
       - "tests/test_openfoam_runtime.py"
       - "tests/test_gui_startup.py"
       - "tests/test_gui_lifecycle.py"
+      - "tests/test_cfd_responsive_gui.py"
+      - "tests/test_cfd_responsive_v3.py"
+      - "tests/test_gui_windowing.py"
       - "tests/test_cfd_wsl_gui.py"
       - "tests/test_cfd_process.py"
       - "tests/test_cfd_cancellation_gui.py"
@@ -44,10 +48,14 @@ on:
       - "src/cleanroomx/openfoam_runtime.py"
       - "src/cleanroomx/gui.py"
       - "src/cleanroomx/gui_lifecycle.py"
+      - "src/cleanroomx/gui_scrollable.py"
       - "scripts/with_openfoam10.sh"
       - "tests/test_openfoam_runtime.py"
       - "tests/test_gui_startup.py"
       - "tests/test_gui_lifecycle.py"
+      - "tests/test_cfd_responsive_gui.py"
+      - "tests/test_cfd_responsive_v3.py"
+      - "tests/test_gui_windowing.py"
       - "tests/test_cfd_wsl_gui.py"
       - "tests/test_cfd_process.py"
       - "tests/test_cfd_cancellation_gui.py"
@@ -100,4 +108,4 @@ jobs:
       - name: Run interactive native VTK-on-Tk smoke test on actual display server
         env:
           LIBGL_ALWAYS_SOFTWARE: "1"
-        run: xvfb-run -a python -m pytest -q tests/test_gui_startup.py tests/test_gui_lifecycle.py tests/test_cfd_wsl_gui.py tests/test_cfd_cancellation_gui.py tests/test_cfd_multizone_vtk_gui.py tests/test_cfd_particle_sources_gui.py tests/test_cfd_convergence_triage_gui.py -ra
+        run: xvfb-run -a python -m pytest -q tests/test_gui_startup.py tests/test_gui_lifecycle.py tests/test_cfd_responsive_gui.py tests/test_cfd_responsive_v3.py tests/test_gui_windowing.py tests/test_cfd_wsl_gui.py tests/test_cfd_cancellation_gui.py tests/test_cfd_multizone_vtk_gui.py tests/test_cfd_particle_sources_gui.py tests/test_cfd_convergence_triage_gui.py -ra

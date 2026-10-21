@@ -1,5 +1,6 @@
 """Real Tk ownership tests; unsafe finalizers are observed without calling Tcl."""
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 import gc
 import os
 import threading
@@ -27,6 +28,26 @@ def root():
     collect_retired_tk_objects()
 
 
+@contextmanager
+def _isolated_background_collection():
+    """Keep unrelated, unreachable Tk cycles out of test worker GC.
+
+    The test deliberately performs garbage collection off the Tk main thread
+    to verify the ownership contract. Collect prior-test garbage on the GUI
+    thread, then freeze existing objects so the worker sees only objects
+    created inside this fixture. Always unfreeze and collect on the GUI
+    thread, even on assertion failure. This is test isolation, not a
+    production GC policy.
+    """
+    gc.collect(2)
+    gc.freeze()
+    try:
+        yield
+    finally:
+        gc.unfreeze()
+        gc.collect(2)
+
+
 def _observed_variable(root, finalized, rescued):
     class ObservedVariable(tk.StringVar):
         def __del__(self):
@@ -42,35 +63,37 @@ def _observed_variable(root, finalized, rescued):
 
 def test_unprotected_variable_cycle_exposes_background_finalizer_ownership(root):
     finalized, rescued = [], []
-    variable = _observed_variable(root, finalized, rescued)
-    del variable
-    with ThreadPoolExecutor(max_workers=1) as pool:
-        pool.submit(gc.collect).result(timeout=3)
-    assert finalized and finalized[0] != threading.get_ident()
-    for variable in rescued:
-        tk.Variable.__del__(variable)
-        variable.cycle = None
-    rescued.clear()
+    with _isolated_background_collection():
+        variable = _observed_variable(root, finalized, rescued)
+        del variable
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            pool.submit(gc.collect).result(timeout=3)
+        assert finalized and finalized[0] != threading.get_ident()
+        for variable in rescued:
+            tk.Variable.__del__(variable)
+            variable.cycle = None
+        rescued.clear()
 
 
 @pytest.mark.parametrize("collect_while_caller_still_owns_window", [False, True])
 def test_destroyed_widgets_and_variables_finalize_on_gui_thread(root, collect_while_caller_still_owns_window):
     finalized, rescued = [], []
     protect_tk_lifecycle(root)
-    window = tk.Toplevel(root)
-    window.variable = _observed_variable(root, finalized, rescued)
-    reference = weakref.ref(window.variable)
-    window.destroy()
-    if collect_while_caller_still_owns_window:
+    with _isolated_background_collection():
+        window = tk.Toplevel(root)
+        window.variable = _observed_variable(root, finalized, rescued)
+        reference = weakref.ref(window.variable)
+        window.destroy()
+        if collect_while_caller_still_owns_window:
+            collect_retired_tk_objects()
+            assert reference() is not None
+        del window
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            pool.submit(gc.collect).result(timeout=3)
+        assert finalized == [] and rescued == []
         collect_retired_tk_objects()
-        assert reference() is not None
-    del window
-    with ThreadPoolExecutor(max_workers=1) as pool:
-        pool.submit(gc.collect).result(timeout=3)
-    assert finalized == [] and rescued == []
-    collect_retired_tk_objects()
-    assert finalized == [threading.get_ident()]
-    assert reference() is None
+        assert finalized == [threading.get_ident()]
+        assert reference() is None
 
 
 def test_collection_preserves_preexisting_automatic_gc_policy(root):

@@ -71,6 +71,69 @@ def test_cloud_requires_explicit_opt_in_and_secret(monkeypatch):
     assert cfg.endpoint == CLOUD_URL
 
 
+
+def test_diagnostic_element_whitelists_identifiers_before_cloud_context(monkeypatch):
+    marker = "PRIVATE_NESTED_DIAGNOSTIC_INPUT"
+    diagnostics = {
+        "issues": [{
+            "sequence": 1, "severity": "warning", "rule": "spatial.overlap",
+            "message": "Inspect the room", "suggested_action": "Correct the geometry.",
+            "element": {
+                "type": "room", "id": "i" * 5000, "name": "n" * 5000,
+                "raw_inputs": {"secret": marker},
+            },
+        }],
+        "summary": {
+            "status": "warning", "issue_count": 1, "error_count": 0,
+            "warning_count": 1, "info_count": 0,
+        },
+        "verification_history": {"latest_by_analysis": []},
+    }
+    monkeypatch.setattr(
+        "cleanroomx.ai_assistant.analyze_project_diagnostics",
+        lambda *_args, **_kwargs: diagnostics,
+    )
+    snapshot = build_assistant_context(new_project())
+    element = snapshot["diagnostics"]["findings"][0]["element"]
+    assert element["type"] == "room"
+    assert len(element["id"]) == 128
+    assert len(element["name"]) == 160
+    assert set(element) == {"type", "id", "name"}
+    assert marker not in json.dumps(snapshot)
+
+
+def test_oversized_ai_request_is_rejected_before_network(monkeypatch):
+    context = build_assistant_context(new_project())
+    context["unexpected_large_data"] = "X" * 300_000
+
+    def forbidden_network(*_args, **_kwargs):
+        raise AssertionError("Request safety gate must run before network access")
+
+    monkeypatch.setattr("cleanroomx.ai_assistant.urlopen", forbidden_network)
+    with pytest.raises(ValueError, match="256 KiB"):
+        ask_model(
+            "Review this project", context,
+            configuration=AssistantConfiguration("ollama", "test", LOCAL_URL),
+        )
+
+
+def test_invalid_model_identifier_and_boolean_timeout_fail_closed(monkeypatch):
+    context = build_assistant_context(new_project())
+    def forbidden_network(*_args, **_kwargs):
+        raise AssertionError("Invalid request must not reach model service")
+    monkeypatch.setattr("cleanroomx.ai_assistant.urlopen", forbidden_network)
+    with pytest.raises(AssistantConfigurationError, match="bounded model"):
+        ask_model(
+            "Review", context,
+            configuration=AssistantConfiguration("ollama", "bad\\nmodel", LOCAL_URL),
+        )
+    with pytest.raises(ValueError, match="integer"):
+        ask_model(
+            "Review", context, timeout_seconds=True,
+            configuration=AssistantConfiguration("ollama", "test", LOCAL_URL),
+        )
+
+
 def test_model_uses_bounded_project_snapshot_without_executing_work(monkeypatch):
     project = new_project()
     context = build_assistant_context(project)

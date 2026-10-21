@@ -53,7 +53,11 @@ bounded analysis names/types, diagnostic severity/counts/findings, the latest
 and retained verification status summaries. These run statuses are **not**
 CFD convergence claims. The diagnostic snapshot **does not include**
 raw room geometry, full analysis inputs, CFD fields, solver residual arrays,
-files, or project metadata. Names, diagnostic messages and previously entered chat messages can still
+files, or project metadata. Diagnostic element references are restricted to
+bounded `type`, `id`, and `name` strings, with no extra nested element data.
+The complete serialized model request (question, history, and context) must
+fit within 256 KiB or it is rejected before network access. Model IDs are
+bounded and request timeout values must be integers. Names, diagnostic messages and previously entered chat messages can still
 contain sensitive information: inspect your project before enabling cloud mode.
 
 The snapshot identity is calculated from the current **in-memory** project,

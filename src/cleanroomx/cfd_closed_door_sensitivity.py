@@ -7,13 +7,17 @@ multiplied by a visibly hypothetical factor in a NEW network solve.
 """
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import asdict, replace
 import json
 import math
 from pathlib import Path
 
 from .cfd_closed_door_comparison import compare_closed_network_with_open_cfd
 from .pressure_network import RoomPressureNetwork
+from .cfd_leakage_replay import (
+    network_inputs_sha256, validate_closed_door_sensitivity_replay,
+    varied_network,
+)
 
 SCHEMA="cleanroomx.closed-door-leakage-sensitivity.v1"
 
@@ -43,18 +47,7 @@ def sweep_closed_door_leakage(
         report,network,path_evidence,scenario_sha256=scenario_sha256)
     rows=[]
     for factor in factors:
-        changed=[]
-        for path in network.paths:
-            if path.model=="power_law":
-                changed.append(replace(
-                    path,coefficient_m3_s_pa_n=
-                    path.coefficient_m3_s_pa_n*factor))
-            elif path.model=="orifice":
-                changed.append(replace(
-                    path,area_m2=path.area_m2*factor))
-            else:
-                raise ValueError("Unsupported leakage path model")
-        changed_network=replace(network,paths=tuple(changed))
+        changed_network=varied_network(network,factor)
         try:
             comparison=(base if factor==1 else
                 compare_closed_network_with_open_cfd(
@@ -85,6 +78,14 @@ def sweep_closed_door_leakage(
         "physical_model":"steady pressure/leakage NETWORK only; OPEN CFD is reference",
         "basis":"hypothetical uniform simultaneous path coefficient/orifice-area multipliers",
         "baseline_factor":1.0,
+        "baseline_closed_network_inputs":asdict(network),
+        "baseline_closed_network_sha256":network_inputs_sha256(network),
+        "baseline_door_connectivity":[{
+            "door":row["door"],
+            "from_room":row["from_room"],
+            "to_room":row["to_room"],
+            "design_target_pa":row["design_target_pa"],
+        } for row in base["door_comparison"]],
         "baseline_result":base_result,
         "factor_results":rows,
         "hypothesis_not_uncertainty_interval":True,
@@ -106,6 +107,7 @@ def export_closed_door_sensitivity(sweep,destination):
         or sweep.get("closed_door_cfd_demonstrated") is not False
         or sweep.get("hypothesis_not_uncertainty_interval") is not True):
         raise ValueError("Only hypothetical noncertifying HOLD sensitivity may be exported")
+    validate_closed_door_sensitivity_replay(sweep)
     path=Path(destination)
     data=json.dumps(sweep,indent=2,allow_nan=False)+"\n"
     with path.open("x",encoding="utf-8") as stream:

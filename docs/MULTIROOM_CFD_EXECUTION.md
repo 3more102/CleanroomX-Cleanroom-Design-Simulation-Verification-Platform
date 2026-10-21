@@ -730,3 +730,24 @@ This internal arithmetic review does **not** rehash/re-import original OpenFOAM
 case files; the existing source importer must be used to establish that source
 evidence. Neither check establishes mesh independence, physical convergence,
 5 Pa closed-door performance or an engineering release: **HOLD** remains.
+
+
+## Replayed closed-door leakage sensitivity evidence (21 October 2026)
+
+Closed-door sensitivity reports now preserve the exact baseline pressure-network
+inputs (all nodes, paths, targets), their deterministic SHA-256 fingerprint, and
+the CFD-door identity/endpoints/design target mapping. The export path
+independently reconstructs the closed network and **re-solves every requested
+coefficient/orifice-area factor** before accepting saved door pressure drops,
+leakage flow, individual target verdicts, aggregate verdicts or the baseline
+result. An altered input fingerprint or edited claimed pressure/flow rejects
+publication. Both power-law and orifice paths are regression-tested.
+
+The closed-door scenario file's SHA-256 identifies the original scenario, **not**
+each hypothetically varied network. Its actual varied coefficients are obtained
+from the retained baseline inputs and explicit multiplier; no measured
+coefficient or closed-door CFD field is fabricated. The network fingerprint
+detects accidental changes; it is not a cryptographic signature and cannot
+prove independently sourced leakage parameters. Original OpenFOAM field bytes
+are validated by their separate importer, not by network sensitivity replay.
+All outcomes remain engineering **HOLD**, even when network targets pass.

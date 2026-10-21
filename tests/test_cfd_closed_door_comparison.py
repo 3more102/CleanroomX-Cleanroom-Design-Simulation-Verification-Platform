@@ -13,6 +13,7 @@ from cleanroomx.cfd_closed_door_sensitivity import (
     SCHEMA as SENSITIVITY_SCHEMA, sweep_closed_door_leakage,
     export_closed_door_sensitivity,
 )
+from cleanroomx.cfd_leakage_replay import validate_closed_door_sensitivity_replay
 from cleanroomx.cfd_closed_door_comparison import (
     RESULT_SCHEMA, SCENARIO_SCHEMA, compare_closed_network_with_open_cfd,
     load_closed_door_network_scenario, export_closed_door_comparison,
@@ -248,3 +249,71 @@ def test_closed_leakage_sensitivity_rejects_unsupported_factor_sets(factors,expe
     with pytest.raises(ValueError,match=expected.replace("[","\\[").replace("]","\\]")):
         sweep_closed_door_leakage(
             _open_report(),_network(),_evidence(),factors=factors)
+
+
+
+def test_sensitivity_replay_accepts_genuine_network_results_and_source_identity(tmp_path):
+    # Synthetic unit-test scenario; no CFD or cleanroom qualification.
+    sweep=sweep_closed_door_leakage(
+        _open_report(),_network(supply=180.),_evidence(),
+        factors=(.5,1.,2.), scenario_sha256="f"*64)
+    assert validate_closed_door_sensitivity_replay(sweep) is True
+    assert sweep["baseline_closed_network_sha256"]
+    assert sweep["source_closed_input_sha256"]=="f"*64
+    exported=export_closed_door_sensitivity(sweep,tmp_path/"verified-screening.json")
+    assert json.loads(exported.read_text())["baseline_door_connectivity"][0]["door"]=="doorAB"
+
+
+@pytest.mark.parametrize("mutation,reason",[
+    (lambda s:s["factor_results"][0]["door_results"][0].update(
+        computed_closed_network_delta_pa=999.),"solved pressure"),
+    (lambda s:s["factor_results"][0]["door_results"][0].update(
+        computed_network_leakage_m3_h=999.),"solved leakage flow"),
+    (lambda s:s["factor_results"][0]["door_results"][0].update(
+        nominal_target_met=False),"target verdict"),
+    (lambda s:s["factor_results"][0].update(
+        network_nominal_targets_met=False),"Aggregate nominal"),
+    (lambda s:s["factor_results"][0]["door_results"][0].update(
+        nominal_design_delta_pa=3.),"design target"),
+    (lambda s:s["factor_results"][0].update(
+        leakage_multiplier=.75),"solved pressure"),
+    (lambda s:s["factor_results"][1].update(
+        leakage_multiplier=.5),"increase strictly"),
+    (lambda s:s["baseline_closed_network_inputs"]["paths"][0].update(
+        coefficient_m3_s_pa_n=.5),"fingerprint"),
+    (lambda s:s["baseline_closed_network_sha256"]="0"*64,"fingerprint"),
+    (lambda s:s["baseline_result"]["door_results"][0].update(
+        computed_closed_network_delta_pa=-1.),"Baseline result"),
+    (lambda s:s["baseline_door_connectivity"][0].update(
+        from_room="not-a-room"),"not present"),
+    (lambda s:s["source_open_cfd_provenance"].update(
+        manifest_sha256="not-a-hash"),"identity is malformed"),
+])
+def test_leakage_sensitivity_export_rejects_tampered_network_claims(
+    mutation,reason,tmp_path,
+):
+    sweep=sweep_closed_door_leakage(
+        _open_report(),_network(supply=180.),_evidence(),factors=(.5,1.,2.))
+    forged=copy.deepcopy(sweep)
+    mutation(forged)
+    dest=tmp_path/"tampered.json"
+    with pytest.raises(ValueError,match=reason):
+        export_closed_door_sensitivity(forged,dest)
+    assert not dest.exists()
+
+
+def test_leakage_sensitivity_replay_handles_real_orifice_formula(tmp_path):
+    original=_network(supply=90.)
+    from cleanroomx.pressure_network import PressurePath
+    network=RoomPressureNetwork(
+        name=original.name,nodes=original.nodes,
+        paths=(PressurePath("doorAB","A","B","door","orifice",
+                            discharge_coefficient=.65,area_m2=.01,
+                            air_density_kg_m3=1.2),),
+        targets=original.targets,
+    )
+    sweep=sweep_closed_door_leakage(
+        _open_report(),network,_evidence(),factors=(.5,1.,2.))
+    assert validate_closed_door_sensitivity_replay(sweep)
+    assert export_closed_door_sensitivity(
+        sweep,tmp_path/"orifice-sensitivity.json").is_file()

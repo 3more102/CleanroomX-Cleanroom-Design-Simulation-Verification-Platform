@@ -162,6 +162,11 @@ def bound_cfd_evidence(
         "solver_reported_convergence_at_selected_iteration": (
             review["numerical_convergence_at_selected_iteration"]
         ),
+        "run_reported_convergence": (
+            numerics.get("run_reported_convergence")
+            if type(numerics.get("run_reported_convergence")) is bool else None
+        ),
+        "solver_convergence_iteration": numerics.get("solver_convergence_iteration"),
         "mesh": {
             "mesh_ok": mesh["mesh_ok"],
             "cells": mesh.get("cells"),
@@ -183,6 +188,12 @@ def bound_cfd_evidence(
                     room["mean_pressure_pa_relative_to_reference"]
                 ),
                 "mean_speed_m_s": room.get("mean_speed_m_s"),
+                "max_speed_m_s": room.get("max_speed_m_s"),
+                "mean_downward_velocity_m_s": room.get("mean_downward_velocity_m_s"),
+                "upward_volume_fraction": room.get("upward_volume_fraction"),
+                "downward_volume_fraction": room.get("downward_volume_fraction"),
+                "supply_inflow_m3_s": room.get("supply_inflow_m3_s"),
+                "return_outflow_m3_s": room.get("return_outflow_m3_s"),
                 "net_outward_imbalance_m3_s": room["net_outward_imbalance_m3_s"],
             }
             for rid, room in ordered_rooms[:MAX_ROOMS]
@@ -208,6 +219,9 @@ def bound_cfd_evidence(
         "review_reasons": [
             {"code": reason["code"], "message": reason["message"]}
             for reason in review["reasons"][:20]
+        ],
+        "non_prescriptive_checks": [
+            str(check)[:500] for check in review["non_prescriptive_checks"][:10]
         ],
         "limitations": [
             "Self-consistency and project-revision SHA-256 checks are not proof of genuine solver origin.",
@@ -237,6 +251,9 @@ def format_cfd_evidence(context: dict[str, Any]) -> str:
         "Solver convergence marker for selected iteration: " + str(
             context["solver_reported_convergence_at_selected_iteration"]
         ),
+        "Full-run convergence marker: " + str(
+            context.get("run_reported_convergence", "unknown")
+        ),
         "Room count: " + str(context["room_count"]),
         "Door count: " + str(context["door_count"]),
         "Source project SHA-256: " + context["saved_project_source_sha256"][:12],
@@ -247,6 +264,11 @@ def format_cfd_evidence(context: dict[str, Any]) -> str:
         lines.append(
             "Room " + str(room["name"]) + ": mean relative pressure "
             + str(room["mean_pressure_pa_relative_to_reference"]) + " Pa"
+            + "; mean speed " + str(room.get("mean_speed_m_s")) + " m/s"
+            + "; mean downward velocity "
+            + str(room.get("mean_downward_velocity_m_s")) + " m/s"
+            + "; upward cell volume fraction "
+            + str(room.get("upward_volume_fraction"))
             + "; net outward imbalance "
             + str(room["net_outward_imbalance_m3_s"]) + " m³/s"
         )
@@ -265,6 +287,10 @@ def format_cfd_evidence(context: dict[str, Any]) -> str:
             " - " + reason["code"] + ": " + reason["message"]
             for reason in context["review_reasons"]
         ]
+    )
+    lines.append("Further checks (not executed):")
+    lines.extend(
+        " - " + str(check) for check in context.get("non_prescriptive_checks", [])
     )
     lines.append(
         "This is a self-consistent exported report, not independent solver "

@@ -137,8 +137,13 @@ def build_cfd_followup_plan(
         "engineering_release": "HOLD",
         "closed_door_5pa_demonstrated": False,
         "actions": actions,
-        "actions_truncated": len(proposals) > max_actions,
-        "review_reasons_truncated_upstream": bool(evidence.get("review_reasons_truncated", False)),
+        "actions_truncated": (
+            len(proposals) > max_actions
+            or evidence.get("review_reasons_truncated") is True
+            or evidence.get("non_prescriptive_checks_truncated") is True
+        ),
+        "review_reasons_truncated_upstream": evidence.get("review_reasons_truncated") is True,
+        "non_prescriptive_checks_truncated_upstream": evidence.get("non_prescriptive_checks_truncated") is True,
         "limitations": [
             "Actions are read-only proposals; no CFD or project operation was executed.",
             "Source digests bind JSON content only, not genuine OpenFOAM provenance.",

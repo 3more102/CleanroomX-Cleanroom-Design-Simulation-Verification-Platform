@@ -145,3 +145,42 @@ def test_empty_or_oversize_question_rejected():
         ask_model(" ", context)
     with pytest.raises(ValueError):
         ask_model("x" * 4001, context)
+
+
+def test_diagnostics_context_has_explicit_run_evidence_limits():
+    context = build_assistant_context(new_project())
+    assert "recent_runs" in context
+    assert context["recent_runs"] == []
+    assert context["recent_runs_truncated"] is False
+    assert any("convergence" in limit for limit in context["limitations"])
+
+
+def test_focus_is_explicit_and_model_system_guidance_is_restricted(monkeypatch):
+    from cleanroomx.ai_assistant import REVIEW_FOCUS
+    assert set(REVIEW_FOCUS) == {"general", "cfd", "hvac", "particles", "verification"}
+    context = build_assistant_context(new_project())
+    with pytest.raises(ValueError, match="Unsupported engineering review focus"):
+        ask_model(
+            "Review", context,
+            configuration=AssistantConfiguration("ollama", "model", LOCAL_URL),
+            focus="execute-shell",
+        )
+
+    import json
+    requests = []
+    class Response:
+        def __enter__(self): return self
+        def __exit__(self, *_args): return False
+        def read(self, _limit):
+            return b'{"choices":[{"message":{"content":"Check recorded residuals first."}}]}'
+    def fake_urlopen(request, timeout):
+        requests.append(json.loads(request.data))
+        return Response()
+    monkeypatch.setattr("cleanroomx.ai_assistant.urlopen", fake_urlopen)
+    response = ask_model(
+        "What is CFD status?", context,
+        configuration=AssistantConfiguration("ollama", "model", LOCAL_URL),
+        focus="cfd",
+    )
+    assert response == "Check recorded residuals first."
+    assert "mesh independence" in requests[0]["messages"][0]["content"]

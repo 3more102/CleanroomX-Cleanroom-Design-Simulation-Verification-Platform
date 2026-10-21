@@ -82,6 +82,7 @@ class AssistantConversations:
         project_key: str,
         *,
         snapshot_sha256: str | None = None,
+        cfd_report_sha256: str | None = None,
     ) -> list[dict[str, str]]:
         """Return bounded, complete, non-stale Q/A pairs.
 
@@ -92,6 +93,8 @@ class AssistantConversations:
         """
         if snapshot_sha256 is not None:
             self._validate_key(snapshot_sha256)
+        if cfd_report_sha256 is not None:
+            self._validate_key(cfd_report_sha256)
         session = self.require_session(session_id, project_key)
         messages = [
             message for message in session.messages
@@ -114,6 +117,13 @@ class AssistantConversations:
             if snapshot_sha256 is not None and (
                 first.metadata.get("snapshot_sha256") != snapshot_sha256
                 or second.metadata.get("snapshot_sha256") != snapshot_sha256
+            ):
+                continue
+            # A CFD reply must only be reused against exactly the same
+            # exported CFD report, never a new file or absent evidence.
+            if (
+                first.metadata.get("assistant_cfd_report_sha256") != cfd_report_sha256
+                or second.metadata.get("assistant_cfd_report_sha256") != cfd_report_sha256
             ):
                 continue
             pairs.append([
@@ -140,6 +150,7 @@ class AssistantConversations:
         provider: str,
         model: str,
         stale_project: bool = False,
+        cfd_report_sha256: str | None = None,
     ) -> ChatSession:
         """Atomically commit a model exchange if the chat has not changed."""
         self.require_session(session_id, project_key)
@@ -148,11 +159,14 @@ class AssistantConversations:
         if not isinstance(answer, str) or not answer.strip() or len(answer) > MAX_SAVED_REPLY_CHARACTERS:
             raise ValueError("model response is missing or too long")
         self._validate_key(snapshot_sha256)
+        if cfd_report_sha256 is not None:
+            self._validate_key(cfd_report_sha256)
         if not provider or not model:
             raise ValueError("model provenance is required")
         metadata = {
             "assistant_source": "ai",
             "snapshot_sha256": snapshot_sha256,
+            "assistant_cfd_report_sha256": cfd_report_sha256,
             "provider": provider[:80],
             "model": model[:100],
             "stale_project_on_receipt": bool(stale_project),

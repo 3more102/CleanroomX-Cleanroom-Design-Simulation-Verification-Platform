@@ -342,14 +342,15 @@ class AssistantWindow(tk.Toplevel):
             context = self._snapshot()
             key = self._active_project_key
             chat = self._conversations.require_session(self._session_id, key)
+            evidence_sha = (
+                context["cfd_evidence"]["report_sha256"]
+                if "cfd_evidence" in context else None
+            )
             history = self._conversations.model_history(
                 chat.id, key,
                 snapshot_sha256=context["project"]["in_memory_sha256"],
+                cfd_report_sha256=evidence_sha,
             )
-            if "cfd_evidence" in context:
-                # Past answers may have used a different CFD export; do not
-                # forward them as context for this imported evidence.
-                history = []
         except (OSError, ValueError, TypeError, KeyError) as exc:
             self._append("Assistant setup", str(exc))
             return
@@ -372,6 +373,7 @@ class AssistantWindow(tk.Toplevel):
                 "revision": chat.revision,
                 "instance_id": chat.instance_id,
                 "snapshot_sha": snapshot_sha,
+                "cfd_report_sha256": evidence_sha,
                 "provider": cfg.provider,
                 "model": cfg.model,
                 "question": question,
@@ -419,6 +421,14 @@ class AssistantWindow(tk.Toplevel):
                     or response["snapshot_sha"]
                     != project_snapshot_sha256(self._project_getter())
                 )
+                if response["cfd_report_sha256"] is not None:
+                    try:
+                        current = self._snapshot()
+                        current_sha = current["cfd_evidence"]["report_sha256"]
+                    except (OSError, ValueError, KeyError, TypeError):
+                        current_sha = None
+                    if current_sha != response["cfd_report_sha256"]:
+                        stale = True
                 self._conversations.commit_exchange(
                     response["session_id"], response["project_key"],
                     question=response["question"], answer=response["answer"],
@@ -427,6 +437,7 @@ class AssistantWindow(tk.Toplevel):
                     expected_instance_id=response["instance_id"],
                     provider=response["provider"], model=response["model"],
                     stale_project=stale,
+                    cfd_report_sha256=response["cfd_report_sha256"],
                 )
             except (KeyError, ValueError, RuntimeError) as exc:
                 if same_view:
@@ -439,7 +450,7 @@ class AssistantWindow(tk.Toplevel):
                 if stale:
                     self._append(
                         "Snapshot warning",
-                        "The project has changed. This answer used an older snapshot.",
+                        "Project or CFD evidence changed. This answer used an older snapshot.",
                     )
                 self._refresh_sessions()
             self.status.set("AI suggestion recorded in local chat; project unchanged.")

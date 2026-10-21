@@ -190,3 +190,46 @@ def test_project_room_audit_preserves_exact_log_hashes(tmp_path):
         path = root / f"room_{room}" / "checkMesh.log"
         expected = hashlib.sha256(read_bounded_regular_log(path)).hexdigest()
         assert report["cases"][room]["mesh_logs"]["checkMesh"]["sha256"] == expected
+
+
+
+def test_project_room_audit_requires_every_generated_solver_input_receipt(tmp_path):
+    """Synthetic manifest omission cannot hide missing critical case inputs."""
+    root = _generated(tmp_path)
+    _log_fixtures(root)
+    manifest = root / "manifest.json"
+    source = json.loads(manifest.read_text(encoding="utf-8"))
+    key = "room_process/system/controlDict"
+    assert key in source["files"]
+    source["files"].pop(key)
+    manifest.write_text(json.dumps(source), encoding="utf-8")
+    with pytest.raises(ValueError, match="Missing case input receipt: " + key):
+        _audit(root)
+
+
+def test_project_room_audit_rejects_duplicate_manifest_keys(tmp_path):
+    """Duplicate JSON keys are ambiguous provenance, even with valid logs."""
+    root = _generated(tmp_path)
+    _log_fixtures(root)
+    manifest = root / "manifest.json"
+    original = manifest.read_text(encoding="utf-8")
+    assert '"warning":' in original
+    tampered = original.replace(
+        '"warning":', '"warning": "duplicate synthetic test",\n  "warning":', 1
+    )
+    manifest.write_text(tampered, encoding="utf-8")
+    with pytest.raises(ValueError, match="duplicate JSON object key"):
+        _audit(root)
+
+
+def test_project_room_audit_hashes_the_same_manifest_snapshot(tmp_path):
+    """Published manifest fingerprint covers the bytes that were parsed."""
+    import hashlib
+
+    root = _generated(tmp_path)
+    _log_fixtures(root)
+    manifest = root / "manifest.json"
+    report = _audit(root)
+    assert report["input_manifest_sha256"] == hashlib.sha256(
+        manifest.read_bytes()
+    ).hexdigest()

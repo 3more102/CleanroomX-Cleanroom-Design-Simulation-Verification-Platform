@@ -6,12 +6,12 @@ Run logs must come from OpenFOAM; synthetic test logs are explicitly fixtures.
 from __future__ import annotations
 
 import hashlib
-import json
 from pathlib import Path
 import re
 
 from .cfd_audit import audit_openfoam_log, read_bounded_regular_log
 from .cfd_project_rooms import CASE_RE, PROJECT_CFD_SCHEMA
+from .strict_json import load_strict_json_snapshot
 
 
 def _bounded_log(path: Path) -> tuple[str, str]:
@@ -41,9 +41,12 @@ def audit_project_room_cases(
     manifest_path = root / "manifest.json"
     if manifest_path.is_symlink() or not manifest_path.is_file():
         raise ValueError("Manifest must be a regular file")
-    if manifest_path.stat().st_size > 4 * 1024 * 1024:
-        raise ValueError("Manifest exceeds 4 MiB")
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    # Strict, bounded, single-snapshot JSON: duplicate keys and mid-read
+    # replacements must not become ambiguous evidence.
+    snapshot = load_strict_json_snapshot(manifest_path, max_bytes=4 * 1024 * 1024)
+    if manifest_path.is_symlink():
+        raise ValueError("Manifest must remain a regular file")
+    manifest = snapshot.value
     if not isinstance(manifest, dict) or manifest.get("schema_version") != PROJECT_CFD_SCHEMA:
         raise ValueError("Unsupported project room case manifest")
     cases, files = manifest.get("cases"), manifest.get("files")
@@ -51,6 +54,18 @@ def audit_project_room_cases(
         raise ValueError("Incomplete project room case manifest")
     if any(not isinstance(name, str) or not CASE_RE.fullmatch(name) for name in cases):
         raise ValueError("Unsafe room name in manifest")
+    # The generator and runner both need these inputs for every named case.
+    # A manifest cannot silently omit their receipts and still pass review.
+    mandatory = (
+        "system/blockMeshDict", "system/controlDict", "system/fvSchemes",
+        "system/fvSolution", "0/U", "0/p",
+        "constant/transportProperties", "constant/turbulenceProperties",
+    )
+    for room in cases:
+        for relative in mandatory:
+            expected = f"room_{room}/{relative}"
+            if expected not in files:
+                raise ValueError(f"Missing case input receipt: {expected}")
     for name, checksum in files.items():
         if not isinstance(name, str) or not isinstance(checksum, str) or not re.fullmatch(r"[0-9a-f]{64}", checksum):
             raise ValueError("Invalid generated file receipt")
@@ -118,7 +133,7 @@ def audit_project_room_cases(
         "case_count": len(cases),
         "cases": summaries,
         "project_source_sha256": manifest.get("project_source_sha256"),
-        "input_manifest_sha256": hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
+        "input_manifest_sha256": hashlib.sha256(snapshot.raw_bytes).hexdigest(),
         "limitations": [
             "No coupled multizone CFD or closed-door leakage prediction",
             "OpenFOAM numeric logs and a Mesh OK marker do not establish physical validation",

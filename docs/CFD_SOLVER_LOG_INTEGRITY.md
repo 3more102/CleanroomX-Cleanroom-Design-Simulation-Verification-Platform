@@ -21,3 +21,20 @@ attestation.
 Synthetic regression tests cover a symlink swap between check and open,
 nonregular/oversized logs, and matching source-byte hashes. These tests
 are not evidence of CFD convergence or cleanroom qualification.
+
+## Project-room input manifest coverage
+
+The independent-room CFD audit also uses the project's strict JSON snapshot
+reader for `manifest.json` (4 MiB bound). Duplicate keys, nonfinite JSON
+constants and changed file identities are rejected. The audit's reported
+manifest SHA-256 is calculated from the **same parsed snapshot**, not a second
+potentially changed file read.
+
+Every named room case must include receipts for all eight inputs required
+by the room-case execution path: `blockMeshDict`, `controlDict`,
+`fvSchemes`, `fvSolution`, `0/U`, `0/p`, `transportProperties`,
+and `turbulenceProperties`. If any receipt is missing, the numerical audit
+fails before reading solver logs.
+
+This detects missing receipts and altered source snapshots; it does not
+authenticate the manifest author or demonstrate physical validation.

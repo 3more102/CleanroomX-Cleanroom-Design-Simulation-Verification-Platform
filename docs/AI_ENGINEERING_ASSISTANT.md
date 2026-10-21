@@ -292,3 +292,37 @@ The former tests context boundaries, local/cloud opt-in, sanitized failures,
 and mock transport. Real Ollama/OpenAI end-to-end inference and Tk interactive
 operation require an appropriately configured user workstation; passing
 unit tests does not prove either.
+
+
+## Offline recorded-case replay (optional)
+
+The headless reviewer can re-import retained OpenFOAM fields with the existing canonical
+multizone analyzer and compare its results to an exported report.json.
+
+```bash
+cleanroomx-ai-review path/to/project.json --cfd-export path/to/export-directory --cfd-case path/to/recorded-openfoam-case --format json
+```
+
+The optional --cfd-case requires --cfd-export. It checks the retained input manifest,
+execution receipt, blockMesh/checkMesh/simpleFoam/postProcess stage logs, mesh, p/U/C/phi
+fields and selected SIMPLE iteration using canonical CleanroomX code. The independently
+recomputed complete report summary must match the exported JSON exactly. A mismatching
+case is rejected; the saved project and export revisions are rechecked before publishing.
+
+The JSON records context.cfd_case_replay.status=recorded_case_consistent, the report digest,
+solver_producer_authenticated=false, physical_validation_established=false,
+engineering_release=HOLD, and closed_door_5pa_demonstrated=false.
+
+Replay does NOT launch OpenFOAM, authenticate who produced the files, establish
+mesh independence, prove closed-door pressure control or certify a cleanroom.
+An attacker may forge the retained case and report together. This is an additional
+integrity consistency check, not independent physical validation.
+
+The GUI Review CFD export operation still checks a report only, and must not
+be described as a successful retained-case replay.
+
+Tests use synthetic/mock fixtures, not measured or actual OpenFOAM cases:
+
+```bash
+python -m pytest tests/test_ai_cfd_replay.py tests/test_ai_cfd_evidence.py -q
+```

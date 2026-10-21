@@ -18,6 +18,9 @@ from .ai_assistant import (
 from .ai_assistant_chat import AssistantConversations
 from .ai_cfd_evidence import bound_cfd_evidence, format_cfd_evidence
 from .ai_cfd_followup import build_cfd_followup_plan, render_cfd_followup_plan
+from .ai_cfd_handoff import (
+    prepare_cfd_run_handoff, revalidate_cfd_run_handoff, render_cfd_run_handoff,
+)
 from .ai_assistant_plan import build_assistant_action_plan, render_assistant_action_plan
 from .ai_assistant_specialist import build_specialist_review, render_specialist_review
 from .project import ProjectDocument
@@ -34,6 +37,7 @@ class AssistantWindow(tk.Toplevel):
         base_dir_getter: Callable[[], str | Path | None],
         project_key_getter: Callable[[], str],
         project_path_getter: Callable[[], str | Path | None] | None = None,
+        open_cfd_case: Callable[[Path], None] | None = None,
         on_close: Callable[[], None] | None = None,
     ) -> None:
         super().__init__(parent)
@@ -45,6 +49,7 @@ class AssistantWindow(tk.Toplevel):
         self._base_dir_getter = base_dir_getter
         self._project_key_getter = project_key_getter
         self._project_path_getter = project_path_getter or (lambda: None)
+        self._open_cfd_case = open_cfd_case
         self._cfd_export_dir: Path | None = None
         self._cfd_project_key: str | None = None
         self._on_close = on_close
@@ -131,6 +136,14 @@ class AssistantWindow(tk.Toplevel):
             evidence_buttons, text="Specialist review (offline)",
             command=self.review_specialist,
         ).pack(side="left", padx=(12, 0))
+
+        handoff_buttons = ttk.Frame(content)
+        handoff_buttons.pack(fill="x", pady=(0, 6))
+        ttk.Label(handoff_buttons, text="Generated CFD case:").pack(side="left")
+        ttk.Button(
+            handoff_buttons, text="Review and open CFD workspace...",
+            command=self.handoff_cfd_case,
+        ).pack(side="left", padx=(8, 0))
 
         self.status = tk.StringVar(
             value="Local Ollama by default. Save chats explicitly to preserve them."
@@ -330,6 +343,63 @@ class AssistantWindow(tk.Toplevel):
         self.status.set(
             "Matching CFD evidence loaded for read-only AI Q&A. "
             "Engineering release remains HOLD."
+        )
+
+    def handoff_cfd_case(self) -> None:
+        """Explicit two-stage handoff; opening a workspace never starts OpenFOAM."""
+        if self._busy:
+            self.status.set("Finish the model request before opening CFD workspace.")
+            return
+        if self._open_cfd_case is None:
+            self.status.set("This GUI does not provide a CFD workspace handoff.")
+            return
+        try:
+            self._ensure_session()
+            project_path = self._project_path_getter()
+            if project_path is None:
+                raise ValueError("Save the project before choosing a generated CFD case.")
+            key = self._project_key_getter()
+            candidate = filedialog.askdirectory(
+                parent=self, title="Select a generated, not-yet-executed OpenFOAM case",
+            )
+            if not candidate:
+                return
+            preview = prepare_cfd_run_handoff(
+                candidate, project=self._project_getter(), project_path=project_path,
+            )
+            self._append("CFD case handoff preview (offline)", render_cfd_run_handoff(preview))
+            self.status.set("CFD case verified for handoff. No solver started.")
+        except (OSError, ValueError, TypeError, KeyError, RuntimeError) as exc:
+            self._append("CFD case handoff rejected", str(exc))
+            self.status.set("No CFD workspace opened; no solver started.")
+            return
+        if not messagebox.askyesno(
+            "Open existing CFD workspace?",
+            "The preview matches the saved project and has no recorded solver run.\\n\\n"
+            "Open the existing Multiroom CFD workspace for independent review?\\n"
+            "This action does NOT run OpenFOAM. Running the solver requires a "
+            "separate deliberate action in that workspace.",
+            parent=self,
+        ):
+            self.status.set("CFD handoff not confirmed. No solver started.")
+            return
+        try:
+            if key != self._project_key_getter():
+                raise ValueError("Project changed while awaiting CFD handoff confirmation")
+            current_project_path = self._project_path_getter()
+            if current_project_path is None:
+                raise ValueError("Current project is not saved")
+            approved_case = revalidate_cfd_run_handoff(
+                preview, project=self._project_getter(), project_path=current_project_path,
+            )
+            self._open_cfd_case(approved_case)
+        except (OSError, ValueError, TypeError, KeyError, RuntimeError) as exc:
+            self._append("CFD case handoff rejected after confirmation", str(exc))
+            self.status.set("CFD handoff failed safely. No solver started by AI.")
+            return
+        self.status.set(
+            "Existing CFD workspace opened. Solver NOT started by AI; "
+            "use separate Run control only after independent review."
         )
 
     def review_project(self) -> None:

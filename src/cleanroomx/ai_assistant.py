@@ -133,7 +133,16 @@ def build_assistant_context(
         raise ValueError("max_findings must be an integer between 1 and 50")
     identity = project_snapshot_sha256(project)
     diagnostics = analyze_project_diagnostics(project, base_dir=base_dir)
-    findings = diagnostics["issues"]
+    # Limit after severity ranking: otherwise late critical issues could be
+    # hidden behind earlier informational findings in a large project.
+    severity_rank = {"error": 0, "warning": 1, "info": 2}
+    findings = sorted(
+        diagnostics["issues"],
+        key=lambda item: (
+            severity_rank.get(item.get("severity"), 3),
+            item.get("sequence", 0),
+        ),
+    )
     latest = diagnostics.get("verification_history", {}).get("latest_by_analysis", [])
     # The run ledger has already been integrity-checked by the canonical
     # diagnostics service. Re-read through the validating API, not raw metadata.

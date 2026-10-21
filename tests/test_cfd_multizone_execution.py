@@ -127,7 +127,7 @@ def test_true_openfoam_saved_iteration_history_uses_p_u_and_phi_snapshots(
         triage,tmp_path/"actual-solver-triage.json").is_file()
 
 
-def test_alternative_simple_relaxation_executes_as_an_independent_provenanced_case(tmp_path):
+def test_alternative_simple_relaxation_executes_as_an_independent_provenanced_case(tmp_path,monkeypatch):
     """A REAL Foundation v10 short run; checks execution, not convergence improvement.
 
     New-case settings must be documented by fvSolution and the input manifest,
@@ -199,11 +199,13 @@ def test_alternative_simple_relaxation_executes_as_an_independent_provenanced_ca
         generated["project_source_sha256"])
     from cleanroomx.cfd_pipeline_cli import main as cfd_pipeline_main
     cli_out=tmp_path/"cli-paired-relaxation.json"
-    assert cfd_pipeline_main([
+    monkeypatch.setattr("sys.argv",[
+        "cleanroomx-cfd-pipeline",
         "multizone-compare-relaxation",str(baseline_dir),str(case),
         "--density-kg-m3","1.2","--reference-room-id","corridor",
         "--output",str(cli_out),
-    ])==0
+    ])
+    assert cfd_pipeline_main()==0
     assert json.loads(cli_out.read_text())["engineering_release"]=="HOLD"
     with pytest.raises(FileExistsError):
         export_independent_relaxation_comparison(compared,out)

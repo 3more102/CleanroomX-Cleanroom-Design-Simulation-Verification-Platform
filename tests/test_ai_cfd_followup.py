@@ -94,3 +94,15 @@ def test_strict_size_limit():
     for invalid in (True, 0, 51, 1.5):
         with pytest.raises(ValueError):
             build_cfd_followup_plan(_evidence(), max_actions=invalid)
+
+
+
+def test_upstream_truncated_reasons_cannot_appear_complete():
+    source = _evidence()
+    source["review_reasons_truncated"] = True
+    source["non_prescriptive_checks_truncated"] = True
+    plan = build_cfd_followup_plan(source, max_actions=50)
+    assert plan["actions_truncated"] is True
+    assert plan["review_reasons_truncated_upstream"] is True
+    assert plan["non_prescriptive_checks_truncated_upstream"] is True
+    assert "omitted" in render_cfd_followup_plan(plan)

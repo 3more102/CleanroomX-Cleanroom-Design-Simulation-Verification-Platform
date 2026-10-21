@@ -8,6 +8,14 @@
 
 The current stable release is **v0.102.1**.
 
+### Experimental AI-assisted engineering review
+
+The opt-in `cleanroomx-ai-review` command runs existing canonical project
+analyses, validates that their source revisions agree, then asks an **installed
+local Ollama model** to explain the evidence. Responses are advisory and cannot
+certify cleanroom compliance or change a design. No cloud model or solver
+substitute is bundled. See the [local AI reviewer guide](docs/AI_ASSISTED_REVIEW.md).
+
 ## Active connected-CFD engineering workflow
 
 The development branch in [PR #1363](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/pull/1363)

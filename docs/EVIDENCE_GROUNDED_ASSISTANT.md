@@ -71,9 +71,13 @@ and must not be allowed to rewrite or overrule its validation states.
 
 ## Current boundaries and next integration stage
 
-- There is **no LLM API client, conversation GUI, or autonomous write access** in
-  this first slice. A future GUI can call the same reviewer in a background
-  worker, displaying source and validation status without blocking Tk.
+- A read-only **Project Assistant (Evidence Review)** dialog is available under
+  the desktop **Tools** menu and command palette, and runs the reviewer in a
+  background worker to keep Tk responsive. It refuses unsaved work and external
+  file revision drift. The window includes a findings table and copyable report.
+- There is **no LLM API client, generative chat UI, or autonomous write access**
+  in this slice. The assistant produces rule-backed diagnostics rather than
+  model-generated advice.
 - This is *project-model* diagnostics, not a claim of genuine OpenFOAM mesh,
   solver convergence, validated particle transport, calibrated contamination
   or ISO certification.

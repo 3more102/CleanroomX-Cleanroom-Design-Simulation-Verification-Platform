@@ -1,6 +1,7 @@
 """Actual Tk/VTK interactions on labelled synthetic fields, not CFD evidence."""
 import copy
 import json
+import os
 import time
 import tkinter as tk
 
@@ -13,7 +14,12 @@ from test_cfd_particle_sources import _report
 
 @pytest.fixture
 def root():
-    window = tk.Tk()
+    try:
+        window = tk.Tk()
+    except tk.TclError as exc:
+        if os.environ.get("DISPLAY"):
+            raise
+        pytest.skip(f"Actual Tk source editor requires a display: {exc}")
     configure_ttk_theme(window, "dark")
     yield window
     window.destroy()

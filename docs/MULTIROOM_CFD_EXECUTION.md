@@ -751,3 +751,38 @@ detects accidental changes; it is not a cryptographic signature and cannot
 prove independently sourced leakage parameters. Original OpenFOAM field bytes
 are validated by their separate importer, not by network sensitivity replay.
 All outcomes remain engineering **HOLD**, even when network targets pass.
+
+
+## One-path-at-a-time leakage vulnerability study (21 October 2026)
+
+The connected-CFD CLI now offers a **separate, optional pressure-network** experiment:
+
+```bash
+cleanroomx-cfd-pipeline multizone-leakage-local /tmp/cx-open-case \\
+  /tmp/my-sourced-closed-door-scenario.json \\
+  --density-kg-m3 1.2 --reference-room-id corridor \\
+  --factors 0.5 1 2 --output /tmp/new-local-leakage-sensitivity.json
+```
+
+Start with an **actually executed**, provenance-checked open-door CFD case and a
+responsible engineer's independently completed closed-door network scenario.
+Every CFD door needs an explicit target and explicit documented leakage path.
+Other leakage paths, such as separately sourced cracks, can be included. The
+software first checks the open CFD/network comparison, then independently
+multiplies **one path at a time**, holding all other paths and mechanical
+supply/return/exhaust unchanged. Up to 16 leakage paths × 8 explicit factors
+are supported; the requested 1.0 factor is the unchanged baseline.
+
+The output provides computed steady-network room pressures, per-door pressure
+and leakage airflow, nominal pressure-target screening, input identity hashes,
+and the source CFD iteration reference. Before saving JSON, every hypothesis is
+re-solved and its reported numbers are independently checked; a modified
+network fingerprint, factor, path identity, room pressure or leakage result
+prevents export. Original CFD bytes and leakage source data are verified by the
+respective load paths at analysis time, not re-opened by this JSON replay step.
+
+**Scientific boundary:** these are *hypothetical local sensitivity screens of a
+steady pressure-flow network*, NOT a statistical uncertainty interval, actual
+closed-door CFD, experimental leakage characterization or cleanroom acceptance.
+Nominally meeting 5 Pa in the network does **not** establish measured 5 Pa
+or cleanroom certification. Engineering release remains **HOLD**.

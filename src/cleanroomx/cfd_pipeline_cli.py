@@ -89,6 +89,16 @@ def build_parser():
     sensitivity.add_argument("--density-kg-m3",type=float,default=1.2)
     sensitivity.add_argument("--reference-room-id",default="corridor")
     sensitivity.add_argument("--output",help="Create a NEW noncertifying comparison JSON file")
+    local=sub.add_parser(
+        "multizone-leakage-local",
+        help="Individually vary each sourced CLOSED-door leakage path; not CFD",
+    )
+    local.add_argument("case_directory",help="Executed, hash-checked all-open OpenFOAM case")
+    local.add_argument("scenario",help="Explicit closed-door JSON leakage/network model")
+    local.add_argument("--density-kg-m3",type=float,required=True)
+    local.add_argument("--reference-room-id",required=True)
+    local.add_argument("--factors",type=float,nargs="+",default=[.5,1.,2.])
+    local.add_argument("--output",required=True,help="New replay-validated JSON report")
     multi_run=sub.add_parser("multizone-run",help="Opt-in blockMesh/checkMesh/simpleFoam for the connected case")
     multi_run.add_argument("directory")
     multi_run.add_argument("--timeout-seconds", type=int, default=3600)
@@ -185,6 +195,26 @@ def main():
         if args.output:
             export_independent_relaxation_comparison(result,args.output)
         print(dumps_strict_json(result))
+        return 0
+    if args.command=="multizone-leakage-local":
+        from .cfd_closed_door_comparison import load_closed_door_network_scenario
+        from .cfd_closed_door_single_path import (
+            sweep_individual_leakage_sensitivity,export_individual_leakage_sensitivity)
+        report=analyze_multizone_case(
+            args.case_directory,density_kg_m3=args.density_kg_m3,
+            reference_room_id=args.reference_room_id)
+        network,evidence,sha=load_closed_door_network_scenario(args.scenario)
+        comparison=sweep_individual_leakage_sensitivity(
+            report,network,evidence,factors=args.factors,scenario_sha256=sha)
+        export_individual_leakage_sensitivity(comparison,args.output)
+        print(dumps_strict_json({
+            "schema":comparison["schema"],
+            "engineering_release":"HOLD",
+            "source_closed_input_sha256":sha,
+            "path_count":len(comparison["path_experiments"]),
+            "factor_count":len(comparison["factors"]),
+            "output":str(args.output),
+        }))
         return 0
     if args.command=="multizone-run":
         result=run_multizone_open_door_case(args.directory,timeout_seconds=args.timeout_seconds)

@@ -209,3 +209,66 @@ def test_model_history_rejects_invalid_snapshot_identity():
     chat = chats.new(key)
     with pytest.raises(ValueError, match="SHA-256"):
         chats.model_history(chat.id, key, snapshot_sha256="invalid")
+
+
+
+def test_history_isolated_by_cfd_export_identity():
+    key = project_chat_key("facility.json")
+    snapshot = project_chat_key("design.json")
+    report_a = project_chat_key("export-a.json")
+    report_b = project_chat_key("export-b.json")
+    chats = AssistantConversations()
+    session = chats.new(key)
+
+    def exchange(question, answer, cfd):
+        nonlocal session
+        session = chats.commit_exchange(
+            session.id, key, question=question, answer=answer,
+            snapshot_sha256=snapshot,
+            expected_revision=session.revision,
+            expected_instance_id=session.instance_id,
+            provider="ollama", model="unit-test",
+            cfd_report_sha256=cfd,
+        )
+
+    exchange("Explain CFD A", "Result A", report_a)
+    exchange("Explain CFD B", "Result B", report_b)
+    exchange("General question", "No CFD attached", None)
+
+    assert chats.model_history(
+        session.id, key, snapshot_sha256=snapshot,
+        cfd_report_sha256=report_a,
+    ) == [
+        {"role": "user", "content": "Explain CFD A"},
+        {"role": "assistant", "content": "Result A"},
+    ]
+    assert chats.model_history(
+        session.id, key, snapshot_sha256=snapshot,
+        cfd_report_sha256=report_b,
+    ) == [
+        {"role": "user", "content": "Explain CFD B"},
+        {"role": "assistant", "content": "Result B"},
+    ]
+    assert chats.model_history(
+        session.id, key, snapshot_sha256=snapshot,
+    ) == [
+        {"role": "user", "content": "General question"},
+        {"role": "assistant", "content": "No CFD attached"},
+    ]
+
+
+def test_invalid_cfd_report_hash_fails_before_chats_are_modified():
+    key = project_chat_key("facility.json")
+    chats = AssistantConversations()
+    session = chats.new(key)
+    with pytest.raises(ValueError, match="SHA-256"):
+        chats.commit_exchange(
+            session.id, key,
+            question="Review", answer="Hold",
+            snapshot_sha256=project_chat_key("design.json"),
+            expected_revision=session.revision,
+            expected_instance_id=session.instance_id,
+            provider="ollama", model="test-model",
+            cfd_report_sha256="bad",
+        )
+    assert chats.require_session(session.id, key).revision == 0

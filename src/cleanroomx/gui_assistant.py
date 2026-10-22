@@ -88,6 +88,11 @@ class ProjectAssistantDialog(tk.Toplevel):
             command=self.copy_report, state="disabled",
         )
         self.copy_button.pack(side="left", padx=8)
+        self.model_button = ttk.Button(
+            buttons, text="Optional model Q&A...", command=self.open_model_assistant,
+        )
+        self.model_button.pack(side="left", padx=8)
+        self._model_dialog = None
         ttk.Button(buttons, text="Close", command=self._close).pack(side="right")
         self.protocol("WM_DELETE_WINDOW", self._close)
         self.refresh()
@@ -186,7 +191,20 @@ class ProjectAssistantDialog(tk.Toplevel):
         self.clipboard_append(self._markdown)
         self.status_var.set("Copied evidence-grounded Markdown review to clipboard.")
 
+    def open_model_assistant(self) -> None:
+        """Human-triggered, separate dialog: opening it sends no data."""
+        current = self._model_dialog
+        if current is not None and current.winfo_exists():
+            current.lift()
+            current.focus_set()
+            return
+        from .assistant_model_ui import ModelAssistantWindow
+        self._model_dialog = ModelAssistantWindow(self, self.source)
+
     def _close(self) -> None:
+        current = self._model_dialog
+        if current is not None and current.winfo_exists():
+            current._close()
         if self._after_id is not None:
             try:
                 self.after_cancel(self._after_id)

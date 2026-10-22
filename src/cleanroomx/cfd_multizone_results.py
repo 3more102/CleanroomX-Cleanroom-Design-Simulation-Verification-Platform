@@ -17,6 +17,7 @@ import shutil
 
 from .cfd_multizone import MAX_BLOCKS, verify_multizone_inputs
 from .cfd_multizone_review import review_recorded_multizone
+from .strict_json import strict_json_loads
 
 NUMBER = r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?"
 MAX_BYTES = 32 * 1024 * 1024
@@ -137,18 +138,26 @@ def _mesh_statistics(text: str) -> dict:
 
 def _recorded_outputs(root: Path) -> tuple[dict, dict]:
     root, manifest = verify_multizone_inputs(root)
-    receipt = json.loads(_read(root, "run-receipt.json"))
+    # A run receipt is integrity evidence: reject duplicate keys, NaN and Inf.
+    receipt = strict_json_loads(_read(root, "run-receipt.json"))
+    if type(receipt) is not dict:
+        raise ValueError("OpenFOAM execution receipt must be a JSON object")
     if receipt.get("schema") != "cleanroomx.multizone-run.v1" or receipt.get("status") != "executed_requires_convergence_review":
         raise ValueError("A successful recorded OpenFOAM execution is required")
     if hashlib.sha256((root/"manifest.json").read_bytes()).hexdigest() != receipt.get("manifest_sha256"):
         raise ValueError("Manifest changed after execution")
-    stages = receipt.get("stages", [])
+    stages = receipt.get("stages")
+    if (type(stages) is not list or len(stages) != 4 or
+        any(type(stage) is not dict for stage in stages)):
+        raise ValueError("Execution receipt has invalid stage structure")
     if [s.get("command") for s in stages] != ["blockMesh", "checkMesh", "simpleFoam", "postProcess"]:
         raise ValueError("Execution receipt lacks required stages")
     for stage in stages:
         relative = stage["command"] + ".log"
         data = _read(root, relative)
-        if stage.get("returncode") != 0 or stage.get("failure") or hashlib.sha256(data.encode()).hexdigest() != stage.get("log_sha256"):
+        if (type(stage.get("returncode")) is not int or stage["returncode"] != 0
+            or stage.get("failure") is not None
+            or hashlib.sha256(data.encode()).hexdigest() != stage.get("log_sha256")):
             raise ValueError(f"Solver stage failed or log changed: {relative}")
     outputs = receipt.get("outputs")
     if not isinstance(outputs, dict) or not outputs:

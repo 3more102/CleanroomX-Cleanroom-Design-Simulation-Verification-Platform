@@ -390,3 +390,12 @@ It does **not**, by itself, establish cleanroom certification, CFD validation, c
 ## Release
 
 **Latest stable:** [CleanroomX v0.102.1](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/releases/tag/v0.102.1)
+
+## Read-only AI project advisor
+
+CleanroomX includes an optional [AI Project Advisor](docs/AI_PROJECT_ADVISOR.md) that reviews saved project definitions in a separate desktop chat window or CLI. Offline mode requires no API key; explicitly selected OpenAI mode can provide model-generated advice. The assistant does **not** run CFD, change project files, validate solver output, or certify compliance.
+
+```bash
+cleanroomx-ai-gui path/to/project.cleanroomx.json
+cleanroomx-ai path/to/project.cleanroomx.json "List saved analyses"
+```

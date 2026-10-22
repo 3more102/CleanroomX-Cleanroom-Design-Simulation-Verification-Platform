@@ -89,6 +89,8 @@ from .gui_lifecycle import protect_tk_lifecycle
 from .gui_windowing import fit_window_to_display
 from .gui_proofgraph import ProofGraphViewer
 from .gui_start import StartCenter
+from .ai_assistant_ui import AssistantWindow
+from .ai_assistant_chat import project_chat_key
 from .project_dossier import (
     build_project_engineering_dossier,
     markdown_project_engineering_dossier,
@@ -2087,6 +2089,7 @@ class CleanroomXApp:
         self.root.geometry(f"{default_width}x{default_height}")
 
         self.project: ProjectDocument = new_project()
+        self._assistant_unsaved_id = uuid.uuid4().hex
         self.project_path: Path | None = None
         self._project_file_revision = None
         self._recovery_source_path: Path | None = None
@@ -2112,6 +2115,7 @@ class CleanroomXApp:
         self._project_diagnostics_after_id = None
         self._recent_project_paths: list[Path] = []
         self._command_palette_window: CommandPalette | None = None
+        self._ai_assistant_window: AssistantWindow | None = None
         self._ui_state_path = (
             Path(ui_state_path)
             if ui_state_path is not None
@@ -2349,6 +2353,8 @@ class CleanroomXApp:
             accelerator="Ctrl+Shift+P",
             command=self.show_command_palette,
         )
+        tools_menu.add_separator()
+        tools_menu.add_command(label="AI Engineering Assistant...", command=self.show_ai_assistant)
         menubar.add_cascade(label="Tools", menu=tools_menu)
 
         view_menu = tk.Menu(menubar, tearoff=False)
@@ -6063,6 +6069,7 @@ class CleanroomXApp:
             return
         self._discard_current_autosave()
         self.project = new_project()
+        self._assistant_unsaved_id = uuid.uuid4().hex
         self.project_path = None
         self._project_file_revision = None
         self._recovery_source_path = None
@@ -6420,9 +6427,10 @@ class CleanroomXApp:
             parent=self.root,
         )
 
-    def show_multizone_cfd(self):
+    def show_multizone_cfd(self, directory: str | Path | None = None):
         from .cfd_multizone_gui import MultizoneCFDWindow
-        window = MultizoneCFDWindow(self.root, directory=getattr(self, "_last_multizone_case", None))
+        selected = directory if directory is not None else getattr(self, "_last_multizone_case", None)
+        window = MultizoneCFDWindow(self.root, directory=selected)
         return window
 
     def export_project_engineering_dossier(self) -> None:
@@ -7540,6 +7548,30 @@ class CleanroomXApp:
                 document,
                 label="HTML report",
             )
+
+    def show_ai_assistant(self) -> None:
+        """Open one project-aware, read-only AI workspace."""
+        window = self._ai_assistant_window
+        if window is not None:
+            try:
+                if window.winfo_exists():
+                    window.lift()
+                    window.focus_set()
+                    return
+            except tk.TclError:
+                pass
+
+        self._ai_assistant_window = AssistantWindow(
+            self.root,
+            project_getter=lambda: self.project,
+            base_dir_getter=self._base_dir,
+            project_key_getter=lambda: project_chat_key(
+                self.project_path, unsaved_id=self._assistant_unsaved_id
+            ),
+            project_path_getter=lambda: self.project_path,
+            open_cfd_case=lambda case: self.show_multizone_cfd(directory=case),
+            on_close=lambda: setattr(self, "_ai_assistant_window", None),
+        )
 
     def show_about(self) -> None:
         messagebox.showinfo(

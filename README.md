@@ -8,6 +8,20 @@
 
 The current stable release is **v0.102.1**.
 
+## AI engineering assistant (development)
+
+The desktop now includes **Tools > AI Engineering Assistant...** with a
+read-only, offline review of canonical project diagnostics and an optional
+model-assisted Q&A window. By default, model requests use local Ollama;
+external cloud transmission needs explicit configuration and opt-in. The
+assistant cannot modify designs or certify numerical results.
+
+See [AI Engineering Assistant setup and staged roadmap](docs/AI_ENGINEERING_ASSISTANT.md).
+
+For a headless, model-free review, run `cleanroomx-ai-review path/to/project.json --actions --format json`. It checks the saved source revision and does not modify project or solver data.
+
+To inspect recorded CFD exports in the AI window, choose **Review CFD export...** and select the generated `report.json`. The importer checks the saved project revision, recomputes the canonical engineering review, and retains **HOLD** for open-door runs; it is not physical validation.
+
 ## Active connected-CFD engineering workflow
 
 The development branch in [PR #1363](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/pull/1363)

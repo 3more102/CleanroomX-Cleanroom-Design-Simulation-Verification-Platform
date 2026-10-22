@@ -3,10 +3,19 @@ from __future__ import annotations
 import argparse
 import sys
 from .cfd_openfoam import export_openfoam_cases, run_openfoam_cases
+from .cfd_project_rooms import generate_project_room_cases, run_project_room_cases
+from .cfd_project_audit import audit_project_room_cases
+from .cfd_multizone import generate_multizone_open_door_case, run_multizone_open_door_case
+from .cfd_relaxation_comparison import (
+    compare_independent_relaxation_cases,
+    export_independent_relaxation_comparison,
+)
+from .cfd_multizone_results import analyze_multizone_case, export_multizone_report
 from .cfd_vtk import populate_study_from_vtk
 from .cfd_visualization import render_cfd_cross_section
 from .cfd_scalar import prepare_scalar_case, run_scalar_case
 from .cfd_audit import audit_openfoam_log
+from .cfd_residual_dashboard import render_residual_dashboard
 from .cfd_grid_study import analyze_vtk_grid_study, validate_grid_spec
 from .cfd_grid_family import generate_grid_family
 from pathlib import Path
@@ -23,6 +32,84 @@ def build_parser():
     runner=sub.add_parser("run",help="Opt-in: run blockMesh, checkMesh, simpleFoam")
     runner.add_argument("directory")
     runner.add_argument("--timeout-seconds",type=int,default=3600)
+    project=sub.add_parser(
+        "project-rooms-generate",
+        help="Generate independent OpenFOAM v10 CFD cases for ceiling-FFU rooms and closed doors",
+    )
+    project.add_argument("project", help="CleanroomX GUI project JSON")
+    project.add_argument("directory", help="New output directory (must not exist)")
+    project.add_argument(
+        "--kinematic-viscosity-m2-s", type=float, required=True,
+        help="Explicit finite positive physical air property; never inferred",
+    )
+    project.add_argument("--mesh-cells", type=int, nargs=3, default=[24, 24, 12],
+                         metavar=("NX", "NY", "NZ"))
+    project.add_argument("--max-iterations", type=int, default=150)
+    project.add_argument("--output-interval", type=int, default=50)
+    project_run=sub.add_parser(
+        "project-rooms-run",
+        help="Opt-in run of independent hashed room cases: blockMesh, checkMesh, simpleFoam",
+    )
+    project_run.add_argument("directory")
+    project_run.add_argument("--timeout-seconds", type=int, default=3600)
+    project_audit=sub.add_parser(
+        "project-rooms-audit",
+        help="Fail-closed numerical screening of generated room solver logs",
+    )
+    project_audit.add_argument("directory")
+    project_audit.add_argument("--fields", required=True, nargs="+")
+    project_audit.add_argument("--max-initial-residual", required=True, type=float)
+    project_audit.add_argument("--max-final-residual", required=True, type=float)
+    project_audit.add_argument("--max-global-continuity", type=float)
+    project_audit.add_argument("--window", type=int, default=3)
+    multizone=sub.add_parser(
+        "multizone-generate",
+        help="Create ONE connected OpenFOAM CFD input domain through expressly OPEN doors",
+    )
+    multizone.add_argument("project")
+    multizone.add_argument("directory")
+    multizone.add_argument("--door-mode", choices=("open",), required=True,
+                           help="Required: open door passages are a different scenario from the 5 Pa closed-door network")
+    multizone.add_argument("--kinematic-viscosity-m2-s", type=float, required=True)
+    multizone.add_argument("--cell-size-x-m", type=float, default=0.5)
+    multizone.add_argument("--cell-size-y-m", type=float, default=0.1)
+    multizone.add_argument("--cell-size-z-m", type=float, default=0.3)
+    multizone.add_argument("--max-iterations", type=int, default=150)
+    multizone.add_argument("--output-interval", type=int, default=50)
+    multizone.add_argument(
+        "--pressure-relaxation", type=float, default=0.3,
+        help="SIMPLE pressure field relaxation 0.05..0.7; numerical sensitivity ONLY")
+    multizone.add_argument(
+        "--velocity-relaxation", type=float, default=0.7,
+        help="SIMPLE velocity equation relaxation 0.1..0.95; numerical sensitivity ONLY")
+    sensitivity=sub.add_parser(
+        "multizone-compare-relaxation",
+        help="Compare TWO executed matched-source OpenFOAM relaxation cases; engineering HOLD")
+    sensitivity.add_argument("baseline_directory")
+    sensitivity.add_argument("variant_directory")
+    sensitivity.add_argument("--density-kg-m3",type=float,default=1.2)
+    sensitivity.add_argument("--reference-room-id",default="corridor")
+    sensitivity.add_argument("--output",help="Create a NEW noncertifying comparison JSON file")
+    local=sub.add_parser(
+        "multizone-leakage-local",
+        help="Individually vary each sourced CLOSED-door leakage path; not CFD",
+    )
+    local.add_argument("case_directory",help="Executed, hash-checked all-open OpenFOAM case")
+    local.add_argument("scenario",help="Explicit closed-door JSON leakage/network model")
+    local.add_argument("--density-kg-m3",type=float,required=True)
+    local.add_argument("--reference-room-id",required=True)
+    local.add_argument("--factors",type=float,nargs="+",default=[.5,1.,2.])
+    local.add_argument("--output",required=True,help="New replay-validated JSON report")
+    multi_run=sub.add_parser("multizone-run",help="Opt-in blockMesh/checkMesh/simpleFoam for the connected case")
+    multi_run.add_argument("directory")
+    multi_run.add_argument("--timeout-seconds", type=int, default=3600)
+    multi_results=sub.add_parser("multizone-analyze",help="Read recorded p/U/phi and export measured room/door diagnostics")
+    multi_results.add_argument("directory")
+    multi_results.add_argument("--density-kg-m3",required=True,type=float)
+    multi_results.add_argument("--reference-room-id",required=True)
+    multi_results.add_argument("--vertical-tolerance-m-s",type=float,default=.01)
+    multi_results.add_argument("--time",dest="time_name")
+    multi_results.add_argument("--report-directory",help="New report folder containing JSON, cell/residual CSV and HTML")
     importer=sub.add_parser("import-vtk",help="Import real VTK cell data to existing study")
     for cfg in (1,2,3):
         importer.add_argument(f"--case-{cfg}",required=True)
@@ -52,6 +139,7 @@ def build_parser():
     audit.add_argument("--max-global-continuity",type=float)
     audit.add_argument("--window",type=int,default=3)
     audit.add_argument("--output")
+    audit.add_argument("--interactive-html", help="Self-contained interactive plot of actual bounded solver residuals")
     grid=sub.add_parser("grid-generate",help="Generate nine OpenFOAM cases: three configurations x three mesh resolutions")
     grid.add_argument("spec")
     grid.add_argument("directory")
@@ -71,6 +159,94 @@ def main():
         result=run_openfoam_cases(args.directory,timeout_seconds=args.timeout_seconds)
         print(dumps_strict_json(result))
         return 0 if result["status"]=="executed_requires_convergence_review" else 2
+    if args.command=="project-rooms-generate":
+        result=generate_project_room_cases(
+            args.project, args.directory,
+            mesh_cells=tuple(args.mesh_cells),
+            kinematic_viscosity_m2_s=args.kinematic_viscosity_m2_s,
+            max_iterations=args.max_iterations,
+            output_interval=args.output_interval,
+        )
+        print(dumps_strict_json(result))
+        return 0
+    if args.command=="project-rooms-run":
+        result=run_project_room_cases(
+            args.directory, timeout_seconds=args.timeout_seconds,
+        )
+        print(dumps_strict_json(result))
+        return 0 if result["status"]=="executed_requires_convergence_review" else 2
+    if args.command=="multizone-generate":
+        result=generate_multizone_open_door_case(
+            args.project, args.directory, door_mode=args.door_mode,
+            cell_size_x_m=args.cell_size_x_m,
+            cell_size_y_m=args.cell_size_y_m,
+            cell_size_z_m=args.cell_size_z_m,
+            kinematic_viscosity_m2_s=args.kinematic_viscosity_m2_s,
+            max_iterations=args.max_iterations,
+            output_interval=args.output_interval,
+            pressure_relaxation=args.pressure_relaxation,
+            velocity_relaxation=args.velocity_relaxation,
+        )
+        print(dumps_strict_json(result))
+        return 0
+    if args.command=="multizone-compare-relaxation":
+        result=compare_independent_relaxation_cases(
+            args.baseline_directory,args.variant_directory,
+            density_kg_m3=args.density_kg_m3,
+            reference_room_id=args.reference_room_id)
+        if args.output:
+            export_independent_relaxation_comparison(result,args.output)
+        print(dumps_strict_json(result))
+        return 0
+    if args.command=="multizone-leakage-local":
+        from .cfd_closed_door_comparison import load_closed_door_network_scenario
+        from .cfd_closed_door_single_path import (
+            sweep_individual_leakage_sensitivity,export_individual_leakage_sensitivity)
+        report=analyze_multizone_case(
+            args.case_directory,density_kg_m3=args.density_kg_m3,
+            reference_room_id=args.reference_room_id)
+        network,evidence,sha=load_closed_door_network_scenario(args.scenario)
+        comparison=sweep_individual_leakage_sensitivity(
+            report,network,evidence,factors=args.factors,scenario_sha256=sha)
+        export_individual_leakage_sensitivity(comparison,args.output)
+        print(dumps_strict_json({
+            "schema":comparison["schema"],
+            "engineering_release":"HOLD",
+            "source_closed_input_sha256":sha,
+            "path_count":len(comparison["path_experiments"]),
+            "factor_count":len(comparison["factors"]),
+            "highest_sampled_margin_loss_path":(
+                comparison["sampled_path_rankings"]["ranked_paths"][0]["path"]),
+            "highest_sampled_margin_loss_pa":(
+                comparison["sampled_path_rankings"]["ranked_paths"][0][
+                    "max_sampled_target_margin_loss_pa"]),
+            "output":str(args.output),
+        }))
+        return 0
+    if args.command=="multizone-run":
+        result=run_multizone_open_door_case(args.directory,timeout_seconds=args.timeout_seconds)
+        print(dumps_strict_json(result))
+        return 0 if result["status"]=="executed_requires_convergence_review" else 2
+    if args.command=="multizone-analyze":
+        result=analyze_multizone_case(
+            args.directory,density_kg_m3=args.density_kg_m3,
+            reference_room_id=args.reference_room_id,
+            vertical_tolerance_m_s=args.vertical_tolerance_m_s,time_name=args.time_name,
+        )
+        if args.report_directory:
+            export_multizone_report(result,args.report_directory)
+        print(dumps_strict_json({k:v for k,v in result.items() if k not in ("cells","residual_history")}))
+        return 0
+    if args.command=="project-rooms-audit":
+        result=audit_project_room_cases(
+            args.directory, fields=args.fields,
+            max_initial_residual=args.max_initial_residual,
+            max_final_residual=args.max_final_residual,
+            max_global_continuity=args.max_global_continuity,
+            window=args.window,
+        )
+        print(dumps_strict_json(result))
+        return 0 if result["status"]=="numerically_screened_requires_engineering_review" else 3
     if args.command=="grid-generate":
         report=generate_grid_family(load_cli_input(load_strict_json,args.spec),args.directory)
         print(dumps_strict_json(report))
@@ -102,14 +278,25 @@ def main():
         print(dumps_strict_json(result))
         return 0 if result["status"]=="executed_requires_residual_and_field_validation" else 2
     if args.command=="audit-log":
+        if (args.output and args.interactive_html and
+            Path(args.output).resolve() == Path(args.interactive_html).resolve()):
+            raise ValueError("JSON and interactive HTML outputs must have different paths")
         result=audit_openfoam_log(args.log,fields=args.fields,
                   max_initial_residual=args.max_initial_residual,
                   max_final_residual=args.max_final_residual,
-                  max_global_continuity=args.max_global_continuity,window=args.window)
+                  max_global_continuity=args.max_global_continuity,
+                  window=args.window,include_plot_series=bool(args.interactive_html))
+        dashboard=(render_residual_dashboard(result) if args.interactive_html else None)
         payload=dumps_strict_json(result)
+        if args.interactive_html:
+            if not publish_cli_output("cleanroomx-cfd-pipeline",args.interactive_html,
+                                      dashboard,protected_inputs=(args.log,)+
+                                      ((args.output,) if args.output else ())):
+                return 1
         if args.output:
             if not publish_cli_output("cleanroomx-cfd-pipeline",args.output,payload,
-                                      protected_inputs=(args.log,)):
+                                      protected_inputs=(args.log,)+
+                                      ((args.interactive_html,) if args.interactive_html else ())):
                 return 1
         else:
             print(payload)

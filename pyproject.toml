@@ -20,6 +20,7 @@ cfd = ["vtk>=9.2", "matplotlib>=3.8"]
 cleanroomx = "cleanroomx.cli:main"
 cleanroomx-gui = "cleanroomx.gui:main"
 cleanroomx-doctor = "cleanroomx.doctor_cli:main"
+cleanroomx-openfoam-runtime = "cleanroomx.openfoam_runtime:main"
 cleanroomx-project-run = "cleanroomx.project_batch:main"
 cleanroomx-project-agents = "cleanroomx.agent_orchestration_cli:main"
 cleanroomx-project-bundle = "cleanroomx.project_bundle_cli:main"

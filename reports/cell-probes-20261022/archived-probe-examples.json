@@ -1,0 +1,163 @@
+{
+  "schema": "cleanroomx.recorded-cell-probes.v1",
+  "source_iteration": "100",
+  "source_manifest_sha256": "ff25c6a55936dac0c4a485a773e56395537fe817854c072b931e6fd157eb2ae7",
+  "source_run_receipt_sha256": "6ba3d3364006138e4e119404e23c514c007125befdc80c084e7ef0f68de1dde4",
+  "density_kg_m3": 1.2,
+  "pressure_reference": {
+    "room_id": "corridor",
+    "method": "subtract computed volume-mean kinematic pressure, then multiply by density",
+    "kinematic_pressure_m2_s2": 1.4923155367427776
+  },
+  "solver_reported_convergence": false,
+  "engineering_release": "HOLD",
+  "probes": [
+    {
+      "schema": "cleanroomx.recorded-cell-probe.v1",
+      "source_iteration": "100",
+      "source_manifest_sha256": "ff25c6a55936dac0c4a485a773e56395537fe817854c072b931e6fd157eb2ae7",
+      "source_run_receipt_sha256": "6ba3d3364006138e4e119404e23c514c007125befdc80c084e7ef0f68de1dde4",
+      "density_kg_m3": 1.2,
+      "pressure_reference": {
+        "room_id": "corridor",
+        "method": "subtract computed volume-mean kinematic pressure, then multiply by density",
+        "kinematic_pressure_m2_s2": 1.4923155367427776
+      },
+      "solver_reported_convergence": false,
+      "cell_index": 0,
+      "room_id": "process",
+      "requested_location_m": [
+        0.25,
+        0.05,
+        0.15
+      ],
+      "cell_center_m": [
+        0.25,
+        0.05,
+        0.15
+      ],
+      "velocity_m_s": [
+        -0.08931957271,
+        -0.03520418254,
+        0.09899699007
+      ],
+      "speed_m_s": 0.1379047663437573,
+      "pressure_pa_relative_to_reference": 0.05762580150866698,
+      "sampling": "containing_recorded_cell_no_interpolation",
+      "engineering_release": "HOLD"
+    },
+    {
+      "schema": "cleanroomx.recorded-cell-probe.v1",
+      "source_iteration": "100",
+      "source_manifest_sha256": "ff25c6a55936dac0c4a485a773e56395537fe817854c072b931e6fd157eb2ae7",
+      "source_run_receipt_sha256": "6ba3d3364006138e4e119404e23c514c007125befdc80c084e7ef0f68de1dde4",
+      "density_kg_m3": 1.2,
+      "pressure_reference": {
+        "room_id": "corridor",
+        "method": "subtract computed volume-mean kinematic pressure, then multiply by density",
+        "kinematic_pressure_m2_s2": 1.4923155367427776
+      },
+      "solver_reported_convergence": false,
+      "cell_index": 4403,
+      "room_id": "process",
+      "requested_location_m": [
+        4.25,
+        4.05,
+        1.05
+      ],
+      "cell_center_m": [
+        4.25,
+        4.05,
+        1.05
+      ],
+      "velocity_m_s": [
+        -0.005641785338,
+        0.02324675377,
+        0.02147635681
+      ],
+      "speed_m_s": 0.03214770916369492,
+      "pressure_pa_relative_to_reference": 0.017650278308666768,
+      "sampling": "containing_recorded_cell_no_interpolation",
+      "engineering_release": "HOLD"
+    },
+    {
+      "schema": "cleanroomx.recorded-cell-probe.v1",
+      "source_iteration": "100",
+      "source_manifest_sha256": "ff25c6a55936dac0c4a485a773e56395537fe817854c072b931e6fd157eb2ae7",
+      "source_run_receipt_sha256": "6ba3d3364006138e4e119404e23c514c007125befdc80c084e7ef0f68de1dde4",
+      "density_kg_m3": 1.2,
+      "pressure_reference": {
+        "room_id": "corridor",
+        "method": "subtract computed volume-mean kinematic pressure, then multiply by density",
+        "kinematic_pressure_m2_s2": 1.4923155367427776
+      },
+      "solver_reported_convergence": false,
+      "cell_index": 6605,
+      "room_id": "preparation",
+      "requested_location_m": [
+        7.25,
+        2.35,
+        1.65
+      ],
+      "cell_center_m": [
+        7.25,
+        2.35,
+        1.65
+      ],
+      "velocity_m_s": [
+        0.02682498554,
+        -0.03553929061,
+        -0.05110298692
+      ],
+      "speed_m_s": 0.06778005826516333,
+      "pressure_pa_relative_to_reference": 0.003650307908666761,
+      "sampling": "containing_recorded_cell_no_interpolation",
+      "engineering_release": "HOLD"
+    },
+    {
+      "schema": "cleanroomx.recorded-cell-probe.v1",
+      "source_iteration": "100",
+      "source_manifest_sha256": "ff25c6a55936dac0c4a485a773e56395537fe817854c072b931e6fd157eb2ae7",
+      "source_run_receipt_sha256": "6ba3d3364006138e4e119404e23c514c007125befdc80c084e7ef0f68de1dde4",
+      "density_kg_m3": 1.2,
+      "pressure_reference": {
+        "room_id": "corridor",
+        "method": "subtract computed volume-mean kinematic pressure, then multiply by density",
+        "kinematic_pressure_m2_s2": 1.4923155367427776
+      },
+      "solver_reported_convergence": false,
+      "cell_index": 13209,
+      "room_id": "corridor",
+      "requested_location_m": [
+        17.75,
+        2.95,
+        2.85
+      ],
+      "cell_center_m": [
+        17.75,
+        2.95,
+        2.85
+      ],
+      "velocity_m_s": [
+        -0.01121244123,
+        -0.0008429567834,
+        0.0156452116
+      ],
+      "speed_m_s": 0.01926660479907289,
+      "pressure_pa_relative_to_reference": 0.0008775003086667787,
+      "sampling": "containing_recorded_cell_no_interpolation",
+      "engineering_release": "HOLD"
+    }
+  ],
+  "units": {
+    "location": "m",
+    "velocity": "m/s",
+    "speed": "m/s",
+    "pressure": "Pa"
+  },
+  "limitations": [
+    "Containing cell-centred values only; no pointwise interpolation or spatial accuracy claim",
+    "Pressure is relative to the imported computed room mean, not absolute pressure",
+    "SIMPLE iteration is not physical time; probe readings do not establish convergence or compliance"
+  ]
+}

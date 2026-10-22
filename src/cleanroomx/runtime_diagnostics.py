@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import sys
 import time
+import traceback as traceback_module
 from types import TracebackType
 from typing import Callable, Mapping
 import uuid
@@ -97,6 +98,44 @@ def close_gui_runtime_logging(logger: logging.Logger) -> None:
         if getattr(handler, _RUNTIME_HANDLER_MARKER, False):
             logger.removeHandler(handler)
             handler.close()
+
+
+def report_gui_failure(exc: BaseException, *, phase: str = "startup") -> str:
+    """Retain a full pre-mainloop failure even when Tk or the log folder fails.
+
+    Returns operator guidance suitable for a dialog. Logging errors must never
+    replace the original traceback, including on a read-only user profile.
+    """
+    logger = None
+    log_path = None
+    try:
+        logger, log_path = configure_gui_runtime_logging(
+            logger_name="cleanroomx.gui.startup",
+        )
+        logger.error(
+            "GUI %s failed; interpreter=%r python=%s cwd=%r",
+            phase, sys.executable, sys.version.split()[0], os.getcwd(),
+            exc_info=(type(exc), exc, exc.__traceback__),
+        )
+    except OSError:
+        # stderr remains usable when the configured log directory is unwritable.
+        pass
+    finally:
+        if logger is not None:
+            close_gui_runtime_logging(logger)
+    traceback_module.print_exception(type(exc), exc, exc.__traceback__, file=sys.stderr)
+    message = (
+        f"CleanroomX {phase} failed: {exc}\n\n"
+        "Run cleanroomx-gui --check in the same Python environment. "
+        "For Tcl/Tk or display errors, use a graphical desktop and a Python "
+        "installation with Tcl/Tk support.\n"
+    )
+    if log_path is None:
+        message += "Persistent log unavailable; the complete traceback is above."
+    else:
+        message += f"Complete traceback: {log_path}"
+    print(message, file=sys.stderr)
+    return message
 
 
 def install_tk_exception_handler(

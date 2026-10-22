@@ -1,0 +1,51 @@
+{
+  "failure": "Native CFD run cancelled before publishing its receipt",
+  "finished_utc": "2026-10-21T11:31:37.720429+00:00",
+  "manifest_sha256": "b1763e5aec4d057d4e0ebedde005fe8d166d678da36fc4b2c42313b3181b9972",
+  "outputs": {},
+  "runtime": {
+    "executables": {
+      "blockMesh": "/opt/openfoam10/platforms/linux64GccDPInt32Opt/bin/blockMesh",
+      "checkMesh": "/opt/openfoam10/platforms/linux64GccDPInt32Opt/bin/checkMesh",
+      "postProcess": "/opt/openfoam10/platforms/linux64GccDPInt32Opt/bin/postProcess",
+      "simpleFoam": "/opt/openfoam10/platforms/linux64GccDPInt32Opt/bin/simpleFoam"
+    },
+    "version": "Usage: simpleFoam [OPTIONS]\noptions:\n  -case <dir>       specify alternate case directory, default is the cwd\n  -fileHandler <handler>\n                    override the fileHandler\n  -hostRoots <((host1 dir1) .. (hostN dirN))>\n                    slave root directories (per host) for distributed running\n  -libs '(\"lib1.so\" ... \"libN.so\")'\n                    pre-load libraries\n  -listFunctionObjects\n                    List functionObjects\n  -listFvConstraints\n                    List fvConstraints\n  -listFvModels     List fvModels\n  -listMomentumTransportModels\n                    List momentumTransportModels\n  -listScalarBCs    List scalar field boundary conditions (fvPatchField<scalar>)\n  -listSwitches     List all available debug, info and optimisation switches\n  -listVectorBCs    List vector field boundary conditions (fvPatchField<vector>)\n  -noFunctionObjects\n                    do not execute functionObjects\n  -parallel         run in parallel\n  -postProcess      Execute functionObjects only\n  -roots <(dir1 .. dirN)>\n                    slave root directories for distributed running\n  -srcDoc           display source code in browser\n  -doc              display application documentation in browser\n  -help             print the usage\n\nUsing: OpenFOAM-10 (see https://openfoam.org)\nBuild: 10-c4cf895ad8fa"
+  },
+  "schema": "cleanroomx.multizone-run.v1",
+  "stages": [
+    {
+      "arguments": [
+        "blockMesh"
+      ],
+      "command": "blockMesh",
+      "elapsed_seconds": 8.179305780000504,
+      "failure": null,
+      "log_sha256": "4d55576feb7682f7c01e266a1a1f5b8ad03c091d0e3180b12afef9916f8d4dda",
+      "returncode": 0
+    },
+    {
+      "arguments": [
+        "checkMesh"
+      ],
+      "command": "checkMesh",
+      "elapsed_seconds": 0.38260226100010186,
+      "failure": null,
+      "log_sha256": "e19b73e4c9b75fa5aac09461368029178c377c2c5b1b65b6bd535e661785b51e",
+      "returncode": 0
+    },
+    {
+      "arguments": [
+        "simpleFoam"
+      ],
+      "command": "simpleFoam",
+      "elapsed_seconds": 0.46823101100017084,
+      "failure": "Native CFD run cancelled; its process group was terminated",
+      "log_sha256": "97d5a81cc38ab08e2ffe4c98b2a00ee0a37b201bb06b4d9329d91e8b00a5eee5",
+      "returncode": null
+    }
+  ],
+  "started_utc": "2026-10-21T11:31:28.687241+00:00",
+  "status": "cancelled",
+  "warning": "Review residuals, flux balance, model validity and mesh sensitivity; execution is not validation."
+}

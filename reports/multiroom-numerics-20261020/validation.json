@@ -1,0 +1,36 @@
+{
+  "focused_multizone_checks": {
+    "failed": 0,
+    "includes_actual_Foundation_v10_execution": true,
+    "passed": 24
+  },
+  "full_suite": {
+    "failed": 0,
+    "log_sha256": "764dafd13689bc37adbcc5349f96f56b14e585a29cfca638c31950974c2f56b2",
+    "passed": 2439,
+    "seconds": 160.2,
+    "skip_reason": "Optional native IfcOpenShell dependency is not installed",
+    "skipped": 1
+  },
+  "gui_and_spatial_editing_checks": {
+    "Tk_version": "8.6",
+    "failed": 0,
+    "passed": 232,
+    "real_X11_display": true
+  },
+  "runtime": {
+    "OpenFOAM": "Foundation v10, build 10-c4cf895ad8fa",
+    "python": "3.12.14"
+  },
+  "scope": "Execution and numerical software verification. Design-airflow case remains unconverged; no closed-door leakage or 5 Pa CFD validation.",
+  "tested_source_sha256": {
+    "scripts/with_openfoam10.sh": "dd2d1d750278f306999c9eb2ba9b50ef3a18eebb56d254013d70627e856081a2",
+    "src/cleanroomx/cfd_multizone_gui.py": "4ddb616b937598ff77a7b1604b7295ad092c8dda5350aa34d3a04b23abc4989b",
+    "src/cleanroomx/cfd_multizone_results.py": "e9bf9c2eb866630718bf0be7ec6e4124eb3b3fffb4a4f2450b032d0bde1518de",
+    "src/cleanroomx/gui.py": "4188c39f90ea04863c599a5ac0bffe23608cc53ef787fc1b1ac23d2fe2f6da65",
+    "src/cleanroomx/spatial.py": "a50fb1100b80b4a3de9e602f9314468c3a135581ea5e322645fa59380d888c6f",
+    "tests/test_cfd_multizone_execution.py": "ba987f5a2888e31c0cf6b28594708bdc99335047a181f12e566014331a9ea849",
+    "tests/test_cfd_multizone_results.py": "4933be9e20958f923bb9ba25a932d65806cc91386ff11e83aa279f9eacffa59f",
+    "tests/test_spatial_editing_gui.py": "450c3087368cef0c5989438047dfa52037306d4313baac106b3763e4f44e3967"
+  }
+}

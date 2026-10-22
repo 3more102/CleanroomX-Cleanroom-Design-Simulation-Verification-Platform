@@ -8,7 +8,87 @@
 
 The current stable release is **v0.102.1**.
 
+## Active connected-CFD engineering workflow
+
+The development branch in [PR #1363](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/pull/1363)
+connects the existing desktop to real Foundation v10 case execution, recorded
+p/U/C/phi review, original mesh inspection and scheduled particle screening.
+The design-flow case shown below is **not solver-converged**. Closed-door 5 Pa
+performance, mesh independence and physical particle validation remain **HOLD**.
+
+| Stage | Existing implementation / source of displayed data |
+|---|---|
+| Geometry and properties | `spatial.py`, canonical project room/device model |
+| Connected case and mesh | `cfd_multizone.py`, generated dictionaries, blockMesh/checkMesh |
+| Execution and integrity | Foundation v10 processes, stage logs, manifest and receipt hashes |
+| Recorded fields and analysis | `cfd_multizone_results.py`, actual p/U/C/phi and face-flux balances |
+| Desktop / original 3D mesh | `cfd_multizone_gui.py`, `cfd_multizone_vtk.py`, `cfd_multizone_mesh.py` |
+| Scheduled particles | `cfd_particles.py`, `cfd_particle_sources.py`, `cfd_particle_sources_gui.py` |
+| Evidence | Recorded-cell sections, residuals, numerical population, CSV/JSON/HTML exports |
+
+Launch with `cleanroomx-gui --demo`; install optional 3D dependencies using
+`python -m pip install -e ".[cfd]"`. Actual solver execution requires a sourced
+[OpenFOAM Foundation v10](https://openfoam.org/download/10-ubuntu/) environment.
+Use the [multiroom workflow](docs/MULTIROOM_CFD_EXECUTION.md) or the explicit
+[Windows → WSL procedure](docs/WINDOWS_WSL_OPENFOAM_BRIDGE.md).
+
+The connected native Linux runner also supports
+[cancellation and child-process cleanup](docs/NATIVE_CFD_CANCELLATION.md).
+Cancelled or interrupted runs retain failure evidence and cannot be imported
+as completed CFD. The separate Windows-to-WSL bridge does not yet offer this
+cancellation control.
+
+The native **Residual histories** panel supports field filtering,
+initial/final linear residuals, linear/log10 scales, recent-iteration windows
+and exact mouse/keyboard point inspection. See the
+[actual residual-control captures and usage](docs/native-residual-inspection-20261021/README.md).
+These controls inspect recorded data and preserve the original convergence verdict.
+
+Fresh native and WSL runs now open the **Live solver** panel: observed SIMPLE
+iterations, initial/final residuals, raw continuity diagnostics and interactive
+plots update from the actual growing solver log. Preview values remain
+unverified until the normal completed-field import. See
+[usage and reading limits](docs/LIVE_CFD_MONITOR.md) and the
+[actual widget capture, explicitly replaying a recorded log](docs/live-solver-monitor-20261021/README.md).
+
+**Computed sections** also supports [recorded cell probes](docs/CFD_CELL_PROBES.md):
+click a fluid cell or enter XYZ to inspect its exact stored velocity vector,
+speed and relative pressure, then export source-linked selections. Missing
+fluid cells produce no reading. The original streamline mode remains available.
+
+The [executed cancellation and GUI lifecycle report](reports/native-cancellation-20261021/REPORT.md)
+includes the complete **2833 passed / 1 optional IFC skip** run, original
+cancelled-case archive and
+[two actual desktop captures](docs/native-cfd-cancellation-20261021/README.md).
+
+### Actual application captures
+
+These images come from the running Tk application and native VTK framebuffer.
+Design arrows/targets express input intent. CFD views use recorded solver
+fields; particle paths use the stated frozen-field model.
+
+![Actual multiroom design and room inspector](docs/real-gui-screenshots-20261021/04-object-inspector.png)
+
+![Actual saved source editor with timed releases](docs/real-gui-screenshots-20261021/09-particle-injection.png)
+
+![Original verified OpenFOAM mesh, with computed velocity samples](docs/real-gui-screenshots-20261021/06-original-openfoam-mesh.png)
+
+![Actual camera close-up of computed particle paths](docs/real-gui-screenshots-20261021/17-particle-source-closeup.png)
+
+![Computed numerical population, not physical airborne concentration](docs/real-gui-screenshots-20261021/13-particle-population.png)
+
+[All actual captures](docs/real-gui-screenshots-20261021/README.md) ·
+[Engineering session report](reports/engineering-session-20261021/REPORT.md) ·
+[Current project state / remaining work](docs/PROJECT_STATE.md)
+
 ### Workstation and package-readiness diagnostics
+
+The [startup and runtime recovery guide](docs/STARTUP_AND_RUNTIME_RECOVERY.md)
+covers persistent startup tracebacks, strict real-GUI smoke checks, bounded
+OpenFOAM installation discovery and configurable WSL checkout/runtime paths,
+including installations accessible under `/mnt/d/`.
+
+![Current desktop runtime controls and genuine imported CFD fields](docs/startup-runtime-recovery-20261021/02-runtime-and-computed-fields.png)
 
 Use `cleanroomx-doctor` to check Python qualification, package and module
 integrity, native BIM availability, Tcl/Tk readiness, packaged examples,
@@ -72,21 +152,6 @@ These are six unedited CleanroomX desktop screenshots. See the [annotated CFD ga
 The six source PNG files and their [SHA-256 manifest](docs/images/multiroom-cfd/manifest.json) are retained under `docs/images/multiroom-cfd/`. Validate their integrity with `python tools/validate_multiroom_cfd_gallery.py`.
 <!-- cleanroomx-multiroom-cfd-gallery:end -->
 
-## Real CleanroomX desktop screenshots — 21 October 2026
-
-The following are **actual GUI/VTK captures from the development branch** (not features qualified in the stable release). The recorded Foundation v10 all-doors-open simulation was **not converged**; engineering release remains **HOLD**.
-
-| Design Studio and room geometry | Original OpenFOAM mesh |
-| :--: | :--: |
-| ![Real CleanroomX Design Studio](docs/real-gui-screenshots-20261021/02-design-studio.png) | ![Original OpenFOAM mesh](docs/real-gui-screenshots-20261021/06-original-openfoam-mesh.png) |
-
-| Recorded CFD velocity field | Computed particle paths (screening only) |
-| :--: | :--: |
-| ![Recorded computed velocity field](docs/real-gui-screenshots-20261021/07-computed-velocity-section.png) | ![Particle tracking in frozen recorded U](docs/real-gui-screenshots-20261021/10-computed-particle-tracking.png) |
-
-**[View all 17 original PNG files in the visual gallery](docs/real-gui-screenshots-20261021/README.md)** — 16 distinct images (the archived 05 and 08 are identical); source capture metadata and limitations are linked on the gallery page.
-
-
 ### Cleanroom CFD study (external solver evidence)
 
 - Compare three supply/exhaust layouts: central ceiling / low-wall, distributed ceiling / low-wall, and distributed ceiling / raised perforated floor.
@@ -113,6 +178,24 @@ The following are **actual GUI/VTK captures from the development branch** (not f
 - Import real VTK velocity or scalar fields and OpenFOAM residual logs at fine, medium and coarse resolutions.
 - Compute apparent order, Richardson zero-grid estimate and fine-grid GCI using user-defined verification criteria; an acceptable GCI is **not** a claim of physically validated CFD.
 - See [three-grid convergence workflow](docs/CFD_GRID_CONVERGENCE.md).
+
+### Recorded-field particle sources
+
+- **Computed sections → Open real VTK 3D → Particle sources...** opens the
+  functional source table/editor. Pick a solved fluid cell in 3D, save source
+  properties, and run the complete collection on a cancellable worker.
+- Multiple source definitions with explicit release start, duration, numerical
+  count, enablement and initial velocity, driven by recorded OpenFOAM U.
+- Reuses the existing one-way Stokes/Cunningham/inertia/gravity screening model.
+- Source-bound JSON configuration, cancellable atomic integration,
+  release-aware sample playback, numerical population accounting and replayed
+  trajectory JSON/CSV export; at most 20 numerical particles per run.
+- Counts are numerical samples, not calibrated airborne concentrations.
+  Boundary contact does not establish deposition or outlet escape.
+- The source review includes computed population graphs/tables, source glyphs,
+  JSON save/load, and a release-aware 3D timeline using actual integration samples.
+- [Source model and workflow](docs/CFD_PARTICLE_SOURCES.md) ·
+  [Current engineering evidence and limitations](docs/PROJECT_STATE.md).
 
 ### Engineering verification
 

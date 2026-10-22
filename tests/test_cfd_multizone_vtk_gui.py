@@ -1,0 +1,168 @@
+"""Real VTK-on-Tk widget smoke test under Xvfb, using *labeled synthetic fixtures*.
+
+This checks an actual native window and GUI field/vector controls. It is not
+OpenFOAM execution or CFD validation. See test_cfd_multizone_execution.py for
+real solver-field contract tests.
+"""
+import tkinter as tk
+import json
+import time
+
+import pytest
+
+vtk = pytest.importorskip("vtk")
+
+from cleanroomx.cfd_multizone_vtk import open_multizone_vtk_window
+from test_cfd_multizone_vtk import _source
+from cleanroomx.cfd_streamlines import trace_computed_streamline
+
+
+def test_real_tk_vtk_window_opens_and_updates_selected_field_and_glyphs(tmp_path):
+    root = tk.Tk()
+    root.geometry("900x700")
+    window = None
+    try:
+        report = _source()
+        trace = trace_computed_streamline(report,(0.5,0.5,0.5),max_integration_s=1.)
+        root.update()
+        window = open_multizone_vtk_window(root,report,[trace])
+        root.update()
+        assert isinstance(window,tk.Toplevel)
+        assert window._cleanroomx_vtk_mode in ("embedded","native")
+        assert window._cleanroomx_vtk_render_window is not None
+        assert window._cleanroomx_vtk_renderer.GetActors().GetNumberOfItems() >= 4
+        assert window._cleanroomx_field_var.get() == "speed"
+        window._cleanroomx_field_var.set("pressure")
+        window._cleanroomx_arrows_var.set(False)
+        window._cleanroomx_refresh_scene()
+        root.update()
+        assert window._cleanroomx_field_var.get() == "pressure"
+        assert window._cleanroomx_vtk_renderer.GetActors().GetNumberOfItems() >= 3
+        assert window._cleanroomx_vtk_renderer.GetActors().GetNumberOfItems() <= 5
+        # Rebuild from the exact recorded x-cell layer and reject missing data.
+        window._cleanroomx_room_var.set("r1")
+        window._cleanroomx_plane_var.set("x")
+        window._cleanroomx_plane_position_var.set("1.5")
+        window._cleanroomx_refresh_scene()
+        root.update()
+        assert "1 recorded cells" in window._cleanroomx_view_status.get()
+        old_renderer=window._cleanroomx_vtk_renderer
+        window._cleanroomx_plane_position_var.set("100")
+        window._cleanroomx_refresh_scene()
+        assert window._cleanroomx_vtk_renderer is old_renderer
+        assert "Selection rejected" in window._cleanroomx_view_status.get()
+        window._cleanroomx_plane_var.set("all")
+        window._cleanroomx_plane_position_var.set("")
+        window._cleanroomx_refresh_scene()
+        assert "3 recorded cells" in window._cleanroomx_view_status.get()
+        # Genuine VTK display-to-world projection followed by vtkPointPicker.
+        renderer=window._cleanroomx_vtk_renderer
+        renderer.SetWorldPoint(1.5,0.5,0.5,1.0)
+        renderer.WorldToDisplay()
+        x,y,_=renderer.GetDisplayPoint()
+        assert window._cleanroomx_seed_display_point(x,y)
+        assert len(window._cleanroomx_traces)==2
+        assert window._cleanroomx_traces[-1]["points"][0]["xyz_m"]==[1.5,0.5,0.5]
+        assert "NOT particle tracking" in window._cleanroomx_view_status.get()
+        assert not window._cleanroomx_seed_display_point(-100,-100)
+        assert len(window._cleanroomx_traces)==2
+        exported=tmp_path/"vtk3d-paths.json"
+        assert window._cleanroomx_export_traces_to_path(exported)
+        payload=json.loads(exported.read_text(encoding="utf-8"))
+        assert payload["source_iteration"]=="50"
+        assert len(payload["traces"])==2
+        assert payload["validation"]=="steady_visualization_only_not_particle_transport"
+        assert not window._cleanroomx_export_traces_to_path(exported)
+        assert "Export rejected" in window._cleanroomx_view_status.get()
+        window._cleanroomx_particle_mode_var.set(True)
+        window._cleanroomx_particle_diameter_var.set("5")
+        window._cleanroomx_particle_density_var.set("1000")
+        window._cleanroomx_particle_time_var.set(".2")
+        renderer=window._cleanroomx_vtk_renderer
+        renderer.SetWorldPoint(1.5,.5,.5,1.0)
+        renderer.WorldToDisplay()
+        x,y,_=renderer.GetDisplayPoint()
+        assert window._cleanroomx_seed_display_point(x,y)
+        assert len(window._cleanroomx_particles)==1
+        assert window._cleanroomx_particles[0]["points"][0]["xyz_m"]==[1.5,.5,.5]
+        assert "FROZEN steady U, NOT certified" in window._cleanroomx_view_status.get()
+        # Timeline markers use the last ACTUALLY COMPUTED particle vertex.
+        recorded=window._cleanroomx_particles[0]["points"]
+        assert len(recorded)>2
+        window._cleanroomx_playback_var.set((
+            recorded[1]["elapsed_particle_s"]+
+            recorded[2]["elapsed_particle_s"])/2)
+        selected=window._cleanroomx_update_particle_markers()
+        assert selected[0]["xyz_m"]==recorded[1]["xyz_m"]
+        assert window._cleanroomx_particle_marker_points.GetNumberOfPoints()==1
+        assert window._cleanroomx_particle_marker_points.GetPoint(0)==pytest.approx(
+            recorded[1]["xyz_m"])
+        assert not window._cleanroomx_playback_status.get().startswith("Fake")
+
+        particle_file=tmp_path/"vtkscreen-particles.json"
+        assert window._cleanroomx_export_particles_to_path(particle_file)
+        content=json.loads(particle_file.read_text(encoding="utf-8"))
+        assert content["schema"]=="cleanroomx.particle-screening-collection.v1"
+        assert content["tracks"][0]["diameter_um"]==pytest.approx(5.)
+        assert not window._cleanroomx_export_particles_to_path(particle_file)
+        assert "Particle export rejected" in window._cleanroomx_view_status.get()
+        diagnostic_window=window._cleanroomx_analyze_particle_paths()
+        assert isinstance(diagnostic_window,tk.Toplevel)
+        root.update()
+        diagnostics=diagnostic_window._cleanroomx_particle_diagnostics
+        assert diagnostics["source_iteration"]=="50"
+        assert diagnostics["number_of_screening_tracks"]==1
+        assert diagnostics["engineering_release"]=="HOLD"
+        assert diagnostics["validated_particle_transport"] is False
+        assert len(diagnostic_window._cleanroomx_particle_diagnostics_table.get_children())==1
+        assert diagnostics["tracks"][0]["sample_count"]==len(recorded)
+        # Three exact replay runs are computed off the Tk event thread.
+        assert diagnostic_window._cleanroomx_start_refinement()
+        deadline=time.monotonic()+12
+        while (diagnostic_window._cleanroomx_refinement_state["busy"]
+               and time.monotonic()<deadline):
+            root.update()
+            time.sleep(.02)
+        root.update()
+        assert not diagnostic_window._cleanroomx_refinement_state["busy"]
+        refinement=diagnostic_window._cleanroomx_refinement_state["last"]
+        assert refinement["engineering_release"]=="HOLD"
+        assert not refinement["validated_particle_transport"]
+        assert len(refinement["runs"])==3
+        assert any(
+            getattr(child,"_cleanroomx_refinement",None) is refinement
+            for child in diagnostic_window.winfo_children()
+        )
+        diagnostic_window._cleanroomx_refinement_tolerance.set("nan")
+        assert diagnostic_window._cleanroomx_start_refinement() is False
+        assert "Refinement rejected" in diagnostic_window._cleanroomx_refinement_status.get()
+        diagnostic_window.destroy()
+        window._cleanroomx_particles.clear()
+        assert window._cleanroomx_analyze_particle_paths() is None
+        assert "Particle diagnostics rejected" in window._cleanroomx_view_status.get()
+
+        # The multi-injection feature uses actual selected solver centres and
+        # processes numerical traces on a worker without blocking the viewer.
+        window._cleanroomx_ensemble_count_var.set("2")
+        window._cleanroomx_particle_time_var.set(".1")
+        assert window._cleanroomx_inject_ensemble()
+        deadline=time.monotonic()+10
+        while window._cleanroomx_ensemble_state["busy"] and time.monotonic()<deadline:
+            root.update()
+            time.sleep(.02)
+        root.update()
+        assert not window._cleanroomx_ensemble_state["busy"]
+        assert len(window._cleanroomx_particles)==2
+        assert len({
+            tuple(p["points"][0]["xyz_m"])
+            for p in window._cleanroomx_particles
+        })==2
+        assert all(p["source_iteration"]=="50" for p in window._cleanroomx_particles)
+        assert "NOT a probability or concentration" in window._cleanroomx_ensemble_status.get()
+        window._cleanroomx_ensemble_count_var.set("21")
+        assert window._cleanroomx_inject_ensemble() is False
+        assert "Selection rejected" in window._cleanroomx_ensemble_status.get()
+    finally:
+        if window is not None:
+            window.destroy()
+        root.destroy()

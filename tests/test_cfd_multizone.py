@@ -1,0 +1,298 @@
+"""Conformal voxel open-door CFD input cases; synthetic geometry, no solver run."""
+from __future__ import annotations
+
+import hashlib
+import json
+import math
+
+import pytest
+
+from cleanroomx.cfd_pipeline_cli import build_parser
+from cleanroomx.cfd_multizone import (
+    SCHEMA, _build_case, _geometry,
+    generate_multizone_open_door_case, run_multizone_open_door_case,
+)
+from cleanroomx.gui import bundled_demo_project_path
+from cleanroomx.project import load_project_document
+
+
+def _generate(tmp_path, **opts):
+    return generate_multizone_open_door_case(
+        bundled_demo_project_path(), tmp_path / "multi",
+        door_mode="open", kinematic_viscosity_m2_s=1.5e-5,
+        **opts
+    )
+
+
+def test_multizone_geometry_has_real_cross_room_internal_faces_and_single_component():
+    project=load_project_document(bundled_demo_project_path())
+    geometry,_=_geometry(project,(0.5,0.1,0.3))
+    assert len(geometry["occupancy"]) > 1000
+    assert geometry["dimensions"] == (36,50,10)
+    assert set(geometry["doors"]) == {
+        "door-process-preparation","door-preparation-ante","door-ante-corridor"
+    }
+    for door in geometry["doors"].values():
+        assert door["open_face_count"] > 0
+        assert door["clear_width_m"] == pytest.approx(1.0)
+        assert door["clear_height_m"] == pytest.approx(2.1)
+        assert door["wall_thickness_m"] == pytest.approx(0.5)
+    # The same face is occupied on both sides; this is actual fluid connectivity.
+    assert any(
+        geometry["occupancy"].get((i+1,j,k)) not in (None,rid)
+        for (i,j,k),rid in geometry["occupancy"].items()
+    )
+
+
+def test_generated_case_has_real_conformal_multiblock_and_every_device_boundary(tmp_path):
+    manifest=_generate(tmp_path)
+    assert manifest["schema_version"]==SCHEMA
+    assert manifest["input_mode"]=="hypothetical_all_doors_open"
+    assert set(manifest["files"]) == {
+        "system/blockMeshDict","system/controlDict","system/fvSchemes","system/fvSolution",
+        "constant/transportProperties","constant/momentumTransport","0/U","0/p"
+    }
+    evidence=manifest["case"]
+    assert evidence["door_mode"]=="open"
+    assert evidence["connected_component_count"]==1
+    assert evidence["fluid_block_count"]>1000
+    assert len(evidence["open_doors"])==3
+    assert len(evidence["ffu_mesh_faces"])==12
+    assert len(evidence["return_mesh_faces"])==3
+    assert all(x>0 for x in evidence["ffu_mesh_faces"].values())
+    assert all(x>0 for x in evidence["return_mesh_faces"].values())
+    assert set(evidence["room_boundary_flows"])=={"process","preparation","ante"}
+    assert evidence["room_boundary_flows"]["process"]["supply_m3_s"]==pytest.approx(.75)
+    assert "no 5 Pa" in evidence["pressure_boundary"]
+    root=tmp_path/"multi"
+    mesh=(root/"system/blockMeshDict").read_text()
+    u=(root/"0/U").read_text()
+    p=(root/"0/p").read_text()
+    assert mesh.count("    hex (")==evidence["fluid_block_count"]
+    for rid in ("process","preparation","ante"):
+        assert f"supply_{rid}" in mesh
+        assert f"return_{rid}" in mesh
+        assert f"supply_{rid}\n    {{\n        type fixedValue;" in u
+        assert f"return_{rid}\n    {{\n        type pressureInletOutletVelocity;" in u
+        assert f"return_{rid}\n    {{\n        type fixedValue; value uniform 0;" in p
+    assert "walls\n    {\n        type noSlip;" in u
+    assert "application simpleFoam;" in (root/"system/controlDict").read_text()
+    assert "simulationType laminar;" in (root/"constant/momentumTransport").read_text()
+    assert "div((nuEff*dev2(T(grad(U))))) Gauss linear;" in (root/"system/fvSchemes").read_text()
+    assert all(hashlib.sha256((root/name).read_bytes()).hexdigest()==sha
+               for name,sha in manifest["files"].items())
+    assert json.loads((root/"manifest.json").read_text())==manifest
+    with pytest.raises(FileExistsError,match="overwrite"):
+        _generate(tmp_path)
+
+
+def test_doors_must_explicitly_be_open_and_inputs_fail_closed(tmp_path):
+    with pytest.raises(ValueError,match="explicitly select"):
+        generate_multizone_open_door_case(
+            bundled_demo_project_path(), tmp_path/"closed",
+            door_mode="closed", kinematic_viscosity_m2_s=1.5e-5
+        )
+    with pytest.raises(ValueError,match="align"):
+        generate_multizone_open_door_case(
+            bundled_demo_project_path(), tmp_path/"nonconformal",
+            door_mode="open", kinematic_viscosity_m2_s=1.5e-5,
+            cell_size_y_m=0.3
+        )
+    with pytest.raises(ValueError,match="voxel grid"):
+        generate_multizone_open_door_case(
+            bundled_demo_project_path(), tmp_path/"huge",
+            door_mode="open", kinematic_viscosity_m2_s=1.5e-5,
+            cell_size_x_m=.1,cell_size_y_m=.1,cell_size_z_m=.1
+        )
+    with pytest.raises(ValueError,match="strictly positive"):
+        generate_multizone_open_door_case(
+            bundled_demo_project_path(), tmp_path/"badphysics",
+            door_mode="open", kinematic_viscosity_m2_s=float("nan")
+        )
+    assert list(tmp_path.iterdir())==[]
+
+
+def test_open_door_geometry_avoids_inventing_nearby_door_locations():
+    project=load_project_document(bundled_demo_project_path())
+    layout=project.metadata["spatial_layout"]
+    door=next(d for d in layout["devices"] if d["id"]=="door-process-preparation")
+    door["y_m"]=2.01
+    with pytest.raises(ValueError,match="door clear width edge"):
+        _geometry(project,(.5,.1,.3))
+
+
+def test_multizone_runner_rejects_changed_inputs_before_external_solver(tmp_path,monkeypatch):
+    _generate(tmp_path)
+    root=tmp_path/"multi"
+    monkeypatch.setattr("cleanroomx.cfd_multizone.shutil.which",lambda name: None)
+    with pytest.raises(RuntimeError,match="blockMesh not found"):
+        run_multizone_open_door_case(root)
+    modified=root/"0/U"
+    modified.write_text(modified.read_text()+"\n// tampered")
+    with pytest.raises(ValueError,match="Solver input changed"):
+        run_multizone_open_door_case(root)
+
+
+def test_cli_explicit_open_door_mode_required():
+    parser=build_parser()
+    with pytest.raises(SystemExit):
+        parser.parse_args(["multizone-generate","demo.json","output",
+                           "--kinematic-viscosity-m2-s","1.5e-5"])
+    args=parser.parse_args([
+        "multizone-generate","demo.json","output","--door-mode","open",
+        "--kinematic-viscosity-m2-s","1.5e-5",
+    ])
+    assert args.command=="multizone-generate"
+    assert args.cell_size_y_m==.1
+    assert args.pressure_relaxation==.3
+    assert args.velocity_relaxation==.7
+    choice=parser.parse_args([
+        "multizone-generate","demo.json","output","--door-mode","open",
+        "--kinematic-viscosity-m2-s","1.5e-5",
+        "--pressure-relaxation","0.2","--velocity-relaxation","0.5",
+    ])
+    assert choice.pressure_relaxation==.2
+    assert choice.velocity_relaxation==.5
+    pair=parser.parse_args([
+        "multizone-compare-relaxation","baseline","variant",
+        "--density-kg-m3","1.25","--reference-room-id","ante",
+        "--output","new-comparison.json",
+    ])
+    assert pair.baseline_directory=="baseline"
+    assert pair.variant_directory=="variant"
+    assert pair.density_kg_m3==1.25
+    assert pair.reference_room_id=="ante"
+    assert pair.output=="new-comparison.json"
+    assert parser.parse_args(["multizone-run","output"]).command=="multizone-run"
+
+
+def test_independent_closed_room_export_rejects_open_design_door(tmp_path):
+    from cleanroomx.cfd_project_rooms import generate_project_room_cases
+    raw=json.loads(bundled_demo_project_path().read_text())
+    door=next(d for d in raw["project"]["metadata"]["spatial_layout"]["devices"] if d["type"]=="door")
+    door["door_state"]="open"
+    source=tmp_path/"open-design.json"
+    source.write_text(json.dumps(raw))
+    with pytest.raises(ValueError,match="requires closed"):
+        generate_project_room_cases(source,tmp_path/"closed",kinematic_viscosity_m2_s=1.5e-5)
+
+
+def test_multizone_equipment_respects_room_floor_elevation():
+    project=load_project_document(bundled_demo_project_path())
+    for room in project.metadata["spatial_layout"]["rooms"]:
+        room["floor_elevation_m"]=1.2
+    _,metadata=_build_case(project,pitch=(.5,.1,.3),viscosity_m2_s=1.5e-5,iterations=10,interval=5)
+    assert metadata["origin_m"][2]==1.2
+    assert len(metadata["ffu_mesh_faces"])==12
+    assert all(x>0 for x in metadata["ffu_mesh_faces"].values())
+    assert all(x>0 for x in metadata["return_mesh_faces"].values())
+
+
+def test_unconfigured_shared_wall_never_becomes_an_unintended_passage():
+    project=load_project_document(bundled_demo_project_path())
+    devices=project.metadata["spatial_layout"]["devices"]
+    devices[:]=[d for d in devices if d["id"]!="door-preparation-ante"]
+    with pytest.raises(ValueError,match="Unconfigured shared"):
+        _geometry(project,(.5,.1,.3))
+
+
+def test_explicit_solver_relaxation_changes_only_solver_dictionary_and_manifest(tmp_path):
+    # Generated inputs only: NO solver is executed by this synthetic fixture.
+    standard=generate_multizone_open_door_case(
+        bundled_demo_project_path(),tmp_path/"standard",
+        door_mode="open",kinematic_viscosity_m2_s=1.5e-5,
+        max_iterations=10,output_interval=5)
+    variant=generate_multizone_open_door_case(
+        bundled_demo_project_path(),tmp_path/"variant",
+        door_mode="open",kinematic_viscosity_m2_s=1.5e-5,
+        max_iterations=10,output_interval=5,
+        pressure_relaxation=.2,velocity_relaxation=.5)
+    assert standard["case"]["numerical_controls"]["pressure_field_relaxation"]==.3
+    assert standard["case"]["numerical_controls"]["velocity_equation_relaxation"]==.7
+    assert variant["case"]["numerical_controls"]["pressure_field_relaxation"]==.2
+    assert variant["case"]["numerical_controls"]["velocity_equation_relaxation"]==.5
+    assert "relaxationFactors { fields { p 0.3; } equations { U 0.7; } }" in (
+        tmp_path/"standard/system/fvSolution").read_text()
+    assert "relaxationFactors { fields { p 0.2; } equations { U 0.5; } }" in (
+        tmp_path/"variant/system/fvSolution").read_text()
+    assert standard["files"]["system/fvSolution"]!=variant["files"]["system/fvSolution"]
+    for key in standard["files"]:
+        if key!="system/fvSolution":
+            assert standard["files"][key]==variant["files"][key]
+    from cleanroomx.cfd_multizone import verify_multizone_inputs
+    assert verify_multizone_inputs(tmp_path/"variant")[1]==variant
+    content=tmp_path/"variant/system/fvSolution"
+    content.write_text(content.read_text().replace("p 0.2;","p 0.3;"))
+    with pytest.raises(ValueError,match="Solver input changed"):
+        verify_multizone_inputs(tmp_path/"variant")
+
+
+@pytest.mark.parametrize("pressure,velocity",[
+    (math.nan,.5),(.2,math.inf),(.2,True),(True,.5),("0.2",.5),
+    (0.,.5),(.02,.5),(.71,.5),(.2,0),(.2,.09),(.2,.96),
+])
+def test_relaxation_inputs_fail_before_case_creation(tmp_path,pressure,velocity):
+    output=tmp_path/"new-numerical-case"
+    with pytest.raises(ValueError,match="relaxation"):
+        generate_multizone_open_door_case(
+            bundled_demo_project_path(),output,door_mode="open",
+            kinematic_viscosity_m2_s=1.5e-5,
+            pressure_relaxation=pressure,velocity_relaxation=velocity)
+    assert not output.exists()
+
+
+def test_paired_relaxation_comparison_refuses_unexecuted_and_changed_physics(tmp_path):
+    from cleanroomx.cfd_relaxation_comparison import compare_independent_relaxation_cases
+    common=dict(
+        door_mode="open",kinematic_viscosity_m2_s=1.5e-5,
+        max_iterations=10,output_interval=5)
+    baseline=tmp_path/"baseline"
+    variant=tmp_path/"variant"
+    generate_multizone_open_door_case(
+        bundled_demo_project_path(),baseline,**common)
+    generate_multizone_open_door_case(
+        bundled_demo_project_path(),variant,
+        pressure_relaxation=.2,velocity_relaxation=.5,**common)
+    with pytest.raises(ValueError,match="successful recorded"):
+        compare_independent_relaxation_cases(
+            baseline,variant,density_kg_m3=1.2,
+            reference_room_id="corridor")
+    incompatible=tmp_path/"viscosity-changed"
+    generate_multizone_open_door_case(
+        bundled_demo_project_path(),incompatible,
+        kinematic_viscosity_m2_s=2e-5,
+        door_mode="open",max_iterations=10,output_interval=5,
+        pressure_relaxation=.2,velocity_relaxation=.5)
+    with pytest.raises(ValueError,match="Only the hashed fvSolution"):
+        compare_independent_relaxation_cases(
+            baseline,incompatible,density_kg_m3=1.2,
+            reference_room_id="corridor")
+    same=tmp_path/"no-relaxation-difference"
+    generate_multizone_open_door_case(
+        bundled_demo_project_path(),same,**common)
+    with pytest.raises(ValueError,match="different recorded relaxation"):
+        compare_independent_relaxation_cases(
+            baseline,same,density_kg_m3=1.2,
+            reference_room_id="corridor")
+    # A changed hidden SIMPLE convergence limit must NOT be mislabelled as a
+    # pressure/velocity relaxation-only comparison, even with a new hash.
+    hidden=tmp_path/"hidden-solver-tolerance"
+    generate_multizone_open_door_case(
+        bundled_demo_project_path(),hidden,
+        pressure_relaxation=.2,velocity_relaxation=.5,**common)
+    solution=hidden/"system/fvSolution"
+    original=solution.read_text()
+    assert "residualControl { p 1e-5; U 1e-6; }" in original
+    solution.write_text(original.replace(
+        "residualControl { p 1e-5; U 1e-6; }",
+        "residualControl { p 1e-4; U 1e-6; }"))
+    manifest_file=hidden/"manifest.json"
+    manifest=json.loads(manifest_file.read_text())
+    manifest["files"]["system/fvSolution"]=hashlib.sha256(
+        solution.read_bytes()).hexdigest()
+    manifest_file.write_text(json.dumps(manifest))
+    with pytest.raises(ValueError,match="Only the declared SIMPLE"):
+        compare_independent_relaxation_cases(
+            baseline,hidden,density_kg_m3=1.2,
+            reference_room_id="corridor")
+    assert list(variant.glob("run-receipt.json"))==[]

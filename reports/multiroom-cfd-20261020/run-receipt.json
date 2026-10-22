@@ -1,0 +1,109 @@
+{
+  "finished_utc": "2026-10-20T08:08:39.326811+00:00",
+  "manifest_sha256": "8d146a06592971ee7de62228c836d5da67ba50ed98565a6702231977ee5ded88",
+  "outputs": {
+    "100/U": "27caf355418fb27950cd125f27f293fb79a5eeb4521ca7257ae8db9f992a80d3",
+    "100/p": "f77ff433328c0cbeda25b74e4b6c132703fc4fdccde32706d3f3a79af6028d68",
+    "100/phi": "a3471f9fad3a2bb621d65a6e53e2c0f6221b340ba1a1fd23d849051fd2baa05a",
+    "150/U": "8e34699daa3909f5dcb7a96b3b051ad3c52e222f340eda75ca55d513c02046bd",
+    "150/p": "cc758e3165a409e2f72cb13390bb65439112afa6686fcbd386268c57386e8e0c",
+    "150/phi": "27d9f09f46c07152bd8ae0d57c046d5a7001753557c2fdc2c23235032b3ad7a9",
+    "200/U": "8872ef3d32708b2ea594e0b9f17cf35f2918582615ba1c9c93c0fc96bf6cee09",
+    "200/p": "15bd8f20a5ed141ff4a9cc07735165dc164ef3878f98ff943010af428e0b6b9f",
+    "200/phi": "b1970863cf3dd87813eb3ef59fa2d9a64b5f0b4680241e9bd68410f43800a1c6",
+    "250/U": "e168e27f2794a21f665ffa39131e16b962d91da4ac57171f5334d8165a4fa7cd",
+    "250/p": "985dd4199663d8bb485c4391ac1f7f218b402c3adfc08e2f5952760642d623ed",
+    "250/phi": "410aa41336b2ffef5a7c0a5cf63dd67188ea69b4420f1340ea5c4a7273649e19",
+    "300/U": "5425bd5394ba9c52889f558f7a90d928d85ecc49e409f471bfa6b6eed5080381",
+    "300/p": "d1f9b9f019f4a3ed5dfe4caa8037e1c2796f6086015d009968a221aa3dfea846",
+    "300/phi": "c80f52c5dbec867b120d9077f413cf60d213b37643a81a4fc0515f66d530a7ee",
+    "350/U": "b31e383be84861058318027e4e5ee41eab8b75607cf3b4ce9f5afa3a315f07e3",
+    "350/p": "13d618e593ee798b458b1dd1a31111030bb85e203887fd9d7ea5c18ceb7b7cf1",
+    "350/phi": "f1b93fcfe25a0aba8027864017f3bd378c5b0bbaa66bc4bead8438eb4f548d58",
+    "400/U": "cd00380584fce3662a7ef2281c3d118adbd891eb7d995eb9dc7f9b9e6182ec58",
+    "400/p": "fb98f0ee20796aef2ba90a85bbd0c9c010e2ec17b8eb194c441f7b9f5227f44b",
+    "400/phi": "f16a8e39536464bf041a8043393c2b6e03bdec1d5cf8489a88baa0c829b7a9a5",
+    "450/U": "b702b1786f2212b981b285865cec7b41c1a485aa5a2bdc7b9c147fe9630c4f32",
+    "450/p": "f95c7759ffe7ec76ae7b3e467a363776341f11c729c2170033c2086798ddc424",
+    "450/phi": "c367b04c72bd50581f43134b60b650a642036b9e71ff29dca4f9a92c45c588a2",
+    "50/U": "e2c2bae92ab495ac948e41bb5ba6c5d6b93ae77ee170e32df54421a892804dfa",
+    "50/p": "eb81aeb3810feb79ae9d13ea0b07aa09fad4a05bae77af0d0a8c587690ff7c9f",
+    "50/phi": "bc474f55ccaba928e4a1058a8df51b37793193f750288fac42b1069e78994044",
+    "500/U": "99593bbd488792a261a7c08e6b2e242022a87a4f7d19af2c02711ae373731fbc",
+    "500/p": "ea0d9c7a5bc45dbd217c7e71a7eab66db09453ecd3d270dc62d6b402ba57ae7e",
+    "500/phi": "213ea69c282eec21179e2c2118a42db91a14b4d0f3780e629d0ffc7dc7fcf039",
+    "550/U": "a9450b5298ded1a0644319614e42b6075b8b057cd5b57dfaf045b64c9299bbac",
+    "550/p": "2c381750ba6669ad4d17c1e5ebf625aee85f30e839f717d53e53d29be9b2af84",
+    "550/phi": "a9bbd40b410f4b48dc61d2c68b7d27b26c2cc00c99a839cfaf4d4848253948b7",
+    "600/C": "98596931e1dc1728b0436be4c278325fd83b4fc4863ae44f0f590c50e6017e05",
+    "600/Cx": "0144cae624d5d70d8bbb483e222e34202c57ae8d2d33fff9fefdb399c0f7747f",
+    "600/Cy": "7bd22e4114234b1a1070041e39e263bec9a1cf367bddadc3756bcd1cfd33fc99",
+    "600/Cz": "d2dba597dd10f2bd49443e11d5d3fc082683ca5ccdd3b9e97c4c284832376702",
+    "600/U": "08199b28230bf7ceda8475455a3506f50af13fa2e602f58918e149c214e0bad6",
+    "600/p": "ea38036ed43986a2008ad159436f5e4912d2553f52d114adfdb8b380f86f6f29",
+    "600/phi": "05cc665bbf5109d656851b18cd2a4f1fcfc33012ac8d4c286f397e809de29d34",
+    "constant/polyMesh/boundary": "18c24ef9d7101b4b93dac3c587da3fa3ced8f8103eaca8f8c136be03b9682aee",
+    "constant/polyMesh/faces": "e1ccfcb7a9cbdd6b0c39dd3ed635d62b0fa3a75034e356c1b3cc37cda35f4172",
+    "constant/polyMesh/neighbour": "9a383177fbd99915839cebfa7c2e10292df172ebce73543d24d941f131bf00a3",
+    "constant/polyMesh/owner": "7a1f1ba0333650d1cd000e6c8326dd532dc7ed853fe8aab3074fd15daed05f8e",
+    "constant/polyMesh/points": "82fd819696ad375ec16a5590aebbfd55c0d0faa9a02834cb0d541da68790dcb5"
+  },
+  "runtime": {
+    "executables": {
+      "blockMesh": "/workspace/scratch/a50b614113ea/foam-runtime/root/opt/openfoam10/platforms/linux64GccDPInt32Opt/bin/blockMesh",
+      "checkMesh": "/workspace/scratch/a50b614113ea/foam-runtime/root/opt/openfoam10/platforms/linux64GccDPInt32Opt/bin/checkMesh",
+      "postProcess": "/workspace/scratch/a50b614113ea/foam-runtime/root/opt/openfoam10/platforms/linux64GccDPInt32Opt/bin/postProcess",
+      "simpleFoam": "/workspace/scratch/a50b614113ea/foam-runtime/root/opt/openfoam10/platforms/linux64GccDPInt32Opt/bin/simpleFoam"
+    },
+    "version": "Usage: simpleFoam [OPTIONS]\noptions:\n  -case <dir>       specify alternate case directory, default is the cwd\n  -fileHandler <handler>\n                    override the fileHandler\n  -hostRoots <((host1 dir1) .. (hostN dirN))>\n                    slave root directories (per host) for distributed running\n  -libs '(\"lib1.so\" ... \"libN.so\")'\n                    pre-load libraries\n  -listFunctionObjects\n                    List functionObjects\n  -listFvConstraints\n                    List fvConstraints\n  -listFvModels     List fvModels\n  -listMomentumTransportModels\n                    List momentumTransportModels\n  -listScalarBCs    List scalar field boundary conditions (fvPatchField<scalar>)\n  -listSwitches     List all available debug, info and optimisation switches\n  -listVectorBCs    List vector field boundary conditions (fvPatchField<vector>)\n  -noFunctionObjects\n                    do not execute functionObjects\n  -parallel         run in parallel\n  -postProcess      Execute functionObjects only\n  -roots <(dir1 .. dirN)>\n                    slave root directories for distributed running\n  -srcDoc           display source code in browser\n  -doc              display application documentation in browser\n  -help             print the usage\n\nUsing: OpenFOAM-10 (see https://openfoam.org)\nBuild: 10-c4cf895ad8fa"
+  },
+  "schema": "cleanroomx.multizone-run.v1",
+  "stages": [
+    {
+      "arguments": [
+        "blockMesh"
+      ],
+      "command": "blockMesh",
+      "elapsed_seconds": 2.980523780999647,
+      "failure": null,
+      "log_sha256": "fdd2e094fe9d137edaa29a767e7c5c8c1b2e743fc3768a0d0006372f930268dc",
+      "returncode": 0
+    },
+    {
+      "arguments": [
+        "checkMesh"
+      ],
+      "command": "checkMesh",
+      "elapsed_seconds": 0.11443599900030677,
+      "failure": null,
+      "log_sha256": "2ee500bbb113dbc3b16e99a4f05e1a868f745a506db69a46f60634c046e373c1",
+      "returncode": 0
+    },
+    {
+      "arguments": [
+        "simpleFoam"
+      ],
+      "command": "simpleFoam",
+      "elapsed_seconds": 6.636105769000096,
+      "failure": null,
+      "log_sha256": "66a1c54384d5804e20c132ec117e549741a20973bf6a03458f6f1392fb44dc3f",
+      "returncode": 0
+    },
+    {
+      "arguments": [
+        "postProcess",
+        "-func",
+        "writeCellCentres",
+        "-latestTime"
+      ],
+      "command": "postProcess",
+      "elapsed_seconds": 0.1647243340003115,
+      "failure": null,
+      "log_sha256": "90ebcdefb31822cc0da00f9d9a5e8a443042df6f97460183d72ce0296ee7fd0f",
+      "returncode": 0
+    }
+  ],
+  "started_utc": "2026-10-20T08:08:29.411495+00:00",
+  "status": "executed_requires_convergence_review",
+  "warning": "Review residuals, flux balance, model validity and mesh sensitivity; execution is not validation."
+}

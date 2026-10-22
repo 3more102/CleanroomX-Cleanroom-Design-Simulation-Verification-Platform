@@ -1,0 +1,111 @@
+{
+  "artifact_validation": {
+    "archive_entries_sha256_match": true,
+    "cancelled_archive_canonical_import_rejected": true,
+    "canonical_rejection": "A successful recorded OpenFOAM execution is required",
+    "image_and_retained_log_hashes_match": true
+  },
+  "complete_suite": {
+    "actual_OpenFOAM_required": true,
+    "duration_seconds_console": 415.82,
+    "errors": 0,
+    "failed": 0,
+    "passed": 2833,
+    "skip_reason": "Optional native IFC/IfcOpenShell dependency unavailable",
+    "skipped": 1,
+    "warnings": 48
+  },
+  "engineering_release": "HOLD",
+  "environment": {
+    "OpenFOAM": "Foundation v10, build 10-c4cf895ad8fa",
+    "Tk": "9.0.4",
+    "VTK": "9.3.1",
+    "display": "Actual Xvfb TCP display; software GL",
+    "platform": "Linux",
+    "python": "3.12.14"
+  },
+  "evidence": {
+    "actual-cancelled-native-case-files.json": {
+      "sha256": "d66b948865cc4ec76e5028e4bf4ceed2b5f3dfd38bf16a6b5f6b49e466c230ae",
+      "size_bytes": 2457
+    },
+    "actual-cancelled-native-case.tar.gz": {
+      "sha256": "7aa7cf4132d293c7f096b53a4ecb56602d5815a527bd19cea243741f498c6f58",
+      "size_bytes": 693655
+    },
+    "installed-gui-smoke.log": {
+      "sha256": "53eb88df614aab4a78015a6df3dbe998e01587e8aaa257ca81ae9a9f22f5925b",
+      "size_bytes": 27
+    },
+    "native-complete.log.gz": {
+      "sha256": "9aaaf60c4aa5afe95d15dcb3d96be66bd482378cb81d8ca55e7cb323eec33ad5",
+      "size_bytes": 750
+    },
+    "native-complete.xml": {
+      "sha256": "1cd681fe19cb97b58987937ff379843fdd625c89659c46d78c1ddcdc5082acc5",
+      "size_bytes": 398709
+    },
+    "native-focused.log.gz": {
+      "sha256": "ddad73fff16202662d9aa75bb7a439371d44fbd045a6b997966ccc155cd4b542",
+      "size_bytes": 542
+    },
+    "native-focused.xml": {
+      "sha256": "d67d55f59975b7cc227be9f64b9e3cc558f879e8737c368b5a55dd990bf8255e",
+      "size_bytes": 5147
+    },
+    "rejected-incomplete-blockMesh.log.gz": {
+      "sha256": "d36e38491b1cda0b9659643f1bf1642c2029c5400022ea7972a979169d00e308",
+      "size_bytes": 553
+    },
+    "rejected-incomplete-mesh-receipt.json": {
+      "sha256": "26a52356b7d97cc5a7ca29c404d66497a9dd54bcbbe2ff106fb69577a9378c7f",
+      "size_bytes": 2510
+    },
+    "rejected-incomplete-mesh-source.json": {
+      "sha256": "b1763e5aec4d057d4e0ebedde005fe8d166d678da36fc4b2c42313b3181b9972",
+      "size_bytes": 6770
+    },
+    "rejected-pre-fix-tk-crash.log.gz": {
+      "sha256": "9f0c95cdaca5d13d33a9cba8f220023633c782e01a60c7ac9fdf18ec0f92759a",
+      "size_bytes": 1974
+    }
+  },
+  "focused_pre_lifecycle_suite": {
+    "duration_seconds": 101.05,
+    "failed": 0,
+    "overlaps_complete_suite": true,
+    "passed": 35,
+    "skipped": 0
+  },
+  "installed_GUI_smoke": {
+    "actual_Tk_display": true,
+    "console": "cleanroomx-gui --demo --smoke --autosave-interval-seconds 0",
+    "process_exit_code": 0,
+    "status": "PASS",
+    "working_directory": "/tmp"
+  },
+  "limits": [
+    "No native Windows workstation or Windows-to-WSL solver operation was executed locally",
+    "Native cancellation does not cover the Windows-to-WSL bridge, MPI, remote jobs or descendants escaping the managed POSIX group",
+    "Solver lifecycle execution does not establish physical CFD convergence, 5 Pa closed-door performance, mesh independence or cleanroom classification"
+  ],
+  "native_gui_cancellation": {
+    "actual_solver": true,
+    "callback_errors": 0,
+    "manifest": "../../docs/native-cfd-cancellation-20261021/capture-manifest.json",
+    "partial_import_rejected": true,
+    "screenshots": 2,
+    "solver_pid_reaped": true
+  },
+  "rejected_attempts": [
+    {
+      "evidence": "rejected-pre-fix-tk-crash.log.gz",
+      "finding": "Fatal Tk variable finalization on a numerical worker; lifecycle protection added and tested"
+    },
+    {
+      "evidence": "rejected-incomplete-mesh-receipt.json",
+      "finding": "blockMesh exit 0 without completion marker or generated mesh; cause unresolved; run refused"
+    }
+  ],
+  "schema": "cleanroomx.native-cancellation-validation.v1"
+}

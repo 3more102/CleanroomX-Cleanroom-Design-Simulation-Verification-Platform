@@ -1,0 +1,39 @@
+{
+  "baseline_commit": "8c7da24eb23a015b8c319f8b36f29387c4299c27",
+  "branch": "feat/doors-5pa-ceiling-downflow-demo-20261020",
+  "complete_suite": {
+    "exit_code": 0,
+    "failed": 0,
+    "passed": 2865,
+    "seconds": 158.89,
+    "skipped": 25,
+    "warnings": 40
+  },
+  "engineering_release": "HOLD",
+  "focused_suite": {
+    "exit_code": 0,
+    "failed": 0,
+    "passed": 51,
+    "seconds": 3.79,
+    "skipped": 0
+  },
+  "new_local_solver_execution": false,
+  "python": "3.12.14",
+  "schema": "cleanroomx.live-monitor-validation.v1",
+  "sha256": {
+    ".github/workflows/cfd-vtk.yml": "c0c69e8cb4e0719b43c6f16675af9a63bd5bb63153cba1f73832eb7cdc4c4b4c",
+    "docs/live-solver-monitor-20261021/01-recorded-log-preview.png": "097cb0649d2fcb0437cfed21343b8cc92dd5f95cb4d87bc1155abb27641a3380",
+    "docs/live-solver-monitor-20261021/capture-manifest.json": "c0fca326693bdc15618b9a92756a2ceed8e7f61c3ba53342d2540a6236a3e1af",
+    "reports/live-solver-monitor-20261021/focused-suite.log": "0d011d26a417f73bfd4d193baecf4e46714716a1a502a32de78ac8c87e753456",
+    "reports/live-solver-monitor-20261021/full-suite.log": "7ebf6dbfc3fb069c14bf94a6950dd6df7492992f6fce4d71f121ada958536178",
+    "scripts/capture_live_solver_preview.py": "ea1d57abd360ada1209c9e8626ea64d19385018c8a9c74d6f8c05d9a8800c49d",
+    "src/cleanroomx/cfd_live_monitor.py": "bc456dcde13a4e9fd66ad92069c7ae81c0f8c1649346f58da2d3e12ffb43d55d",
+    "src/cleanroomx/cfd_live_monitor_gui.py": "6c306336407eea8b76a127908bcbcfef37c7450ee00645d93dc162104b07ebce",
+    "src/cleanroomx/cfd_multizone_gui.py": "bbef917cecc82afa2833a1d8c107ed97b146d0fa21837a984dbdade2606ca5be",
+    "src/cleanroomx/cfd_residual_plot.py": "2ddd9fc0a58b8e8e13bbdb395e034ef9ee39853982a1bf86a4dc7cd16ad3f951",
+    "tests/test_cfd_live_monitor.py": "36586c4f7ddee1264a38743986b206155968ac133f95b14b437d71894fc1d9a5",
+    "tests/test_cfd_live_monitor_gui.py": "db1b80879fb6b11dfe0c05d33a13b3ae84b680b97108b1822ac61cf2858fdaf2",
+    "tests/test_cfd_multizone_execution.py": "2c97b3485d7154a2128f95d4705810c3f31e0f57a298e11bf0863046ffb4a5e3"
+  },
+  "windows_wsl_platform_qualification": false
+}

@@ -40,6 +40,62 @@ def app(tmp_path):
         root.destroy()
 
 
+
+def test_bundled_demo_renders_design_intent_ceiling_downflow_arrows(app):
+    workspace = app.spatial_workspace
+    app.notebook.select(workspace)
+    app.root.update()
+    assert len(workspace.canvas_3d.find_withtag("design-downflow")) == 12
+    # Each closed door has a real wall cutout, a framed 3-D leaf,
+    # and a floor-plan hinge/swing glyph rather than a lone stroke.
+    assert len(workspace.canvas_3d.find_withtag("door-leaf-3d")) == 3
+    assert len(workspace.canvas_3d.find_withtag("door-frame-3d")) == 9
+    assert len(workspace.canvas_3d.find_withtag("door-cut-wall-3d")) >= 3
+    assert len(workspace.canvas_2d.find_withtag("door-gap-2d")) == 3
+    assert len(workspace.canvas_2d.find_withtag("door-swing-2d")) == 3
+    assert len(workspace.canvas_2d.find_withtag("door-hinge-2d")) == 3
+
+
+def test_door_state_changes_leaf_geometry_and_survives_save_reopen(app,tmp_path):
+    workspace=app.spatial_workspace
+    door=next(d for d in workspace.layout["devices"] if d["type"]=="door")
+    workspace.select_item("device",door["id"])
+    tag=f"device:{door['id']}"
+    def leaf(canvas,label):
+        return next(canvas.coords(item) for item in canvas.find_withtag(tag)
+                    if label in canvas.gettags(item))
+    closed_2d=leaf(workspace.canvas_2d,"door-leaf-2d")
+    closed_3d=leaf(workspace.canvas_3d,"door-leaf-3d")
+    workspace.toggle_selected_door()
+    app.root.update()
+    assert next(d for d in workspace.layout["devices"] if d["id"]==door["id"])["door_state"]=="open"
+    assert leaf(workspace.canvas_2d,"door-leaf-2d")!=closed_2d
+    assert leaf(workspace.canvas_3d,"door-leaf-3d")!=closed_3d
+    assert app.undo_project_edit()
+    assert next(d for d in workspace.layout["devices"] if d["id"]==door["id"])["door_state"]=="closed"
+    assert app.redo_project_edit()
+    path=tmp_path/"open-door.cleanroomx.json"
+    save_project_document(path,app.project)
+    app.load_project_path(path)
+    assert next(d for d in app.spatial_workspace.layout["devices"] if d["id"]==door["id"])["door_state"]=="open"
+
+
+def test_ffu_and_return_visibility_controls_are_independent(app):
+    w=app.spatial_workspace
+    ffu=next(d for d in w.layout["devices"] if d["type"]=="ffu")
+    ret=next(d for d in w.layout["devices"] if d["type"]=="return")
+    w._show_ffu.set(False)
+    w.redraw()
+    assert not w.canvas_3d.find_withtag(f"device:{ffu['id']}")
+    assert w.canvas_3d.find_withtag(f"device:{ret['id']}")
+    assert not w.canvas_3d.find_withtag("design-downflow")
+    w._show_ffu.set(True)
+    w._show_returns.set(False)
+    w.redraw()
+    assert w.canvas_3d.find_withtag(f"device:{ffu['id']}")
+    assert not w.canvas_3d.find_withtag(f"device:{ret['id']}")
+
+
 def test_duplicate_edit_undo_redo_save_reopen_and_analysis(app, tmp_path):
     workspace = app.spatial_workspace
     room = workspace.layout["rooms"][0]
@@ -119,6 +175,8 @@ def test_editing_toolbar_controls_remain_visible(app, size):
     app.root.geometry(size)
     app.root.update()
     workspace = app.spatial_workspace
+    assert workspace._body.winfo_ismapped()
+    assert workspace._body.winfo_height() >= 80
     for row in workspace.winfo_children():
         if not isinstance(row, ttk.Frame):
             continue
@@ -416,13 +474,48 @@ def test_3d_xray_and_hover_are_view_only(app):
         for item_id in polygons
     )
 
-    workspace.canvas_3d.addtag_withtag("current", polygons[0])
-    workspace._on_3d_motion(type("Event", (), {"x": 0, "y": 0})())
+    # Exercise an actual motion event. Tk 9 manages the reserved 'current'
+    # tag itself; assigning it manually does not simulate a pointer hit.
+    canvas = workspace.canvas_3d
+    target = _Hit("room", room["id"])
+    position = None
+    for polygon in polygons:
+        x0, y0, x1, y1 = canvas.bbox(polygon)
+        for y in range(max(1, y0), min(canvas.winfo_height()-1, y1), 8):
+            for x in range(max(1, x0), min(canvas.winfo_width()-1, x1), 8):
+                items = canvas.find_overlapping(x, y, x, y)
+                if items and workspace._parse_hit(canvas.gettags(items[-1])) == target:
+                    position = (x, y)
+                    break
+            if position:
+                break
+        if position:
+            break
+    assert position is not None, "Expected a visible room face for native hover"
+    canvas.event_generate("<Motion>", x=position[0], y=position[1], warp=True)
+    app.root.update()
     assert workspace._hovered_3d == _Hit("room", room["id"])
 
     workspace._on_3d_leave()
     assert workspace._hovered_3d is None
     assert app.project.metadata == metadata_before
+
+
+def test_room_inspector_stays_readable_when_view_requests_excess_width(app):
+    workspace = app.spatial_workspace
+    workspace.set_workspace_mode("3d")
+    workspace.set_inspector_visible(True)
+    workspace.select_item("room", workspace.layout["rooms"][0]["id"])
+    app.root.geometry("1440x900")
+    app.root.update()
+    assert workspace._inspector_frame.winfo_width() >= 270
+    app.root.geometry("1050x680")
+    app.root.update()
+    assert workspace._inspector_frame.winfo_width() >= 270
+    assert workspace.canvas_3d.winfo_width() >= 240
+    workspace.set_inspector_visible(False)
+    app.root.update()
+    assert not workspace.inspector_visible()
 
 
 def test_invalid_3d_preset_is_rejected(app):
@@ -1056,3 +1149,186 @@ def test_floor_properties_apply_as_one_transaction_and_preserve_cancel_safety(
     workspace.edit_floor()
     app.root.update()
     assert workspace.layout == applied
+
+
+
+def test_gui_can_export_explicit_openfoam_inputs_without_running_solver(
+    app, tmp_path, monkeypatch
+):
+    import json
+    import cleanroomx.gui as gui_module
+
+    reports = []
+    warnings = []
+    errors = []
+    monkeypatch.setattr(
+        gui_module.simpledialog, "askfloat",
+        lambda *a, **kw: 1.5e-5,
+    )
+    monkeypatch.setattr(
+        gui_module.filedialog, "askdirectory",
+        lambda *a, **kw: str(tmp_path),
+    )
+    monkeypatch.setattr(
+        gui_module.simpledialog, "askstring",
+        lambda *a, **kw: "room_inputs",
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox, "showinfo",
+        lambda *a, **kw: reports.append(a),
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox, "showerror",
+        lambda *a, **kw: errors.append(a),
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox, "showwarning",
+        lambda *a, **kw: warnings.append(a),
+    )
+    assert not app._has_unsaved_changes()
+    source_before = app.project_path.read_bytes()
+    app.export_openfoam_room_cases()
+    root = tmp_path / "room_inputs"
+    assert not errors and not warnings
+    assert reports and "No solver has run" in reports[-1][1]
+    manifest = json.loads((root / "manifest.json").read_text())
+    assert set(manifest["cases"]) == {"process", "preparation", "ante"}
+    assert (root / "room_process/0/U").is_file()
+    assert app.project_path.read_bytes() == source_before
+    assert not (root / "room_process/simpleFoam.log").exists()
+    # An existing generated folder is never replaced.
+    app.export_openfoam_room_cases()
+    assert errors and "Refusing overwrite" in errors[-1][1]
+
+
+def test_gui_cfd_export_rejects_unsaved_changes_without_asking_for_physics(
+    app, monkeypatch
+):
+    import cleanroomx.gui as gui_module
+
+    dialogs = []
+    monkeypatch.setattr(
+        gui_module.simpledialog, "askfloat",
+        lambda *a, **kw: dialogs.append("viscosity"),
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox, "showinfo",
+        lambda *a, **kw: dialogs.append(a[0]),
+    )
+    app.description_var.set("Unsaved change: CFD export must fail closed")
+    app.export_openfoam_room_cases()
+    assert dialogs == ["Save project first"]
+
+
+def test_gui_cfd_export_requires_explicit_viscosity_and_supports_cancel(
+    app, tmp_path, monkeypatch
+):
+    import cleanroomx.gui as gui_module
+
+    called = []
+    monkeypatch.setattr(
+        gui_module.simpledialog, "askfloat",
+        lambda *a, **kw: None,
+    )
+    monkeypatch.setattr(
+        gui_module.filedialog, "askdirectory",
+        lambda *a, **kw: called.append("directory"),
+    )
+    app.export_openfoam_room_cases()
+    assert called == []
+    assert not (tmp_path / "cleanroomx-cfd-rooms").exists()
+    assert not any(path.name.startswith("room_") for path in tmp_path.iterdir())
+
+
+
+def test_connected_open_door_gui_requires_explicit_approval_and_saved_bytes(
+    app, tmp_path, monkeypatch
+):
+    import cleanroomx.gui as gui_module
+
+    calls = []
+    monkeypatch.setattr(
+        gui_module.messagebox, "askyesno",
+        lambda *a, **kw: calls.append("confirm") or True,
+    )
+    monkeypatch.setattr(
+        gui_module.simpledialog, "askfloat",
+        lambda *a, **kw: calls.append("viscosity") or 1.5e-5,
+    )
+    monkeypatch.setattr(
+        gui_module.filedialog, "askdirectory",
+        lambda *a, **kw: str(tmp_path),
+    )
+    monkeypatch.setattr(
+        gui_module.simpledialog, "askstring",
+        lambda *a, **kw: "one_connected_case",
+    )
+    notices = []
+    monkeypatch.setattr(
+        gui_module.messagebox, "showinfo",
+        lambda *a, **kw: notices.append(a),
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox, "showerror",
+        lambda *a, **kw: pytest.fail(str(a)),
+    )
+    initial_bytes = app.project_path.read_bytes()
+
+    def fake_export(project, directory, **kwargs):
+        calls.append(("export", project, directory, kwargs))
+        return {"case": {"fluid_block_count": 14000,
+                         "open_doors": {"a": {}, "b": {}, "c": {}}}}
+
+    monkeypatch.setattr(gui_module, "generate_multizone_open_door_case", fake_export)
+    app.export_connected_open_door_case()
+    assert calls[:2] == ["confirm", "viscosity"]
+    assert calls[2][0] == "export"
+    assert calls[2][1] == app.project_path
+    assert calls[2][2] == tmp_path / "one_connected_case"
+    assert calls[2][3] == {
+        "door_mode": "open", "kinematic_viscosity_m2_s": 1.5e-5,
+    }
+    assert notices and "No OpenFOAM solver was launched" in notices[-1][1]
+    assert app.project_path.read_bytes() == initial_bytes
+    assert not (tmp_path / "one_connected_case").exists()
+
+
+def test_connected_open_door_gui_decline_prevents_export(
+    app, monkeypatch
+):
+    import cleanroomx.gui as gui_module
+
+    calls = []
+    monkeypatch.setattr(
+        gui_module.messagebox, "askyesno",
+        lambda *a, **kw: calls.append("declined") or False,
+    )
+    monkeypatch.setattr(
+        gui_module.simpledialog, "askfloat",
+        lambda *a, **kw: pytest.fail("No viscosity prompt after declining"),
+    )
+    monkeypatch.setattr(
+        gui_module, "generate_multizone_open_door_case",
+        lambda *a, **kw: pytest.fail("No case generation after declining"),
+    )
+    app.export_connected_open_door_case()
+    assert calls == ["declined"]
+
+
+def test_connected_open_door_gui_blocks_unsaved_before_confirmation(
+    app, monkeypatch
+):
+    import cleanroomx.gui as gui_module
+
+    monkeypatch.setattr(
+        gui_module.messagebox, "askyesno",
+        lambda *a, **kw: pytest.fail("Cannot confirm unsaved geometry"),
+    )
+    notices = []
+    monkeypatch.setattr(
+        gui_module.messagebox, "showinfo",
+        lambda *a, **kw: notices.append(a),
+    )
+    app.description_var.set("unsaved CFD input")
+    app.export_connected_open_door_case()
+    assert notices and notices[-1][0] == "Save project first"

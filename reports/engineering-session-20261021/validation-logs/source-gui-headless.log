@@ -1,0 +1,8 @@
+sssss                                                                    [100%]
+=========================== short test summary info ============================
+SKIPPED [1] tests/test_cfd_particle_sources_gui.py:44: Actual Tk source editor requires a display: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_cfd_particle_sources_gui.py:73: Actual Tk source editor requires a display: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_cfd_particle_sources_gui.py:99: Actual Tk source editor requires a display: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_cfd_particle_sources_gui.py:125: Actual Tk source editor requires a display: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/test_cfd_particle_sources_gui.py:142: Actual Tk source editor requires a display: no display name and no $DISPLAY environment variable
+5 skipped in 0.10s

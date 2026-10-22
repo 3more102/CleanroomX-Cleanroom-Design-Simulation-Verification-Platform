@@ -4,6 +4,7 @@ import argparse
 import copy
 from datetime import datetime
 import json
+import math
 from pathlib import Path
 import queue
 import threading
@@ -63,6 +64,8 @@ from .project_bundle import (
     export_project_bundle,
     extract_project_bundle,
 )
+from .cfd_project_rooms import CASE_RE, generate_project_room_cases
+from .cfd_multizone import generate_multizone_open_door_case
 from .project_diagnostics import markdown_project_diagnostics_report
 from .project_diagnostics_cli import (
     _assert_project_output_is_safe,
@@ -81,7 +84,8 @@ from .gui_state import (
     save_gui_layout_state,
 )
 from .gui_theme import configure_ttk_theme, normalize_theme_name
-from .runtime_diagnostics import install_tk_exception_handler
+from .runtime_diagnostics import install_tk_exception_handler, report_gui_failure
+from .gui_lifecycle import protect_tk_lifecycle
 from .gui_windowing import fit_window_to_display
 from .gui_proofgraph import ProofGraphViewer
 from .gui_start import StartCenter
@@ -2066,6 +2070,7 @@ class CleanroomXApp:
         ui_state_path: str | Path | None = None,
     ):
         self.root = root
+        protect_tk_lifecycle(root)
         self.root.title(f"CleanroomX {__version__}")
         self._display_width = max(1, int(self.root.winfo_screenwidth()))
         self._display_height = max(1, int(self.root.winfo_screenheight()))
@@ -2255,6 +2260,19 @@ class CleanroomXApp:
         analyze_menu.add_command(label="Abandon Current Run", command=self.cancel_run)
         analyze_menu.add_separator()
         analyze_menu.add_command(label="Run History...", command=self.show_run_history)
+        analyze_menu.add_separator()
+        analyze_menu.add_command(
+            label="Generate OpenFOAM Room Cases...",
+            command=self.export_openfoam_room_cases,
+        )
+        analyze_menu.add_command(
+            label="Generate Connected Open-Door CFD Case...",
+            command=self.export_connected_open_door_case,
+        )
+        analyze_menu.add_command(
+            label="Run / Review Multiroom CFD...",
+            command=self.show_multizone_cfd,
+        )
         menubar.add_cascade(label="Analyze", menu=analyze_menu)
 
         verify_menu = tk.Menu(menubar, tearoff=False)
@@ -2704,6 +2722,7 @@ class CleanroomXApp:
         panes.add(content, weight=5)
 
         self.workspace_panes = ttk.Panedwindow(content, orient="vertical")
+        self.workspace_panes.bind("<Configure>", self._keep_workspace_visible_on_resize)
         self.workspace_panes.pack(fill="both", expand=True)
 
         workspace_host = ttk.Frame(self.workspace_panes)
@@ -2897,6 +2916,18 @@ class CleanroomXApp:
     @staticmethod
     def _paned_contains(paned: ttk.Panedwindow, child: tk.Misc) -> bool:
         return str(child) in {str(item) for item in paned.panes()}
+
+    def _keep_workspace_visible_on_resize(self, event: tk.Event) -> None:
+        """Keep a shrinking window from allocating all space to the output pane.
+
+        This runs on container resizing, not sash dragging. Users can still
+        expand output deliberately; hiding it retains the single-pane layout.
+        """
+        if len(self.workspace_panes.panes()) < 2:
+            return
+        minimum = min(360, max(0, event.height - 120))
+        if self.workspace_panes.sashpos(0) < minimum:
+            self.workspace_panes.sashpos(0, minimum)
 
     @staticmethod
     def _pane_fraction(paned: ttk.Panedwindow, extent: int) -> float | None:
@@ -6177,6 +6208,223 @@ class CleanroomXApp:
             parent=self.root,
         )
 
+    def export_openfoam_room_cases(self) -> None:
+        """Export checked, separate-room CFD inputs; never launch a solver implicitly.
+
+        This workflow refuses stale or unsaved projects and requires an explicit
+        viscosity value. The GUI does not claim a coupled door pressure solution.
+        """
+        if self._running:
+            messagebox.showwarning(
+                "Analysis running", "Abandon the current run before exporting CFD.",
+                parent=self.root,
+            )
+            return
+        try:
+            if self._editor_analysis() is not None:
+                self._commit_editor()
+            else:
+                self._sync_metadata()
+        except Exception as exc:
+            messagebox.showerror(
+                "Cannot prepare CFD export", str(exc), parent=self.root,
+            )
+            return
+
+        if self.project_path is None or self._has_unsaved_changes():
+            messagebox.showinfo(
+                "Save project first",
+                "Save the project and all spatial changes before generating OpenFOAM "
+                "case inputs. The exported manifest is linked to exact saved bytes.",
+                parent=self.root,
+            )
+            self.status_var.set("OpenFOAM export blocked: save project changes first")
+            return
+        try:
+            current = capture_project_file_revision(self.project_path)
+            expected = getattr(self, "_project_file_revision", None)
+            if expected is not None and not project_file_revision_matches(expected, current):
+                raise RuntimeError(
+                    "The project changed on disk; reload or reconcile it before CFD export."
+                )
+        except Exception as exc:
+            messagebox.showerror("CFD export blocked", str(exc), parent=self.root)
+            self.status_var.set("OpenFOAM export blocked: source revision mismatch")
+            return
+
+        nu = simpledialog.askfloat(
+            "CFD physical property",
+            "Enter an independently selected air kinematic viscosity (m²/s).\n"
+            "No physical property is inferred from the demonstration:",
+            parent=self.root, minvalue=1e-12,
+        )
+        if nu is None:
+            return
+        parent_dir = filedialog.askdirectory(
+            parent=self.root,
+            title="Choose parent folder for NEW OpenFOAM room cases",
+            initialdir=str(self.project_path.parent),
+            mustexist=True,
+        )
+        if not parent_dir:
+            return
+        name = simpledialog.askstring(
+            "OpenFOAM case directory",
+            "Name a NEW output folder (must not already exist):",
+            parent=self.root,
+            initialvalue="cleanroomx-cfd-rooms",
+        )
+        if name is None:
+            return
+        if not CASE_RE.fullmatch(name):
+            messagebox.showerror(
+                "Invalid folder name",
+                "Use 1–64 ASCII letters, numbers, underscores or hyphens; "
+                "start with a letter or number.",
+                parent=self.root,
+            )
+            return
+
+        destination = Path(parent_dir) / name
+        try:
+            current_after_dialogs = capture_project_file_revision(self.project_path)
+            if not project_file_revision_matches(current, current_after_dialogs):
+                raise RuntimeError("Saved project changed while the export dialogs were open")
+            report = generate_project_room_cases(
+                self.project_path, destination,
+                kinematic_viscosity_m2_s=nu,
+            )
+        except (OSError, ValueError, RuntimeError, FileExistsError) as exc:
+            self.status_var.set("OpenFOAM room case generation failed")
+            messagebox.showerror("CFD case generation failed", str(exc), parent=self.root)
+            return
+
+        self.status_var.set(
+            f"Generated {len(report['cases'])} independent OpenFOAM room case inputs"
+        )
+        messagebox.showinfo(
+            "OpenFOAM inputs generated",
+            f"Generated {len(report['cases'])} independent room cases at:\n"
+            f"{destination}\n\n"
+            "No solver has run. The closed doors are no-slip walls. "
+            "The 5 Pa pressure-network example is NOT CFD-coupled; "
+            "run blockMesh, checkMesh and simpleFoam separately to obtain "
+            "real results, then review mesh quality and convergence.",
+            parent=self.root,
+        )
+
+    def export_connected_open_door_case(self) -> None:
+        """Save-bound, expressly open-door CFD input export; never run a solver."""
+        if self._running:
+            messagebox.showwarning(
+                "Analysis running",
+                "Abandon the current run before generating a connected CFD case.",
+                parent=self.root,
+            )
+            return
+        try:
+            if self._editor_analysis() is not None:
+                self._commit_editor()
+            else:
+                self._sync_metadata()
+        except Exception as exc:
+            messagebox.showerror(
+                "Cannot prepare multizone CFD", str(exc), parent=self.root
+            )
+            return
+        if self.project_path is None or self._has_unsaved_changes():
+            self.status_var.set("Connected CFD export blocked: save the project first")
+            messagebox.showinfo(
+                "Save project first",
+                "Save all project and spatial layout changes before exporting "
+                "a connected CFD case tied to exact project bytes.",
+                parent=self.root,
+            )
+            return
+        try:
+            revision = capture_project_file_revision(self.project_path)
+            opened = getattr(self, "_project_file_revision", None)
+            if opened is not None and not project_file_revision_matches(opened, revision):
+                raise RuntimeError(
+                    "Project file changed on disk; reload or reconcile before generating CFD"
+                )
+        except Exception as exc:
+            messagebox.showerror("Connected CFD export blocked", str(exc), parent=self.root)
+            return
+        confirmed = messagebox.askyesno(
+            "Hypothetical open-door CFD scenario",
+            "Generate a SINGLE CONNECTED hypothetical airflow model with ALL "
+            "three room-to-room doors OPEN?\n\n"
+            "This does NOT reproduce the CLOSED-door 5 Pa pressure-cascade "
+            "network. No solver has run or been verified.",
+            parent=self.root,
+        )
+        if not confirmed:
+            return
+        nu = simpledialog.askfloat(
+            "Multizone air property",
+            "Enter air kinematic viscosity (m²/s), based on actual physical conditions:",
+            parent=self.root, minvalue=1e-12,
+        )
+        if nu is None:
+            return
+        parent_dir = filedialog.askdirectory(
+            parent=self.root,
+            title="Choose existing parent directory for NEW multizone CFD case",
+            initialdir=str(self.project_path.parent),
+            mustexist=True,
+        )
+        if not parent_dir:
+            return
+        folder = simpledialog.askstring(
+            "New connected CFD case folder",
+            "New output folder name:",
+            parent=self.root,
+            initialvalue="cleanroomx-open-door-multizone",
+        )
+        if folder is None:
+            return
+        if not CASE_RE.fullmatch(folder):
+            messagebox.showerror(
+                "Invalid folder name",
+                "Use 1–64 ASCII letters, numbers, underscores or hyphens; "
+                "start with a letter or number.",
+                parent=self.root,
+            )
+            return
+        destination = Path(parent_dir) / folder
+        try:
+            latest = capture_project_file_revision(self.project_path)
+            if not project_file_revision_matches(revision, latest):
+                raise RuntimeError("Project changed while the CFD export dialogs were open")
+            result = generate_multizone_open_door_case(
+                self.project_path, destination,
+                door_mode="open", kinematic_viscosity_m2_s=nu,
+            )
+        except (OSError, ValueError, RuntimeError, FileExistsError) as exc:
+            self.status_var.set("Connected CFD geometry preparation failed")
+            messagebox.showerror("Connected CFD export failed", str(exc), parent=self.root)
+            return
+        self.status_var.set(
+            "Generated hypothetical connected open-door multizone CFD input"
+        )
+        self._last_multizone_case = destination
+        messagebox.showinfo(
+            "Connected OpenFOAM input generated",
+            f"Case folder: {destination}\n"
+            f"Connected fluid blocks: {result['case']['fluid_block_count']}\n"
+            f"Traversable doors: {len(result['case']['open_doors'])}\n\n"
+            "No OpenFOAM solver was launched. The 5 Pa CLOSED-door targets "
+            "are NOT imposed. Run blockMesh/checkMesh/simpleFoam explicitly "
+            "and independently review the resulting physics.",
+            parent=self.root,
+        )
+
+    def show_multizone_cfd(self):
+        from .cfd_multizone_gui import MultizoneCFDWindow
+        window = MultizoneCFDWindow(self.root, directory=getattr(self, "_last_multizone_case", None))
+        return window
+
     def export_project_engineering_dossier(self) -> None:
         if self._running:
             messagebox.showwarning(
@@ -7380,20 +7628,53 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.demo and args.project:
         parser.error("project path and --demo cannot be used together")
-    if args.autosave_interval_seconds < 0:
-        parser.error("--autosave-interval-seconds must be zero or greater")
+    if (not math.isfinite(args.autosave_interval_seconds)
+            or args.autosave_interval_seconds < 0):
+        parser.error("--autosave-interval-seconds must be finite and zero or greater")
     if args.check:
         print(json.dumps(application_info(), indent=2, ensure_ascii=False))
         return 0
 
     registry = validate_application_registry()
-    project_path = bundled_demo_project_path() if args.demo else args.project
+    root = None
+    app = None
+    smoke_callback_errors = []
+    try:
+        root = tk.Tk()
+        if args.smoke:
+            # Tk normally prints and swallows callback exceptions. A smoke run
+            # must fail when an idle/layout callback fails, even if update()
+            # returns normally. Install this before application construction.
+            def smoke_callback_error(exc_type, exc, traceback):
+                smoke_callback_errors.append(exc)
+                report_gui_failure(exc.with_traceback(traceback), phase="smoke callback")
+            root.report_callback_exception = smoke_callback_error
+        app = CleanroomXApp(
+            root,
+            autosave_interval_seconds=args.autosave_interval_seconds,
+        )
+        return _run_gui(root, app, args, registry, smoke_callback_errors)
+    except Exception as exc:
+        detail = report_gui_failure(exc)
+        if root is not None and not args.smoke:
+            try:
+                messagebox.showerror("CleanroomX startup failed", detail, parent=root)
+            except tk.TclError:
+                pass
+        return 2
+    finally:
+        manager = getattr(app, "_autosave_manager", None)
+        if manager is not None:
+            manager.shutdown(wait=False)
+        if root is not None and callable(getattr(root, "destroy", None)):
+            try:
+                root.destroy()
+            except tk.TclError:
+                pass  # WM_DELETE_WINDOW may already have destroyed this root.
 
-    root = tk.Tk()
-    app = CleanroomXApp(
-        root,
-        autosave_interval_seconds=args.autosave_interval_seconds,
-    )
+
+def _run_gui(root, app, args, registry, smoke_callback_errors) -> int:
+    """Run an initialized window; the caller owns lifecycle and failure logging."""
     if not args.smoke:
         runtime_status_callback = getattr(
             getattr(app, "status_var", None),
@@ -7425,23 +7706,28 @@ def main(argv: list[str] | None = None) -> int:
     if not args.smoke:
         recovered_at_startup = app.offer_startup_recovery()
 
-    if project_path and not recovered_at_startup:
+    if (args.demo or args.project) and not recovered_at_startup:
         try:
+            project_path = bundled_demo_project_path() if args.demo else args.project
             app.load_project_path(project_path)
         except Exception as exc:
+            detail = report_gui_failure(exc, phase="project loading")
             if args.smoke:
-                root.destroy()
                 print(f"CleanroomX GUI smoke: FAIL — {exc}")
                 return 2
-            messagebox.showerror("Open failed", str(exc), parent=root)
+            messagebox.showerror("Open failed", detail, parent=root)
 
     if args.smoke:
         try:
-            if project_path and app.project.analyses:
+            if (args.demo or args.project) and app.project.analyses:
                 run = app.smoke_run_active()
                 json.dumps(run.to_dict(), allow_nan=False)
             root.update_idletasks()
             root.update()
+            if smoke_callback_errors:
+                raise RuntimeError(
+                    f"{len(smoke_callback_errors)} Tk callback error(s) during GUI smoke"
+                ) from smoke_callback_errors[0]
             if args.demo:
                 layout = app.spatial_workspace.layout
                 if len(layout.get("rooms", [])) < 3:
@@ -7455,10 +7741,9 @@ def main(argv: list[str] | None = None) -> int:
                 if not app.spatial_workspace.canvas_3d.find_withtag("pressure_relationship_3d"):
                     raise RuntimeError("3D pressure-cascade relationships did not render")
         except Exception as exc:
-            root.destroy()
+            report_gui_failure(exc, phase="smoke")
             print(f"CleanroomX GUI smoke: FAIL — {exc}")
             return 2
-        root.destroy()
         print("CleanroomX GUI smoke: PASS")
         return 0
 

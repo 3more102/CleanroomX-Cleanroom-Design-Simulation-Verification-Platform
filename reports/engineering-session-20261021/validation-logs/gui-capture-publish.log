@@ -1,0 +1,5 @@
+2026-10-21 12:55:19.746 (   5.383s) [    7F5796ABF740]    vtkExtractEdges.cxx:427   INFO| Executing edge extractor: points are renumbered
+2026-10-21 12:55:19.763 (   5.400s) [    7F5796ABF740]    vtkExtractEdges.cxx:543   INFO| Created 45747 edges
+2026-10-21 12:55:20.157 (   5.794s) [    7F5796ABF740]    vtkExtractEdges.cxx:427   INFO| Executing edge extractor: points are renumbered
+2026-10-21 12:55:20.160 (   5.797s) [    7F5796ABF740]    vtkExtractEdges.cxx:543   INFO| Created 7119 edges
+{"captured_images": 17, "solver_iteration": "100", "solver_converged": false, "gui_callback_errors": []}

@@ -1,0 +1,200 @@
+{
+  "case": {
+    "boundary_faces": {
+      "return_ante": 2,
+      "return_preparation": 2,
+      "return_process": 2,
+      "supply_ante": 8,
+      "supply_preparation": 16,
+      "supply_process": 24,
+      "walls": 5888
+    },
+    "connected_component_count": 1,
+    "door_mode": "open",
+    "ffu_mesh_faces": {
+      "ffu-ante-1": 4,
+      "ffu-ante-2": 4,
+      "ffu-preparation-1": 4,
+      "ffu-preparation-2": 4,
+      "ffu-preparation-3": 4,
+      "ffu-preparation-4": 4,
+      "ffu-process-1": 4,
+      "ffu-process-2": 4,
+      "ffu-process-3": 4,
+      "ffu-process-4": 4,
+      "ffu-process-5": 4,
+      "ffu-process-6": 4
+    },
+    "fluid_block_count": 13210,
+    "grid_extent_cells": [
+      36,
+      50,
+      10
+    ],
+    "limitations": [
+      "Walls occupy one voxel layer on owner-room side, not an engineered architectural thickness",
+      "Open doors are hypothetical and differ from the CLOSED door 5 Pa leakage-network case",
+      "FFU and return footprints are sampled by mesh-face centers, not manufacturer specifications",
+      "No CFD solution, numerical convergence, turbulent-flow validation or commissioning evidence"
+    ],
+    "model": "hypothetical interconnected OPEN-door isothermal laminar CFD geometry",
+    "open_doors": {
+      "door-ante-corridor": {
+        "aperture": {
+          "side": "east",
+          "u0": 1.0,
+          "u1": 2.0,
+          "z0": 0.0,
+          "z1": 2.1
+        },
+        "clear_height_m": 2.1,
+        "clear_width_m": 1.0,
+        "from_room": "ante",
+        "open_face_count": 70,
+        "orientation": "east",
+        "to_room": "corridor",
+        "wall_thickness_m": 0.5
+      },
+      "door-preparation-ante": {
+        "aperture": {
+          "side": "east",
+          "u0": 1.0,
+          "u1": 2.0,
+          "z0": 0.0,
+          "z1": 2.1
+        },
+        "clear_height_m": 2.1,
+        "clear_width_m": 1.0,
+        "from_room": "preparation",
+        "open_face_count": 70,
+        "orientation": "east",
+        "to_room": "ante",
+        "wall_thickness_m": 0.5
+      },
+      "door-process-preparation": {
+        "aperture": {
+          "side": "east",
+          "u0": 1.5,
+          "u1": 2.5,
+          "z0": 0.0,
+          "z1": 2.1
+        },
+        "clear_height_m": 2.1,
+        "clear_width_m": 1.0,
+        "from_room": "process",
+        "open_face_count": 70,
+        "orientation": "east",
+        "to_room": "preparation",
+        "wall_thickness_m": 0.5
+      }
+    },
+    "origin_m": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "pressure_boundary": "zero kinematic pressure on each configured low return; no 5 Pa constraint",
+    "return_mesh_faces": {
+      "return-ante": 2,
+      "return-preparation": 2,
+      "return-process": 2
+    },
+    "room_boundary_flows": {
+      "ante": {
+        "mesh_return_area_m2": 0.3,
+        "mesh_supply_area_m2": 0.4,
+        "normal_supply_velocity_m_s": 0.5,
+        "notes": "All returns use zero kinematic gauge pressure reference, not design-room target pressures",
+        "supply_m3_s": 0.2
+      },
+      "preparation": {
+        "mesh_return_area_m2": 0.3,
+        "mesh_supply_area_m2": 0.8,
+        "normal_supply_velocity_m_s": 0.41666666666666663,
+        "notes": "All returns use zero kinematic gauge pressure reference, not design-room target pressures",
+        "supply_m3_s": 0.3333333333333333
+      },
+      "process": {
+        "mesh_return_area_m2": 0.3,
+        "mesh_supply_area_m2": 1.2000000000000002,
+        "normal_supply_velocity_m_s": 0.6249999999999999,
+        "notes": "All returns use zero kinematic gauge pressure reference, not design-room target pressures",
+        "supply_m3_s": 0.75
+      }
+    },
+    "rooms": {
+      "ante": {
+        "analysis_room_name": "Ante",
+        "classification": "Demo transition suite",
+        "floor_elevation_m": 0,
+        "height_m": 3,
+        "id": "ante",
+        "length_m": 4,
+        "name": "Ante / Airlock",
+        "pressure_pa": 5,
+        "width_m": 3,
+        "x_m": 11,
+        "y_m": 0
+      },
+      "corridor": {
+        "analysis_room_name": "Corridor",
+        "classification": "Unclassified reference space (demo)",
+        "floor_elevation_m": 0,
+        "height_m": 3,
+        "id": "corridor",
+        "length_m": 3,
+        "name": "Reference Corridor",
+        "pressure_pa": 0,
+        "width_m": 3,
+        "x_m": 15,
+        "y_m": 0
+      },
+      "preparation": {
+        "analysis_room_name": "Preparation",
+        "classification": "Demo preparation suite",
+        "floor_elevation_m": 0,
+        "height_m": 3,
+        "id": "preparation",
+        "length_m": 5,
+        "name": "Preparation",
+        "pressure_pa": 10,
+        "width_m": 4,
+        "x_m": 6,
+        "y_m": 0
+      },
+      "process": {
+        "analysis_room_name": "Process",
+        "classification": "Demo process suite",
+        "floor_elevation_m": 0,
+        "height_m": 3,
+        "id": "process",
+        "length_m": 6,
+        "name": "Process",
+        "pressure_pa": 15,
+        "width_m": 5,
+        "x_m": 0,
+        "y_m": 0
+      }
+    },
+    "voxel_pitch_m": [
+      0.5,
+      0.1,
+      0.3
+    ]
+  },
+  "files": {
+    "0/U": "8f108f9653c928186629dd4d87db79d1831afae6a3bb43806bc2641e2fd0e00b",
+    "0/p": "cacb6231d2358f4c8b1b76b33adb1dd3b5022ddba1721b651cded91245f494d7",
+    "constant/momentumTransport": "1722b130a47151863fead1272d43562b504e41483be231ad8b4d02845287fee3",
+    "constant/transportProperties": "5ac9790400cf78b4999b708e51e40b56088b57fe6324f8782973ec347671a3d7",
+    "system/blockMeshDict": "34f1f814509ab24a6089f9c0de24e4280362f13acb7e26e7678f575bd0068d68",
+    "system/controlDict": "31c86cdac24ebe23f971e64659747bbcd8ec68fdb4f42146eab6d795addeade4",
+    "system/fvSchemes": "3b0fbad85fb532a702acf66fdb4dfe8911246ef5d54a4ee8d91b53b0027d50ff",
+    "system/fvSolution": "38592739996878939ec6cdee0db7b662dc807d48d6e09db6ff39c91f842b825a"
+  },
+  "input_mode": "hypothetical_all_doors_open",
+  "project_source_sha256": "cda6b1e3d90651246d20e5884d0424ed01237deb29e087107f886c6ddbc94fec",
+  "schema_version": "cleanroomx.multizone-open-door.v2",
+  "solver": "OpenFOAM Foundation v10 simpleFoam",
+  "warning": "Only solver INPUTS are generated. No solver run; 5 Pa closed-door network is not imposed or validated."
+}

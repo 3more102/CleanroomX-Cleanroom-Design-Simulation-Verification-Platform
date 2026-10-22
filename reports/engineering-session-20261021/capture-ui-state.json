@@ -1,0 +1,15 @@
+{
+  "inspector_fraction": 0.78,
+  "inspector_visible": true,
+  "navigator_fraction": 0.2,
+  "navigator_visible": true,
+  "output_fraction": 0.72,
+  "output_visible": true,
+  "recent_projects": [
+    "/workspace/scratch/d2477ad7a66e/CleanroomX/src/cleanroomx/demo/gui_demo.cleanroomx.json"
+  ],
+  "theme": "dark",
+  "version": 4,
+  "window_height": 900,
+  "window_width": 1440
+}

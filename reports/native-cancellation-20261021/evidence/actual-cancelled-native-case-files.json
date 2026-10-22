@@ -1,0 +1,74 @@
+{
+  "0/U": {
+    "sha256": "8f108f9653c928186629dd4d87db79d1831afae6a3bb43806bc2641e2fd0e00b",
+    "size_bytes": 777
+  },
+  "0/p": {
+    "sha256": "cacb6231d2358f4c8b1b76b33adb1dd3b5022ddba1721b651cded91245f494d7",
+    "size_bytes": 623
+  },
+  "blockMesh.log": {
+    "sha256": "4d55576feb7682f7c01e266a1a1f5b8ad03c091d0e3180b12afef9916f8d4dda",
+    "size_bytes": 994965
+  },
+  "checkMesh.log": {
+    "sha256": "e19b73e4c9b75fa5aac09461368029178c377c2c5b1b65b6bd535e661785b51e",
+    "size_bytes": 2986
+  },
+  "constant/momentumTransport": {
+    "sha256": "1722b130a47151863fead1272d43562b504e41483be231ad8b4d02845287fee3",
+    "size_bytes": 150
+  },
+  "constant/polyMesh/boundary": {
+    "sha256": "18c24ef9d7101b4b93dac3c587da3fa3ced8f8103eaca8f8c136be03b9682aee",
+    "size_bytes": 1574
+  },
+  "constant/polyMesh/faces": {
+    "sha256": "e1ccfcb7a9cbdd6b0c39dd3ed635d62b0fa3a75034e356c1b3cc37cda35f4172",
+    "size_bytes": 1034920
+  },
+  "constant/polyMesh/neighbour": {
+    "sha256": "9a383177fbd99915839cebfa7c2e10292df172ebce73543d24d941f131bf00a3",
+    "size_bytes": 190472
+  },
+  "constant/polyMesh/owner": {
+    "sha256": "7a1f1ba0333650d1cd000e6c8326dd532dc7ed853fe8aab3074fd15daed05f8e",
+    "size_bytes": 219978
+  },
+  "constant/polyMesh/points": {
+    "sha256": "82fd819696ad375ec16a5590aebbfd55c0d0faa9a02834cb0d541da68790dcb5",
+    "size_bytes": 209057
+  },
+  "constant/transportProperties": {
+    "sha256": "5ac9790400cf78b4999b708e51e40b56088b57fe6324f8782973ec347671a3d7",
+    "size_bytes": 183
+  },
+  "manifest.json": {
+    "sha256": "b1763e5aec4d057d4e0ebedde005fe8d166d678da36fc4b2c42313b3181b9972",
+    "size_bytes": 6770
+  },
+  "run-receipt.json": {
+    "sha256": "5a4c790dabc8c4a34001d4d8741533179b63713a3f90c68e69a86bfd8fec61f2",
+    "size_bytes": 3126
+  },
+  "simpleFoam.log": {
+    "sha256": "97d5a81cc38ab08e2ffe4c98b2a00ee0a37b201bb06b4d9329d91e8b00a5eee5",
+    "size_bytes": 7158
+  },
+  "system/blockMeshDict": {
+    "sha256": "34f1f814509ab24a6089f9c0de24e4280362f13acb7e26e7678f575bd0068d68",
+    "size_bytes": 1574956
+  },
+  "system/controlDict": {
+    "sha256": "ba9d63bb6c5bea218faf5a68b8dda00730ea832f0258d379c69551b8804c120b",
+    "size_bytes": 319
+  },
+  "system/fvSchemes": {
+    "sha256": "3b0fbad85fb532a702acf66fdb4dfe8911246ef5d54a4ee8d91b53b0027d50ff",
+    "size_bytes": 459
+  },
+  "system/fvSolution": {
+    "sha256": "38592739996878939ec6cdee0db7b662dc807d48d6e09db6ff39c91f842b825a",
+    "size_bytes": 415
+  }
+}

@@ -1,0 +1,198 @@
+{
+  "description": "Genuine running Tk windows and VTK framebuffers; no mock UI or artificial solver data",
+  "source_iteration": "100",
+  "source_provenance": {
+    "manifest_sha256": "ff25c6a55936dac0c4a485a773e56395537fe817854c072b931e6fd157eb2ae7",
+    "run_receipt_sha256": "6ba3d3364006138e4e119404e23c514c007125befdc80c084e7ef0f68de1dde4",
+    "project_source_sha256": "cda6b1e3d90651246d20e5884d0424ed01237deb29e087107f886c6ddbc94fec",
+    "output_sha256": {
+      "100/C": "b82e6ac876b3219429ed27de5c833c37abed0b8730a79f3c30b431564b05baf6",
+      "100/Cx": "8b5b19bf47a4547025f5997292d7d4c9e24c62a519dbeace072a534c3bccd239",
+      "100/Cy": "1e228f97bd95bb52744f01a6ee77ed8473cf289ca7e32664f289c224e05d315e",
+      "100/Cz": "13e811312a3cde2000a9d19545b0da5eb94f02fd23ab375ddf02c2f283e0013b",
+      "100/U": "27caf355418fb27950cd125f27f293fb79a5eeb4521ca7257ae8db9f992a80d3",
+      "100/p": "f77ff433328c0cbeda25b74e4b6c132703fc4fdccde32706d3f3a79af6028d68",
+      "100/phi": "a3471f9fad3a2bb621d65a6e53e2c0f6221b340ba1a1fd23d849051fd2baa05a",
+      "25/C": "df5f0d14bf6cc121732caf93e5983e94bb6215b5a3b88f5c426f4efdd60f5cf5",
+      "25/Cx": "270033c4b967dc6642cddad8d6cbf20b1a5c24571d19be1b89223ed3126b8c3b",
+      "25/Cy": "0d146c9249e2a383f0dbae899c34b243419e3919ddf1cfba3e72e50db2f8656c",
+      "25/Cz": "10cb7b193d8ef46b4e37913690d74341ec937945fd310e2e0003774c68ca31de",
+      "25/U": "7ddd2aa7c04fc8e3ac8bc29a5f299cb948694c2e89d76e3f8dbbb52c670cc0b8",
+      "25/p": "e34df9f3cf1e6b55f6d390d91735b41ccb114c3d2312e5701a6ccca3a9b59c43",
+      "25/phi": "930b13aaab2cef4aeccf99887f4694664b9113800e846b9977aa936e1ac904ba",
+      "50/C": "5f3a80f7c030ce65d6e8df0583cb2e8172fb8b22fd7cbcf23ef976cda7a0a6c7",
+      "50/Cx": "dd67483cec0a7fa0e7b755f5101ea27df6c0bed8b5f7226c355faba7dc6f53a6",
+      "50/Cy": "727bbce4c992bc0bb7babc40ee99ab522be303f5157d135d8d2647ac1ebda60d",
+      "50/Cz": "aaae26b15427193f47c8a1585656a5b12f285d6c08883c2b5689e8f70eef1a1f",
+      "50/U": "e2c2bae92ab495ac948e41bb5ba6c5d6b93ae77ee170e32df54421a892804dfa",
+      "50/p": "eb81aeb3810feb79ae9d13ea0b07aa09fad4a05bae77af0d0a8c587690ff7c9f",
+      "50/phi": "bc474f55ccaba928e4a1058a8df51b37793193f750288fac42b1069e78994044",
+      "75/C": "7e25c9d7c4c316b1ee6f2b7981a26bd80f7ac6b9e1b4f177199a8273535f5150",
+      "75/Cx": "9a57496a66f4fead5782ed8b04402305bb912011396e37f0fba54397a280ebcc",
+      "75/Cy": "2113e58125b49cc47f7507f5f365f1ccc1bf0579d5913316ddf6c3b7890333d4",
+      "75/Cz": "c7c2e7ba13413b6ec73891c3ddbbc385b5df1830c0f2e27910f2e3944ccf64c2",
+      "75/U": "e24065d52044cfc1d56c6993a8ffe402a3af77b8cc719dbbc6d98f6ef07e48ce",
+      "75/p": "5167902bd2c1d6cc5859b34a5caa116ba3f179671322f634bc6b260c9fa91b7a",
+      "75/phi": "e42a0136f2cdbdda60a463702d142a04ed7da90a2b8dec155676e16fb175a579",
+      "constant/polyMesh/boundary": "18c24ef9d7101b4b93dac3c587da3fa3ced8f8103eaca8f8c136be03b9682aee",
+      "constant/polyMesh/faces": "e1ccfcb7a9cbdd6b0c39dd3ed635d62b0fa3a75034e356c1b3cc37cda35f4172",
+      "constant/polyMesh/neighbour": "9a383177fbd99915839cebfa7c2e10292df172ebce73543d24d941f131bf00a3",
+      "constant/polyMesh/owner": "7a1f1ba0333650d1cd000e6c8326dd532dc7ed853fe8aab3074fd15daed05f8e",
+      "constant/polyMesh/points": "82fd819696ad375ec16a5590aebbfd55c0d0faa9a02834cb0d541da68790dcb5"
+    },
+    "runtime": {
+      "executables": {
+        "blockMesh": "/opt/openfoam10/platforms/linux64GccDPInt32Opt/bin/blockMesh",
+        "checkMesh": "/opt/openfoam10/platforms/linux64GccDPInt32Opt/bin/checkMesh",
+        "postProcess": "/opt/openfoam10/platforms/linux64GccDPInt32Opt/bin/postProcess",
+        "simpleFoam": "/opt/openfoam10/platforms/linux64GccDPInt32Opt/bin/simpleFoam"
+      },
+      "version": "Usage: simpleFoam [OPTIONS]\noptions:\n  -case <dir>       specify alternate case directory, default is the cwd\n  -fileHandler <handler>\n                    override the fileHandler\n  -hostRoots <((host1 dir1) .. (hostN dirN))>\n                    slave root directories (per host) for distributed running\n  -libs '(\"lib1.so\" ... \"libN.so\")'\n                    pre-load libraries\n  -listFunctionObjects\n                    List functionObjects\n  -listFvConstraints\n                    List fvConstraints\n  -listFvModels     List fvModels\n  -listMomentumTransportModels\n                    List momentumTransportModels\n  -listScalarBCs    List scalar field boundary conditions (fvPatchField<scalar>)\n  -listSwitches     List all available debug, info and optimisation switches\n  -listVectorBCs    List vector field boundary conditions (fvPatchField<vector>)\n  -noFunctionObjects\n                    do not execute functionObjects\n  -parallel         run in parallel\n  -postProcess      Execute functionObjects only\n  -roots <(dir1 .. dirN)>\n                    slave root directories for distributed running\n  -srcDoc           display source code in browser\n  -doc              display application documentation in browser\n  -help             print the usage\n\nUsing: OpenFOAM-10 (see https://openfoam.org)\nBuild: 10-c4cf895ad8fa"
+    }
+  },
+  "mesh": {
+    "mesh_ok": true,
+    "cells": 13210.0,
+    "regions": 1.0,
+    "max_aspect_ratio": 5.0,
+    "max_nonorthogonality_deg": 0.0,
+    "max_skewness": 2.962039982e-14,
+    "min_cell_volume_m3": 0.015,
+    "max_cell_volume_m3": 0.015,
+    "total_volume_m3": 198.15
+  },
+  "selected_iteration_solver_converged": false,
+  "engineering_release": "HOLD",
+  "images": [
+    {
+      "file": "01-main-workspace.png",
+      "kind": "actual_Tk_window_pixels",
+      "description": "Running CleanroomX start workspace with the bundled input project",
+      "width": 1440,
+      "height": 900,
+      "sha256": "6b20f9a530d2fc9fb85e2426b942421efe7d58f498aeb877abd2697daea6e50d"
+    },
+    {
+      "file": "02-design-studio.png",
+      "kind": "actual_Tk_window_pixels",
+      "description": "Actual 3D design geometry; design arrows/pressure intent are not CFD fields",
+      "width": 1440,
+      "height": 900,
+      "sha256": "fa2a4f45933c355b95508ac6946b098d6a20cb43ac34904bfff0277bad7df545"
+    },
+    {
+      "file": "03-multiroom-design.png",
+      "kind": "actual_Tk_window_pixels",
+      "description": "Synchronized actual 2D/3D multiroom input geometry",
+      "width": 1440,
+      "height": 900,
+      "sha256": "4c250470bd3acc779c5881e3502b015280042997745c36932158456a40727ecc"
+    },
+    {
+      "file": "04-object-inspector.png",
+      "kind": "actual_Tk_window_pixels",
+      "description": "Actual selected-room property inspector",
+      "width": 1440,
+      "height": 900,
+      "sha256": "b0817635e0c482c1ea6a526699129a81ab495165abdaeb9a13be85b1fd08d96e"
+    },
+    {
+      "file": "05-simulation-workspace.png",
+      "kind": "actual_Tk_window_pixels",
+      "description": "Real imported OpenFOAM room/door p and phi review; nonconvergence/HOLD retained",
+      "width": 1390,
+      "height": 900,
+      "sha256": "d6b78a78426b727f25701f8a7709145d160bf181759e90c73df12a1719b32431"
+    },
+    {
+      "file": "07-computed-velocity-section.png",
+      "kind": "actual_Tk_window_pixels",
+      "description": "Actual recorded cell velocity magnitudes/vectors on a z layer; no interpolated cells",
+      "width": 1390,
+      "height": 900,
+      "sha256": "414a19e85675d6b0d85cba56292fe3fa540e4ab5ea0c2d8298e8f411fcc35f4f"
+    },
+    {
+      "file": "08-pressure-and-airflow.png",
+      "kind": "actual_Tk_window_pixels",
+      "description": "Computed room pressures, door deltas and face-flux airflow balances",
+      "width": 1390,
+      "height": 900,
+      "sha256": "d6b78a78426b727f25701f8a7709145d160bf181759e90c73df12a1719b32431"
+    },
+    {
+      "file": "11-residual-graphs.png",
+      "kind": "actual_Tk_window_pixels",
+      "description": "Actual saved solver initial/final residual histories",
+      "width": 1390,
+      "height": 900,
+      "sha256": "837ed66f15edd4f9f5d24c84bbd3d4d59796ec9172ff2e7807a5c3b0ae076503"
+    },
+    {
+      "file": "12-iteration-analysis.png",
+      "kind": "actual_Tk_window_pixels",
+      "description": "Actual saved SIMPLE pressure/continuity observations; iteration is not physical time",
+      "width": 1390,
+      "height": 900,
+      "sha256": "fe8a4ab66e511f698bb9260687e537af1a836dedb0c281581ebfedaec0bd55eb"
+    },
+    {
+      "file": "06-original-openfoam-mesh.png",
+      "kind": "actual_VTK_render_window_framebuffer",
+      "description": "Original verified polyMesh cell edges on the selected recorded z layer",
+      "sha256": "b1e68494e88a54828cd938e2a4583c1eafa08d73cabb36881434e4d4a1ccb9dd"
+    },
+    {
+      "file": "15-computed-3d-velocity.png",
+      "kind": "actual_VTK_render_window_framebuffer",
+      "description": "Actual recorded 3D velocity samples with isometric camera; no interpolated volume field",
+      "sha256": "da50d8f518ef12f7461032072680c0bcc3b5dec4df666d3a08721f5e39944552"
+    },
+    {
+      "file": "16-computed-3d-pressure.png",
+      "kind": "actual_VTK_render_window_framebuffer",
+      "description": "Actual recorded 3D relative pressure samples in Pa, using explicit density/reference",
+      "sha256": "31726636ef903dc35852213564fca456024fb7841385b4b1ac518f4811365e5a"
+    },
+    {
+      "file": "09-particle-injection.png",
+      "kind": "actual_Tk_window_pixels",
+      "description": "Actual source editor with two saved fluid sources, diameter/density/count and release schedules",
+      "width": 1160,
+      "height": 830,
+      "sha256": "12c92007600f77127dd822f5a4e1bed433b6574284542d534583ba823c433768"
+    },
+    {
+      "file": "13-particle-population.png",
+      "kind": "actual_Tk_window_pixels",
+      "description": "Computed numerical particle population chart/table from eight scheduled frozen-U trajectories",
+      "width": 1160,
+      "height": 830,
+      "sha256": "81518691a9c3e8bf51bf9a9a11b750ac7fbb8813ff74c17a9e07b4472b30ec42"
+    },
+    {
+      "file": "10-computed-particle-tracking.png",
+      "kind": "actual_VTK_render_window_framebuffer",
+      "description": "Actual integrated particle paths and release-aware recorded-sample markers in computed 3D U",
+      "sha256": "8a90a227f3916f6f49dc12e24855d178e1d7c08a354f507a9b9c6604b8c8dc81"
+    },
+    {
+      "file": "17-particle-source-closeup.png",
+      "kind": "actual_VTK_render_window_framebuffer",
+      "description": "Actual camera close-up of computed process-source paths; no trajectory scaling or synthetic motion",
+      "sha256": "bb25da9ce1ebf3c561e081da9663c096a905b6291ddfdf7211e67e03da8c8b48"
+    },
+    {
+      "file": "14-3d-review-controls.png",
+      "kind": "actual_Tk_window_pixels",
+      "description": "Actual 3D field/source/mesh and particle playback controls",
+      "width": 1180,
+      "height": 430,
+      "sha256": "881929f30d6a365e1f57acbb379f318632c703e7e952abd8a610ec85821a7bd6"
+    }
+  ],
+  "gui_callback_errors": [],
+  "particle_source_count": 2,
+  "numerical_particle_count": 8,
+  "physical_particle_validation": false
+}

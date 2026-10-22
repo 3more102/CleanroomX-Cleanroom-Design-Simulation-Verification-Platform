@@ -1,0 +1,90 @@
+/workspace/scratch/d2477ad7a66e/runtime-packages/root/opt/openfoam10/etc/config.sh/mpi: line 46: mpicc: command not found
+........................................................................ [  2%]
+........................................................................ [  5%]
+........................................................................ [  8%]
+........................................................................ [ 10%]
+........................................................................ [ 13%]
+........................................................................ [ 16%]
+........................................................................ [ 18%]
+........................................................................ [ 21%]
+........................................................................ [ 24%]
+........................................................................ [ 26%]
+........................................................................ [ 29%]
+........................................................................ [ 32%]
+........................................................................ [ 34%]
+........................................................................ [ 37%]
+........................................................................ [ 40%]
+........................................................................ [ 42%]
+........................................................................ [ 45%]
+........................................................................ [ 48%]
+........................................................................ [ 50%]
+........................................................................ [ 53%]
+........................................................................ [ 56%]
+........................................................................ [ 58%]
+........................................................................ [ 61%]
+........................................................................ [ 64%]
+........................................................................ [ 66%]
+........................................................................ [ 69%]
+........................................................................ [ 72%]
+........................................................................ [ 74%]
+........................................................................ [ 77%]
+........................................................................ [ 80%]
+........................................................................ [ 82%]
+........................................................................ [ 85%]
+........................................................................ [ 88%]
+.................F...................................................... [ 90%]
+........................................................................ [ 93%]
+........................................................................ [ 96%]
+........................................................................ [ 98%]
+...................................                                      [100%]
+=================================== FAILURES ===================================
+_____________________ test_3d_xray_and_hover_are_view_only _____________________
+
+app = <cleanroomx.gui.CleanroomXApp object at 0x7f22855cd640>
+
+    def test_3d_xray_and_hover_are_view_only(app):
+        workspace = app.spatial_workspace
+        workspace.set_workspace_mode("3d")
+        room = workspace.layout["rooms"][0]
+        metadata_before = copy.deepcopy(app.project.metadata)
+    
+        workspace._xray_3d.set(True)
+        workspace._draw_3d()
+        app.root.update()
+    
+        room_items = workspace.canvas_3d.find_withtag(f"room:{room['id']}")
+        polygons = [
+            item_id
+            for item_id in room_items
+            if workspace.canvas_3d.type(item_id) == "polygon"
+        ]
+        assert polygons
+        assert any(
+            workspace.canvas_3d.itemcget(item_id, "stipple") == "gray50"
+            for item_id in polygons
+        )
+    
+        workspace.canvas_3d.addtag_withtag("current", polygons[0])
+        workspace._on_3d_motion(type("Event", (), {"x": 0, "y": 0})())
+>       assert workspace._hovered_3d == _Hit("room", room["id"])
+E       AssertionError: assert None == _Hit(kind='room', item_id='process')
+E        +  where None = <cleanroomx.spatial.SpatialDesignWorkspace object .!panedwindow.!frame2.!panedwindow.!frame.!notebook.!spatialdesignworkspace>._hovered_3d
+E        +  and   _Hit(kind='room', item_id='process') = _Hit('room', 'process')
+
+tests/test_spatial_editing_gui.py:479: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+invalid command name "139786238577408_poll_worker"
+    while executing
+"139786238577408_poll_worker"
+    ("after" script)
+=============================== warnings summary ===============================
+tests/test_cfd_multizone_vtk_gui.py: 22 warnings
+tests/test_cfd_particle_sources_gui.py: 14 warnings
+  /opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/site-packages/./matplotlib/_api/deprecation.py:94: MatplotlibDeprecationWarning: Passing individual properties to FontProperties() positionally was deprecated in Matplotlib 3.10 and will be removed in 3.12. Please pass all properties via keyword arguments.
+    warn_external(warning, category=MatplotlibDeprecationWarning)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+SKIPPED [1] tests/test_bim_ifc_native.py:5: native IFC smoke requires the optional CleanroomX BIM dependency
+FAILED tests/test_spatial_editing_gui.py::test_3d_xray_and_hover_are_view_only
+1 failed, 2698 passed, 1 skipped, 36 warnings in 182.92s (0:03:02)

@@ -1,0 +1,35 @@
+{
+  "created_utc": "2026-10-21T10:42:18.435255+00:00",
+  "source_manifest_sha256": "ff25c6a55936dac0c4a485a773e56395537fe817854c072b931e6fd157eb2ae7",
+  "source_run_receipt_sha256": "9e8b9b762bc1d034ab68fc4e5be2b20e141fd3ae704bbc5d3f05bd8ad8a6fd01",
+  "source_iteration": "100",
+  "solver_reported_convergence": false,
+  "engineering_release": "HOLD",
+  "gui_callback_errors": [],
+  "images": [
+    {
+      "file": "01-design-workspace.png",
+      "description": "Actual synchronized design workspace; no sourced solver environment is needed for startup",
+      "kind": "actual_Tk_window_pixels",
+      "width": 1440,
+      "height": 900,
+      "sha256": "5f213fb30a5e3a69c4081a83b543d70706e4759b9c276c150c72f1d296dd1888"
+    },
+    {
+      "file": "02-runtime-and-computed-fields.png",
+      "description": "Current runtime/checkout controls and genuine imported p/U/phi; WSL controls unavailable on this Linux host",
+      "kind": "actual_Tk_window_pixels",
+      "width": 1390,
+      "height": 930,
+      "sha256": "eb2b36586140c357542b2a36afe12dec1cd9c8e6309a4604086ed1ead3c4c5d7"
+    },
+    {
+      "file": "03-recorded-residuals.png",
+      "description": "Actual solver residual curves calculated by the running GUI from recorded stage logs",
+      "kind": "actual_Tk_window_pixels",
+      "width": 1390,
+      "height": 930,
+      "sha256": "f020f4f274c8259a50707bbe6c0571723f98a2ad88bc4274dc4ae32c9d69a84d"
+    }
+  ]
+}

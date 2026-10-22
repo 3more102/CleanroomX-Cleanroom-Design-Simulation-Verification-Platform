@@ -1,0 +1,13 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.14, pytest-9.1.1, pluggy-1.7.0 -- /opt/codex/runtimes/codex-primary-runtime/dependencies/python/bin/python
+cachedir: .pytest_cache
+rootdir: /workspace/scratch/d2477ad7a66e/CleanroomX
+configfile: pyproject.toml
+collecting ... collected 6 items
+
+tests/test_cfd_particle_sources_gui.py::test_real_source_editor_crud_rejects_invalid_fluid_and_roundtrips PASSED [ 16%]
+tests/test_cfd_particle_sources_gui.py::test_worker_run_population_and_replayed_exports_use_real_widgets PASSED [ 33%]
+tests/test_cfd_particle_sources_gui.py::test_cancel_or_edited_sources_never_publishes_partial_worker_result PASSED [ 50%]
+tests/test_cfd_particle_sources_gui.py::test_viewer_changed_while_worker_runs_rejects_stale_paths PASSED [ 66%]
+tests/test_cfd_particle_sources_gui.py::test_actual_vtk_point_pick_prefills_source_and_scheduled_markers PASSED [ 83%]
+tests/test_cfd_multizone_vtk_gui.py::test_real_tk_vtk_window_opens_and_updates_selected_field_and_glyphs 

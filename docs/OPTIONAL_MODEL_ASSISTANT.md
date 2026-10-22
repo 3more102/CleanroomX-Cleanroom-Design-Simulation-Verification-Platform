@@ -8,7 +8,7 @@ API key or AI dependencies.
 ## Desktop use
 
 1. Open and **save** a CleanroomX project.
-2. Open **Tools → Project Assistant / Evidence Review** using the existing
+2. Open **Tools → Project Assistant (Evidence Review)...** using the existing
    desktop menu. Use **Review saved project** to inspect rule-backed findings.
 3. Select **Optional model Q&A...**. Opening the dialog sends **nothing**.
 4. Write one question and click **Ask configured model (opt-in)**.

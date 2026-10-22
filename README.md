@@ -8,6 +8,18 @@
 
 The current stable release is **v0.102.1**.
 
+### Optional AI Engineering Assistant (development)
+
+The existing **Tools → Project Assistant (Evidence Review)...** dialog uses
+canonical, deterministic project diagnostics and requires no model or network.
+Its new **Optional model Q&A...** button opens an additional read-only window.
+Opening the window sends no data; pressing **Ask** transmits only bounded,
+saved-source-checked diagnostic excerpts and the operator's question.
+Local Ollama is the default; cloud OpenAI access requires explicit opt-in.
+Model answers remain unverified suggestions, not solver evidence or approval.
+See the [configuration and privacy guide](docs/OPTIONAL_MODEL_ASSISTANT.md).
+
+
 ## Active connected-CFD engineering workflow
 
 The development branch in [PR #1363](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/pull/1363)

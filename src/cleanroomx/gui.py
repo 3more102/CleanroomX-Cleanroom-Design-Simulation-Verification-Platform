@@ -73,6 +73,7 @@ from .project_diagnostics_cli import (
     _paths_alias,
 )
 from .gui_panels import ProjectDiagnosticsPanel
+from .gui_assistant import ProjectAssistantDialog
 from .gui_constraints import ConstraintManagerDialog
 from .gui_requirements import RequirementsEditorDialog
 from .gui_command_palette import CommandPalette, PaletteCommand
@@ -2349,6 +2350,10 @@ class CleanroomXApp:
             accelerator="Ctrl+Shift+P",
             command=self.show_command_palette,
         )
+        tools_menu.add_command(
+            label="Project Assistant (Evidence Review)...",
+            command=self.show_project_assistant,
+        )
         menubar.add_cascade(label="Tools", menu=tools_menu)
 
         view_menu = tk.Menu(menubar, tearoff=False)
@@ -3652,6 +3657,13 @@ class CleanroomXApp:
     def _command_palette_commands(self) -> list[PaletteCommand]:
         return [
             PaletteCommand(
+                "assistant.review",
+                "Review Saved Project with Assistant",
+                "Verification",
+                self.show_project_assistant,
+                keywords=("assistant", "evidence", "diagnostics", "review"),
+            ),
+            PaletteCommand(
                 "file.new",
                 "New Project",
                 "File",
@@ -3807,6 +3819,48 @@ class CleanroomXApp:
                 keywords=("autosave", "restore"),
             ),
         ]
+
+    def show_project_assistant(self) -> None:
+        """Review only an exact saved, unchanged engineering project revision."""
+        current = getattr(self, "_assistant_dialog", None)
+        if current is not None:
+            try:
+                if current.winfo_exists():
+                    current.lift()
+                    return
+            except tk.TclError:
+                pass
+
+        if self.project_path is None or self._has_unsaved_changes():
+            messagebox.showwarning(
+                "Save project first",
+                "Save the current project changes before opening the evidence assistant. "
+                "Unsaved work cannot be reviewed against an exact on-disk revision.",
+                parent=self.root,
+            )
+            return
+
+        expected = self._project_file_revision
+        if expected is None:
+            messagebox.showwarning(
+                "Saved revision unavailable",
+                "Reload or save the project to establish the exact saved revision.",
+                parent=self.root,
+            )
+            return
+        try:
+            current_revision = capture_project_file_revision(self.project_path)
+            if not project_file_revision_matches(expected, current_revision):
+                raise RuntimeError("Saved project changed since it was opened.")
+        except (OSError, RuntimeError) as exc:
+            messagebox.showerror(
+                "Assistant review blocked",
+                f"{exc} Reload the project to review the current file.",
+                parent=self.root,
+            )
+            return
+
+        self._assistant_dialog = ProjectAssistantDialog(self.root, self.project_path)
 
     def show_command_palette(self) -> None:
         existing = getattr(self, "_command_palette_window", None)
